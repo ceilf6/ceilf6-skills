@@ -13,6 +13,19 @@
 
 ---
 
+以下 3 个 skill 抽离自 Claude Code **交互**架构，覆盖 CLI 入口层、终端渲染层、状态管理层
+
+# agent-cli-architect
+审计和设计 AI Agent CLI 的多模式入口架构：快路径检测、生命周期钩子、入口收敛复用、可扩展命令注册表
+
+# tui-render-optimizer
+审计和优化 React-based 终端 UI 渲染管线：HostConfig 适配器、脏标记+块拷贝增量渲染、终端 I/O 原子性防闪烁
+
+# agent-state-architect
+设计流式 AI Agent 界面的分层状态架构：三级状态分层(全局/本地/外部)、集中式副作用处理器、跨 React/非React 边界状态桥接
+
+---
+
 以下 4 个 skill 均抽离自 [FrontAgent](https://github.com/ceilf6/FrontAgent)
 
 # skill-lifecycle
