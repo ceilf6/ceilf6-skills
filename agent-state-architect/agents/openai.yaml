@@ -1,4 +1,4 @@
 interface:
   display_name: "Agent State Architect"
-  short_description: "Design tiered state architectures for streaming AI agent interfaces"
-  default_prompt: "Use $agent-state-architect to audit the state management architecture and propose a tiered design for streaming performance."
+  short_description: "Tier state for streaming agent interfaces"
+  default_prompt: "Use $agent-state-architect to classify this agent UI state by tier, centralize side effects, and reduce streaming re-renders."

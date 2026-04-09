@@ -1,106 +1,80 @@
 ---
 name: agent-cli-architect
-description: Design and review CLI entry architectures for AI agent tools that support multiple invocation modes (interactive REPL, headless pipe, remote SSH, API SDK). Use when building a new agent CLI, adding a new entry mode to an existing CLI, auditing startup performance, consolidating duplicated initialization code, or designing an extensible command registry with plugin and skill support.
-triggers:
-  keywords:
-    - "CLI architecture"
-    - "command dispatch"
-    - "multi-mode CLI"
-    - "agent CLI"
-    - "entry convergence"
-    - "command registry"
-    - "slash commands"
-    - "plugin commands"
-    - "CLI startup"
+description: Design, audit, and refactor CLI entry architecture for AI agent tools. Use when a request involves multi-mode CLI design, command dispatch, startup flags, interactive vs headless routing, SSH or remote entry flows, slash-command versus subcommand separation, plugin or skill command registration, or cold-start optimization.
 ---
 
 # Agent CLI Architect
 
-Design CLI entry architectures that maximize infrastructure reuse across multiple invocation modes while keeping cold-start fast and the command surface extensible.
+Design agent CLIs so new entry modes reuse the same startup skeleton instead of spawning parallel implementations.
 
-## Overview
+## When To Use
 
-A typical AI agent CLI must support at least three entry patterns: interactive TUI, headless pipe output, and programmatic SDK access. Without deliberate convergence these paths become separate codebases with duplicated initialization. This skill provides a workflow for auditing an existing CLI or designing a new one using patterns derived from Claude Code's architecture.
+- Adding or reviewing interactive, headless, SDK, SSH, deep-link, or remote entry paths.
+- Consolidating duplicated initialization such as logging, migrations, config loading, or environment setup.
+- Designing command registration for subcommands, slash commands, plugins, skills, or MCP integrations.
+- Auditing slow startup, oversized main entry files, or handlers imported too early.
 
-Read [references/entry-convergence.md](./references/entry-convergence.md) for the four convergence patterns and code-level examples.
-Read [references/command-registry.md](./references/command-registry.md) for the dual command plane and multi-source merge patterns.
+## Read First
+
+- Read [references/entry-convergence.md](./references/entry-convergence.md) when the problem is entry flow, startup reuse, or cold-start.
+- Read [references/command-registry.md](./references/command-registry.md) when the problem is command discovery, priority, deduplication, or plugin extensibility.
 
 ## Workflow
 
-### 1. Inventory Entry Points
+### 1. Map Entry Paths
 
-List every way users or systems invoke the CLI:
+List every invocation path and note:
 
-- Shell commands with arguments
-- Piped input and non-interactive flags
-- Deep links or URL schemes
-- Remote connections (SSH, WebSocket)
-- Daemon or background workers
-- SDK and API access
-- Subcommands (auth, plugin, config)
+- how it enters
+- which initialization it needs
+- where it diverges
+- whether it should end in REPL, headless output, or a one-shot handler
 
-For each entry point, note which initialization steps it requires and which it skips.
+### 2. Find Duplicated Startup Work
 
-### 2. Identify Convergence Opportunities
+Look for repeated init chains, eager imports for cheap flags, and mode-specific startup forks. Treat these as convergence candidates before adding new features.
 
-Check whether the codebase exhibits these duplication symptoms:
+### 3. Separate Command Planes
 
-- Two or more entry paths that call the same initialization functions independently.
-- A startup routine that loads heavy modules before checking simple flags like `--version`.
-- Mode-specific code that could share a common startup skeleton with config overrides.
-- Subcommands that re-implement logging, config loading, or migration logic.
+Keep shell subcommands and in-REPL slash commands as different planes with different lifecycle assumptions:
 
-Use the entry convergence patterns in the reference file to propose consolidation.
+- CLI subcommands route and exit.
+- Slash commands run inside an active session and touch live app state.
+- Registration stays thin; execution lives in handlers or REPL command modules.
 
-### 3. Design The Startup Skeleton
+### 4. Converge To One Startup Skeleton
 
-Establish a layered startup flow:
+Push shared setup into one bootstrap layer or lifecycle hook. Carry mode-specific data through pending state, argv rewrites, or config overrides instead of creating a new startup branch.
 
-1. **Bootstrap fast-path**: Handle zero-import flags (`--version`, `--help`) before loading the full CLI.
-2. **Lifecycle hooks**: Centralize shared initialization (`init()`, logging sinks, migrations, remote settings) in a single `preAction` hook that all commands inherit.
-3. **Pending state carriers**: Parse special inputs early, store results in module-level pending variables, then fall through to the default command flow.
-4. **Unified launch point**: All interactive modes converge to a single launch function with mode-specific differences expressed as config overrides, not separate startup chains.
+### 5. Validate Extension Cost
 
-### 4. Design The Command Registry
+Check that:
 
-Decide on the command architecture:
-
-- **CLI subcommands** (external): Registered via the command framework, executed before TUI starts, delegate to handler modules.
-- **Internal slash commands** (REPL): Registered via a unified `getCommands()` function, executed inside the REPL, modify application state directly.
-- **Multi-source merge**: Commands from builtins, plugins, skills, MCP servers, and workflows merged with deduplication and priority ordering.
-- **Lazy loading**: Handler modules loaded via dynamic `import()` on demand, not at startup.
-
-### 5. Validate Cold-Start And Reuse
-
-Run these checks:
-
-- `--version` and `--help` complete without loading the full CLI module tree.
-- Adding a new subcommand inherits all shared initialization without extra code.
-- Adding a new interactive mode only requires a config override to the existing launch point.
-- Plugin and skill commands are discovered lazily and cached per working directory.
-- No initialization logic is duplicated across entry paths.
+- `--help` and `--version` stay cheap
+- adding one new mode mostly changes config, not boot code
+- new subcommands inherit shared initialization automatically
+- plugin and skill commands load lazily and dedupe predictably
 
 ## Output Shape
 
 When using this skill, prefer producing:
 
-- An entry point inventory with initialization dependency matrix.
-- A startup skeleton diagram showing the layered flow.
-- A command registry design with source priority and deduplication rules.
-- Specific refactoring steps ordered by risk and impact.
+- an entry inventory with convergence opportunities
+- a target startup skeleton
+- a split between external subcommands and internal slash commands
+- a refactor sequence ordered by risk and payoff
 
 ## Guardrails
 
-- Do not embed command execution logic in the registration file. Delegate to handler modules.
-- Do not eagerly import heavy modules for simple flag checks.
-- Do not duplicate initialization logic across commands. Use lifecycle hooks.
-- Do not mix CLI subcommand registration with internal slash command logic.
-- Do not load all plugin and MCP commands at startup. Use memoized lazy loading.
-- Do not create separate UI startup chains for each mode. Converge to one launch point with config overrides.
+- Do not duplicate initialization across entry modes.
+- Do not load heavy modules before cheap flag checks.
+- Do not mix command registration with command execution logic.
+- Do not merge subcommands and slash commands into one lifecycle.
+- Do not eagerly load plugin, MCP, or skill commands at startup.
 
 ## Decision Rules
 
-- If the CLI has more than two entry modes that duplicate initialization, consolidate with a preAction lifecycle hook first.
-- If cold-start exceeds 200ms for `--version`, add a bootstrap fast-path layer.
-- If the command surface needs plugin extensibility, design a dual command plane before adding the first plugin.
-- If subcommand handlers are growing large in the main file, extract them to `cli/handlers/*` modules.
+- If several entry modes share most setup, converge them before adding another mode.
+- If cold-start is slow for simple flags, add a bootstrap fast-path first.
+- If the main CLI file is growing into a router plus business layer, extract handlers before extending it.
+- If extensibility matters, define source priority and deduplication rules before shipping third-party commands.

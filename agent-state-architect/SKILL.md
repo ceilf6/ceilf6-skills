@@ -1,133 +1,88 @@
 ---
 name: agent-state-architect
-description: Design and audit state management architectures for AI agent interfaces that combine low-frequency configuration, high-frequency streaming data, and cross-boundary state shared between React and non-React code. Use when diagnosing unnecessary re-renders during streaming, designing state tiers for a new agent UI, centralizing scattered side effects, or bridging React components with external event sources like command queues and file watchers.
-triggers:
-  keywords:
-    - "state architecture"
-    - "state management"
-    - "streaming state"
-    - "re-render optimization"
-    - "side effect centralization"
-    - "useSyncExternalStore"
-    - "external store"
-    - "agent state"
-  negative:
-    - "CSS styling"
-    - "terminal rendering"
-    - "CLI commands"
+description: Design and audit state architecture for AI agent interfaces. Use when a request involves streaming state, unnecessary re-renders, useSyncExternalStore, external stores, React and non-React state sharing, side-effect centralization, command queues, file watchers, or tiering state by frequency and lifecycle.
 ---
 
 # Agent State Architect
 
-Design state architectures that separate concerns by update frequency, consumer type, and lifecycle to prevent high-frequency streaming from cascading unnecessary re-renders across the entire component tree.
+Design agent state so low-frequency shell state, high-frequency streaming state, and cross-boundary process state stop fighting each other.
 
-## Overview
+## When To Use
 
-AI agent interfaces have wildly different state update patterns coexisting:
+- Diagnosing unnecessary re-renders during token streaming or tool progress updates.
+- Designing state tiers for a new agent UI or refactoring an overloaded global store.
+- Bridging React components with command queues, watchers, sockets, or other non-React producers.
+- Centralizing persistence, notifications, cache invalidation, or other side effects now scattered across mutation sites.
 
-- **Session configuration** (permission mode, model, theme) changes every few minutes.
-- **Streaming tokens** (messages, partial text, tool use) update at millisecond intervals.
-- **Cross-boundary state** (command queues, file watchers, task state) lives outside React but must be consumed by React components.
+## Read First
 
-A single global store makes every token arrival trigger selector evaluation across all subscribers. This skill provides a systematic approach to tiering state by frequency and consumer type, plus centralizing side effects to prevent scattered mutation bugs.
-
-Read [references/three-tier-patterns.md](./references/three-tier-patterns.md) for the three-tier state architecture and code-level patterns.
-Read [references/side-effect-centralization.md](./references/side-effect-centralization.md) for the centralized side-effect handler pattern.
+- Read [references/three-tier-patterns.md](./references/three-tier-patterns.md) when designing or explaining the tier split.
+- Read [references/side-effect-centralization.md](./references/side-effect-centralization.md) when mutations trigger persistence, notifications, or cache work.
 
 ## Workflow
 
-### 1. Inventory State By Update Frequency
+### 1. Classify State Before Refactoring
 
-Catalog every piece of state in the application and classify by update frequency:
+For each state domain, record:
 
-- **Low frequency** (minutes to session-lifetime): Settings, permission mode, model selection, UI preferences, MCP connections.
-- **High frequency** (milliseconds): Message list, streaming text, tool use progress, input buffer, scroll position.
-- **Event-driven** (irregular, from outside React): Command queue items, file change events, task watcher updates, WebSocket messages.
+- update frequency
+- lifecycle scope
+- who reads it
+- who writes it
+- whether non-React code needs synchronous access
 
-For each piece of state, note who writes it and who reads it (React components only, non-React code, or both).
+### 2. Split By Tier
 
-### 2. Diagnose Current Architecture Problems
+Use this default mapping unless the repo proves otherwise:
 
-Check for these symptoms:
+- Tier 1: low-frequency shared session state in a store plus selectors
+- Tier 2: high-frequency REPL or component-local state with `useState` plus `useRef`
+- Tier 3: external store state for React and non-React consumers
 
-- Every streaming token triggers re-render evaluation in components that only care about settings.
-- `useContext` provides a frequently-changing value, causing entire subtrees to re-render.
-- Selectors in `useSyncExternalStore` create new objects on every call, defeating referential equality.
-- Streaming callbacks read state from closure captures instead of refs, getting stale values.
-- Side effects (persistence, notifications, cache clearing) are scattered across individual mutation callsites, with some paths missing effects.
-- Non-React code cannot read or write state that React components also need.
+### 3. Move Side Effects Out Of Mutation Sites
 
-### 3. Design The Three-Tier Architecture
+Prefer one store-level `onChange` or equivalent diff handler over scattered persistence and notification code. Mutation sites should change state, not remember every downstream concern.
 
-#### Tier 1: Global Store (Session-Level)
+### 4. Protect Read Semantics
 
-For low-frequency, shared configuration state:
+Check these failure modes explicitly:
 
-- Use a minimal observer-pattern store (34 lines: `getState`, `setState`, `subscribe`).
-- Place the **stable store reference** (not the state value) in React Context.
-- Consume via `useSyncExternalStore` with selectors that return primitives or stable references.
-- Wire an `onChange` callback at store creation for centralized side effects.
+- selectors creating fresh objects
+- `useContext` carrying hot state instead of a stable store reference
+- streaming callbacks reading stale closure state
+- external stores exposing mutable snapshots to React
 
-#### Tier 2: Component-Local State (High-Frequency)
+### 5. Validate The New Boundaries
 
-For high-frequency streaming state scoped to a single component tree:
+Confirm that:
 
-- Use `useState` for React rendering.
-- Use `useRef` alongside `useState` for synchronous reads in streaming callbacks.
-- The ref is updated immediately (bypassing React batching); the state setter triggers deferred re-render.
-
-#### Tier 3: External Store (Cross-Boundary)
-
-For state that must be readable and writable from both React and non-React code:
-
-- Use a module-level mutable array or object as the truth source.
-- Use `createSignal` (listener set + emit, no stored state) for change notification.
-- Maintain a frozen snapshot (`Object.freeze`) for `useSyncExternalStore`.
-- Expose synchronous CRUD APIs for non-React code and a `useSyncExternalStore` hook for React.
-
-### 4. Design The Side-Effect Layer
-
-Wire a single `onChange` callback on the global store that fires on every state transition:
-
-- Receive `{newState, oldState}` and compute targeted diffs.
-- For each concern (persistence, notification, cache clearing), gate on the specific field that changed.
-- Filter internal-only state transitions before propagating to external systems.
-- Handle all cross-cutting concerns in this one function instead of scattering them across mutation callsites.
-
-### 5. Validate Re-Render Behavior
-
-Test these scenarios:
-
-- A streaming token arrives: only the message display component re-renders, not the settings panel or toolbar.
-- Permission mode changes: the relevant UI updates, and the side-effect handler persists and notifies automatically.
-- A command is enqueued from non-React code: the React command display updates, non-React code can immediately read the queue.
-- The selector `useAppState(s => s.verbose)` does not trigger re-render when unrelated state changes.
-- Creating a new object inside a selector causes perpetual re-rendering (this should be caught and fixed).
+- streaming updates only re-render the hot subtree
+- non-React code can read and write shared process state safely
+- side effects still fire after every relevant mutation path
+- unrelated settings changes do not disturb streaming surfaces
 
 ## Output Shape
 
 When using this skill, prefer producing:
 
-- A state inventory classified by tier (frequency, consumer, lifecycle).
-- A current-vs-target architecture comparison.
-- Store and signal implementations with concrete code.
-- A side-effect handler with per-concern diff blocks.
-- A re-render validation checklist.
+- a tiered state inventory
+- a current-vs-target state map
+- concrete store or signal patterns for the chosen tiers
+- a centralized side-effect plan
+- a verification checklist tied to re-render and consistency risks
 
 ## Guardrails
 
-- Do not put high-frequency streaming state in the global store.
-- Do not pass frequently-changing values through `useContext`. Pass a stable store reference instead.
-- Do not create new objects inside `useSyncExternalStore` selectors. Return primitives or stable references.
-- Do not read state from closure captures in streaming callbacks. Use refs for immediate reads.
-- Do not scatter side effects across individual `setState` callsites. Centralize in an `onChange` handler.
-- Do not forget to freeze external store snapshots. Without `Object.freeze`, `useSyncExternalStore` cannot detect changes by reference.
-- Do not propagate internal-only state transitions to external notification systems.
+- Do not put millisecond-level streaming state in the global shared store.
+- Do not pass hot state values through Context when a stable store reference will do.
+- Do not create fresh objects in `useSyncExternalStore` selectors.
+- Do not read hot state from stale closures inside streaming callbacks.
+- Do not scatter side effects across mutation callsites.
+- Do not expose mutable snapshots as React store outputs.
 
 ## Decision Rules
 
-- If every token causes full-tree selector evaluation, split streaming state into Tier 2 (component-local).
-- If non-React code needs to read or write shared state, create a Tier 3 external store with signal-based notification.
-- If side effects are missing on some mutation paths (a symptom: "6 of 8 paths don't notify"), centralize with an `onChange` handler immediately.
-- If `useContext` re-renders are widespread, replace the Context value with a stable store reference and switch consumers to `useSyncExternalStore`.
-- If the user asks for explanation rather than code, keep the output architectural and tier-based.
+- If every token touches too much UI, split the hot path into component-local state first.
+- If React and non-React code both need the same truth source, build an external store instead of forcing everything through React state.
+- If some mutation paths miss persistence or notifications, centralize side effects immediately.
+- If the user wants explanation rather than code, keep the answer tier-based and failure-mode-driven.

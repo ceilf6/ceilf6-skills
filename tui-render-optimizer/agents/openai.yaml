@@ -1,4 +1,4 @@
 interface:
   display_name: "TUI Render Optimizer"
-  short_description: "Audit and optimize React-based terminal UI rendering pipelines"
-  default_prompt: "Use $tui-render-optimizer to diagnose rendering performance issues and apply targeted optimizations."
+  short_description: "Optimize React TUI rendering pipelines"
+  default_prompt: "Use $tui-render-optimizer to locate the bottleneck in this terminal render pipeline and propose targeted fixes."
