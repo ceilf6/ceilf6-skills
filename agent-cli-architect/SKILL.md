@@ -1,11 +1,11 @@
 ---
 name: agent-cli-architect
-description: Design, audit, and refactor CLI entry architecture for AI agent tools. Use when a request involves multi-mode CLI design, command dispatch, startup flags, interactive vs headless routing, SSH or remote entry flows, slash-command versus subcommand separation, plugin or skill command registration, or cold-start optimization.
+description: Design, audit, and refactor the outer CLI entry layer for AI agent tools. Use when a request involves multi-mode CLI design, command dispatch, startup flags, interactive versus headless routing, SSH or remote entry flows, slash-command versus subcommand separation, plugin or skill command registration, command discovery, or cold-start optimization. Not for runtime state-tier design or terminal frame rendering.
 ---
 
 # Agent CLI Architect
 
-Design agent CLIs so new entry modes reuse the same startup skeleton instead of spawning parallel implementations.
+Own the outside of the product: how users and systems enter the tool, how commands are routed, and how startup work is shared before the runtime UI is even alive.
 
 ## When To Use
 
@@ -13,6 +13,12 @@ Design agent CLIs so new entry modes reuse the same startup skeleton instead of 
 - Consolidating duplicated initialization such as logging, migrations, config loading, or environment setup.
 - Designing command registration for subcommands, slash commands, plugins, skills, or MCP integrations.
 - Auditing slow startup, oversized main entry files, or handlers imported too early.
+
+## Use Another Skill Instead
+
+- Use `agent-state-architect` when the real problem is runtime state ownership, re-render propagation, or React and non-React state sharing.
+- Use `tui-render-optimizer` when the runtime already launches correctly and the real problem is commit, layout, diff, or terminal I/O cost.
+- Use both only if the request truly spans startup entry plus runtime behavior.
 
 ## Read First
 
@@ -29,6 +35,13 @@ List every invocation path and note:
 - which initialization it needs
 - where it diverges
 - whether it should end in REPL, headless output, or a one-shot handler
+
+Collect evidence from:
+
+- the bootstrap entry file
+- the main command tree
+- early argv rewriting or pending-state handling
+- dynamic imports, handler modules, and launch helpers
 
 ### 2. Find Duplicated Startup Work
 
@@ -54,6 +67,7 @@ Check that:
 - adding one new mode mostly changes config, not boot code
 - new subcommands inherit shared initialization automatically
 - plugin and skill commands load lazily and dedupe predictably
+- CLI-facing and REPL-facing command systems can evolve independently
 
 ## Output Shape
 
@@ -62,6 +76,7 @@ When using this skill, prefer producing:
 - an entry inventory with convergence opportunities
 - a target startup skeleton
 - a split between external subcommands and internal slash commands
+- a list of shared initialization concerns and where they should live
 - a refactor sequence ordered by risk and payoff
 
 ## Guardrails
@@ -71,6 +86,7 @@ When using this skill, prefer producing:
 - Do not mix command registration with command execution logic.
 - Do not merge subcommands and slash commands into one lifecycle.
 - Do not eagerly load plugin, MCP, or skill commands at startup.
+- Do not let runtime rendering or store concerns leak into CLI architecture decisions unless they change the entry contract.
 
 ## Decision Rules
 
@@ -78,3 +94,4 @@ When using this skill, prefer producing:
 - If cold-start is slow for simple flags, add a bootstrap fast-path first.
 - If the main CLI file is growing into a router plus business layer, extract handlers before extending it.
 - If extensibility matters, define source priority and deduplication rules before shipping third-party commands.
+- If the user's complaint starts after REPL launch rather than before it, hand off to `agent-state-architect` or `tui-render-optimizer` instead of stretching this skill past its layer.

@@ -1,4 +1,4 @@
 interface:
   display_name: "TUI Render Optimizer"
-  short_description: "Optimize React TUI rendering pipelines"
-  default_prompt: "Use $tui-render-optimizer to locate the bottleneck in this terminal render pipeline and propose targeted fixes."
+  short_description: "Tune the terminal render layer"
+  default_prompt: "Use $tui-render-optimizer to isolate whether this TUI issue lives in commit, layout, diff, or terminal I/O and propose targeted fixes."
