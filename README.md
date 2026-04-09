@@ -13,7 +13,7 @@
 
 ---
 
-以下 3 个 skill 抽离自 Claude Code **交互**架构，覆盖 CLI 入口层、终端渲染层、状态管理层
+以下 3 个 skill 学习、提炼自 Claude Code **交互**架构，覆盖 CLI 入口层、终端渲染层、状态管理层
 
 # agent-cli-architect
 审计和设计 AI Agent CLI 的多模式入口架构：快路径检测、生命周期钩子、入口收敛复用、可扩展命令注册表
