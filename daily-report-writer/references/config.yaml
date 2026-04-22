@@ -28,8 +28,12 @@ profiles:
 
     delivery:
       enabled: true
-      daxiang_group_id: "65399714912"
+      daxiang_group_id: "70507076229"
+      bot_id: "139088481414"
       permission: "仅浏览"
+      ensure_bot_member: true
+      visible_text_body_field: "text"
+      extension: '{"fileType":"markdown"}'
       message_template: |-
         今日日报已创建：{title}
         {document_link}

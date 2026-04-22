@@ -11,7 +11,7 @@ Create a daily work report in Citadel/KM using the selected profile in [config.y
 
 - Read [config.yaml](references/config.yaml) at the start of every run.
 - Select the profile requested by the user when they provide a profile ID, MIS, or name; otherwise use `active_profile`.
-- Keep all personalized fields in `config.yaml`: MIS, display name, author email, timezone, target parent document, title pattern, report section names, Daxiang group, permission, and message template.
+- Keep all personalized fields in `config.yaml`: MIS, display name, author email, timezone, target parent document, title pattern, report section names, Daxiang group, bot ID, permission, and message template.
 - If a required field is missing, ask for that field instead of falling back to a hardcoded value.
 - Default mode: fully automated creation when authentication and required source data are available.
 - Report style: detailed process, evidence-backed bullets, not a terse standup.
@@ -32,8 +32,9 @@ Create a daily work report in Citadel/KM using the selected profile in [config.y
 9. Create the document with `citadel createDocument --title "<title>" --content "<content>" --parentId <parent_document.content_id> --mis <user_mis>`.
 10. Verify the result with `citadel getDocumentMetaInfo`; confirm title, owner, and parent ID.
 11. If `delivery.enabled` is true, grant the configured Daxiang group browse access with `citadel grant --url "https://km.sankuai.com/collabpage/<contentId>" --xm-group-ids "<delivery.daxiang_group_id>" --perm "<delivery.permission>" --mis <user_mis>`.
-12. If delivery is enabled and authorization succeeded, send the document link to the configured group. Prefer `oa-skills daxiang-group sendGroupTextMsg --gid <delivery.daxiang_group_id> --text "<message>"`; if unavailable, use an installed Daxiang sender skill such as `daxiang-group-message` or `daxiang-sender`.
-13. Return the document link plus a short source, permission, and delivery coverage summary.
+12. If delivery is enabled and authorization succeeded, ensure the configured bot is in the group when `delivery.ensure_bot_member` is true: `oa-skills daxiang-group addGroupMember --gid <delivery.daxiang_group_id> --bots '["<delivery.bot_id>"]'`. Treat "already present" or success as OK.
+13. Send the group message with the verified visible path: `oa-skills daxiang-group sendGroupMsg --gid <delivery.daxiang_group_id> --sendMsgInfo '{"type":"text","body":"{\"text\":\"<message>\"}","extension":"{\"fileType\":\"markdown\"}"}'`. The `sendGroupTextMsg` convenience method may return success without visible group output in some groups, so use it only as a fallback and mark the delivery as unverified unless the user confirms visibility.
+14. Return the document link plus a short source, permission, and delivery coverage summary.
 
 ## Source Policy
 
@@ -60,6 +61,7 @@ Create a daily work report in Citadel/KM using the selected profile in [config.y
 - Before creating, ensure the title date matches the target date.
 - After creating, verify the parent ID matches `parent_document.content_id`.
 - After authorization, verify the grant command reported success before sending the group message.
+- For Daxiang delivery, prefer a user-visible confirmation signal over a CLI success flag. If the CLI reports success but visibility is unknown, state that explicitly.
 - If authentication requires CIBA/SSO, ask the user to approve in the relevant app and continue after confirmation.
 
 ## Output Contract

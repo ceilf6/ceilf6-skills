@@ -12,6 +12,7 @@ Placeholders in this file refer to the selected profile:
 - `<timezone>`: `profiles.<profile>.timezone`
 - `<parent_document.content_id>`: `profiles.<profile>.parent_document.content_id`
 - `<delivery.daxiang_group_id>`: `profiles.<profile>.delivery.daxiang_group_id`
+- `<delivery.bot_id>`: `profiles.<profile>.delivery.bot_id`
 - `<delivery.permission>`: `profiles.<profile>.delivery.permission`
 
 ## Required Source
@@ -144,9 +145,13 @@ Use when:
 Preferred command:
 
 ```bash
-oa-skills daxiang-group sendGroupTextMsg \
+oa-skills daxiang-group addGroupMember \
   --gid <delivery.daxiang_group_id> \
-  --text "今日日报已创建：<document link>"
+  --bots '["<delivery.bot_id>"]'
+
+oa-skills daxiang-group sendGroupMsg \
+  --gid <delivery.daxiang_group_id> \
+  --sendMsgInfo '{"type":"text","body":"{\"text\":\"今日日报已创建：<title>\n<document link>\"}","extension":"{\"fileType\":\"markdown\"}"}'
 ```
 
 Fallback skills discovered via SkillHub:
@@ -156,8 +161,10 @@ Fallback skills discovered via SkillHub:
 
 Rules:
 - Send only after `citadel grant` succeeds.
+- Add the configured bot to the group before sending. This is idempotent and prevents "success but invisible" sends.
 - Message should be short: report title + link + optional one-line source coverage.
 - Do not include raw collected source data in the group message.
+- Prefer `sendGroupMsg` with `body.text` and markdown extension. `sendGroupTextMsg` uses the convenience `content` field and can report success while not rendering visibly in the target group.
 - If delivery fails after permission succeeds, keep the KM document and report the delivery failure to the user.
 
 ## Skill Discovery

@@ -47,27 +47,27 @@ Use the configured section names from `report.sections.done` and `report.section
 Document event:
 
 ```markdown
-- 听音平台技术方案：继续梳理 TT 数据清洗、Prompt 处理和 PRD 种子输出链路
-  - 文档：https://km.sankuai.com/collabpage/2755575328
-  - 进展：明确清洗层、请求层、展示层的初步拆分
-  - 下一步：继续验证 schema 与 promptVersion 的可扩展性
+- <方案或文档主题>：继续梳理核心链路并沉淀技术方案
+  - 文档：https://km.sankuai.com/collabpage/<contentId>
+  - 进展：明确模块拆分、关键字段和待验证问题
+  - 下一步：继续验证方案可扩展性并补充风险点
 ```
 
 Code event:
 
 ```markdown
-- POI 价格排序：完成分支上的排序逻辑提交并进入联调
-  - 仓库：nibfe/lib-snack-poi
-  - 分支：feature/sort-ceilf6
-  - Commit：https://dev.sankuai.com/code/repo-detail/nibfe/lib-snack-poi/commit/e84e2efc90b20b84fae8f22080fc718d1b820eb9
+- <功能或缺陷修复>：完成分支上的核心逻辑提交并进入联调
+  - 仓库：<project>/<repo>
+  - 分支：<branch>
+  - Commit：https://dev.sankuai.com/code/repo-detail/<project>/<repo>/commit/<commitHash>
 ```
 
 Mixed event:
 
 ```markdown
-- 埋点与字段补充：完成加购按钮埋点和 `isDealJudge` 字段补充
-  - PR：https://dev.sankuai.com/code/repo-detail/nibfe/lib-snack-poi/pr/249/commit
-  - 记录文档：https://km.sankuai.com/collabpage/2754495201
+- <联动事项>：完成字段补充、埋点或接口调整并同步记录
+  - PR：https://dev.sankuai.com/code/repo-detail/<project>/<repo>/pr/<prId>/commit
+  - 记录文档：https://km.sankuai.com/collabpage/<contentId>
   - 状态：自测完成，待继续观察联调反馈
 ```
 
@@ -90,6 +90,16 @@ Send only after group authorization succeeds:
 
 ```text
 <delivery.message_template rendered with title and document_link>
+```
+
+Use `sendGroupMsg` with `body.text` for visible delivery:
+
+```json
+{
+  "type": "text",
+  "body": "{\"text\":\"<rendered message>\"}",
+  "extension": "{\"fileType\":\"markdown\"}"
+}
 ```
 
 Optional third line when useful:
