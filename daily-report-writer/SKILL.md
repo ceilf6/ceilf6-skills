@@ -13,6 +13,7 @@ Create a daily work report in Citadel/KM for `wangjinghong02`.
 - Display name: `王景宏`
 - Parent document: `https://km.sankuai.com/collabpage/2754620560`
 - Parent content ID: `2754620560`
+- Default Daxiang group ID for report delivery: `65399714912`
 - Title format: `YY.MM.DD 王景宏日报`
 - Default mode: fully automated creation when authentication and required source data are available.
 - Report style: detailed process, evidence-backed bullets, not a terse standup.
@@ -31,7 +32,9 @@ Create a daily work report in Citadel/KM for `wangjinghong02`.
 7. Generate CitadelMD with the structure in [report-template.md](references/report-template.md).
 8. Create the document with `citadel createDocument --title "<title>" --content "<content>" --parentId 2754620560 --mis wangjinghong02`.
 9. Verify the result with `citadel getDocumentMetaInfo`; confirm title, owner, and parent ID.
-10. Return the document link plus a short source coverage summary.
+10. Grant group `65399714912` browse access with `citadel grant --url "https://km.sankuai.com/collabpage/<contentId>" --xm-group-ids "65399714912" --perm "仅浏览" --mis wangjinghong02`.
+11. Send the document link to group `65399714912`. Prefer `oa-skills daxiang-group sendGroupTextMsg --gid 65399714912 --text "<message>"`; if unavailable, use an installed Daxiang sender skill such as `daxiang-group-message` or `daxiang-sender`.
+12. Return the document link plus a short source, permission, and delivery coverage summary.
 
 ## Source Policy
 
@@ -41,6 +44,7 @@ Create a daily work report in Citadel/KM for `wangjinghong02`.
 - Never invent links, commit hashes, document titles, TT IDs, ONES IDs, branch names, or statuses.
 - If a source fails, continue with remaining sources and record the missing source in the coverage summary.
 - Treat Daxiang/group messages and C4+ material as sensitive: summarize only work-relevant facts and avoid copying raw chat content into the report.
+- Do not send the report link to the group until `citadel grant` succeeds. If authorization fails, stop before message delivery and report the failure.
 
 ## Writing Rules
 
@@ -56,6 +60,7 @@ Create a daily work report in Citadel/KM for `wangjinghong02`.
 - Before writing, scan the draft for unsupported claims. Every concrete artifact must map to a collected source or explicit user input.
 - Before creating, ensure the title date matches the target date.
 - After creating, verify the parent ID is `2754620560`.
+- After authorization, verify the grant command reported success before sending the group message.
 - If authentication requires CIBA/SSO, ask the user to approve in the relevant app and continue after confirmation.
 
 ## Output Contract
@@ -65,4 +70,6 @@ After creation, report:
 - New document link.
 - Target date and title.
 - Sources used and sources skipped.
+- Group authorization result for `65399714912`.
+- Group message delivery result for `65399714912`.
 - Any assumptions, especially if no commits/TT/ONES/calendar data were found.

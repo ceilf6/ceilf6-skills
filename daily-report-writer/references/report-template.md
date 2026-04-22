@@ -74,6 +74,23 @@ After creating the document, summarize source coverage in the assistant response
 ```markdown
 已创建：<link>
 覆盖来源：学城最近编辑、显式 dev 链接、日历
+群授权：已为 65399714912 授予仅浏览权限
+群通知：已发送到 65399714912
 未覆盖：TT/ONES 未找到当天记录或认证不可用
 假设：无显式阻塞时，明日展望从未完成事项推导
+```
+
+## Group Message Template
+
+Send only after group authorization succeeds:
+
+```text
+今日日报已创建：<title>
+<document link>
+```
+
+Optional third line when useful:
+
+```text
+覆盖来源：学城 / 代码提交 / PR / ONES / TT / 日历
 ```

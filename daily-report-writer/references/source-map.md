@@ -20,11 +20,14 @@ Useful operations:
 - `getMarkdown --contentId <id>`
 - `getDocumentMetaInfo --contentId <id>`
 - `createDocument --title "<title>" --content "<content>" --parentId 2754620560 --mis wangjinghong02`
+- `grant --url "https://km.sankuai.com/collabpage/<contentId>" --xm-group-ids "65399714912" --perm "仅浏览" --mis wangjinghong02`
 
 Rules:
 - The final document must be created under `2754620560`.
 - Do not create a duplicate report when a child document already has the same date title.
 - Recent edits are evidence candidates, not automatic accomplishments. Read or summarize before using.
+- After creating and verifying the report, grant group `65399714912` `仅浏览` permission before sharing the link.
+- If group authorization fails, do not send the report link to the group.
 
 ## Code Sources
 
@@ -116,6 +119,35 @@ Rules:
 - Extract tasks, decisions, blockers, and follow-ups.
 - Do not quote raw messages unless the user explicitly requests it and the content is appropriate.
 
+## Delivery Destination
+
+### Daxiang Group Notification
+
+Default group:
+- `65399714912`
+
+Use when:
+- A report document was newly created and group browse permission was granted successfully.
+
+Preferred command:
+
+```bash
+oa-skills daxiang-group sendGroupTextMsg \
+  --gid 65399714912 \
+  --text "今日日报已创建：<document link>"
+```
+
+Fallback skills discovered via SkillHub:
+- `daxiang-group-message` (SkillHub ID `1586`) for webpage/API-first group text delivery.
+- `daxiang-sender` (SkillHub ID `1695`) for open-platform personal/group messages.
+- `xm-pro-sender` for CatClaw/OpenClaw personal-identity sending.
+
+Rules:
+- Send only after `citadel grant` succeeds.
+- Message should be short: report title + link + optional one-line source coverage.
+- Do not include raw collected source data in the group message.
+- If delivery fails after permission succeeds, keep the KM document and report the delivery failure to the user.
+
 ## Skill Discovery
 
 Use `skillhub` when a needed capability is missing.
@@ -125,6 +157,7 @@ Search keywords:
 - `日报`, `daily standup`, `周报`
 - `学城`, `文档创建`
 - `ONES`, `TT工单`, `日历`, `大象消息`
+- `daxiang-group-message`, `发送大象消息`
 
 Known useful skills:
 - `git-commit-browser` for Devtools commit history.
@@ -132,3 +165,4 @@ Known useful skills:
 - `meituan-daily-standup` for multi-source daily-summary workflow ideas.
 - `meituan-weekly-report-generator` for event-centric aggregation patterns.
 - `calendar-mcp`, `ee-ones`, `tt`, `citadel` as platform primitives.
+- `daxiang-group-message` or `daxiang-sender` for group delivery when `oa-skills daxiang-group` is unavailable.
