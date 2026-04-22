@@ -2,6 +2,18 @@
 
 Use this file to choose the least fragile source path for a daily report.
 
+## Configuration
+
+Read [config.yaml](config.yaml) before using this map.
+
+Placeholders in this file refer to the selected profile:
+- `<user_mis>`: `profiles.<profile>.user_mis`
+- `<author_email>`: `profiles.<profile>.author_email`
+- `<timezone>`: `profiles.<profile>.timezone`
+- `<parent_document.content_id>`: `profiles.<profile>.parent_document.content_id`
+- `<delivery.daxiang_group_id>`: `profiles.<profile>.delivery.daxiang_group_id`
+- `<delivery.permission>`: `profiles.<profile>.delivery.permission`
+
 ## Required Source
 
 ### Citadel / KM
@@ -15,18 +27,18 @@ Preferred tool:
 - `citadel` official skill / `oa-skills citadel`.
 
 Useful operations:
-- `getChildContent --contentId 2754620560`
-- `getLatestEdit --mis wangjinghong02 --limit 30`
+- `getChildContent --contentId <parent_document.content_id>`
+- `getLatestEdit --mis <user_mis> --limit <sources.citadel_recent_edit_limit>`
 - `getMarkdown --contentId <id>`
 - `getDocumentMetaInfo --contentId <id>`
-- `createDocument --title "<title>" --content "<content>" --parentId 2754620560 --mis wangjinghong02`
-- `grant --url "https://km.sankuai.com/collabpage/<contentId>" --xm-group-ids "65399714912" --perm "仅浏览" --mis wangjinghong02`
+- `createDocument --title "<title>" --content "<content>" --parentId <parent_document.content_id> --mis <user_mis>`
+- `grant --url "https://km.sankuai.com/collabpage/<contentId>" --xm-group-ids "<delivery.daxiang_group_id>" --perm "<delivery.permission>" --mis <user_mis>`
 
 Rules:
-- The final document must be created under `2754620560`.
+- The final document must be created under the configured parent document.
 - Do not create a duplicate report when a child document already has the same date title.
 - Recent edits are evidence candidates, not automatic accomplishments. Read or summarize before using.
-- After creating and verifying the report, grant group `65399714912` `仅浏览` permission before sharing the link.
+- After creating and verifying the report, grant the configured group the configured permission before sharing the link.
 - If group authorization fails, do not send the report link to the group.
 
 ## Code Sources
@@ -43,8 +55,8 @@ Preferred skill:
 
 Capabilities to reuse:
 - Query commits for `project/repo` and branch.
-- Filter by author email such as `wangjinghong02@meituan.com`.
-- Filter by target date in `Asia/Shanghai`.
+- Filter by configured author email, usually `<author_email>`.
+- Filter by target date in `<timezone>`.
 - Fetch commit diff when the report needs concrete change detail.
 
 Daily report usage:
@@ -123,8 +135,8 @@ Rules:
 
 ### Daxiang Group Notification
 
-Default group:
-- `65399714912`
+Configured group:
+- `<delivery.daxiang_group_id>`
 
 Use when:
 - A report document was newly created and group browse permission was granted successfully.
@@ -133,7 +145,7 @@ Preferred command:
 
 ```bash
 oa-skills daxiang-group sendGroupTextMsg \
-  --gid 65399714912 \
+  --gid <delivery.daxiang_group_id> \
   --text "今日日报已创建：<document link>"
 ```
 

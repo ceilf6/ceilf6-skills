@@ -1,0 +1,40 @@
+# Daily report profile configuration.
+# To adapt this skill for another person, add a profile and set active_profile.
+# Keep user-specific values here, not in SKILL.md or workflow references.
+
+active_profile: "wangjinghong02"
+
+profiles:
+  wangjinghong02:
+    user_mis: "wangjinghong02"
+    display_name: "王景宏"
+    author_email: "wangjinghong02@meituan.com"
+    timezone: "Asia/Shanghai"
+
+    parent_document:
+      url: "https://km.sankuai.com/collabpage/2754620560"
+      content_id: "2754620560"
+
+    title:
+      pattern: "{yy}.{mm}.{dd} {display_name}日报"
+
+    report:
+      sections:
+        done: "今日完成"
+        next: "明日展望"
+      legacy_next_section_aliases:
+        - "回来展望"
+      style: "detailed_process"
+
+    delivery:
+      enabled: true
+      daxiang_group_id: "65399714912"
+      permission: "仅浏览"
+      message_template: |-
+        今日日报已创建：{title}
+        {document_link}
+
+    sources:
+      citadel_recent_edit_limit: 30
+      commit_author_email: "{author_email}"
+      date_timezone: "{timezone}"
