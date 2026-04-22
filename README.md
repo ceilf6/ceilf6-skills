@@ -40,3 +40,8 @@
 
 # frontend-reviewer
 前端侧的代码和UI审计skill
+
+---
+
+# daily-report-writer
+用于美团员工自动采集内部信息例如学城文档、代码提交、PR、ONES、TT、日历等，并在指定学城目录下创建个人工作日报，提高工作效率
