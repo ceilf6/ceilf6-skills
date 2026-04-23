@@ -148,7 +148,7 @@ Preferred command:
 node scripts/send-daxiang-group-text.mjs \
   --gid <delivery.daxiang_group_id> \
   --bot-id <delivery.bot_id> \
-  --text "今日日报已创建：<title>
+  --text "大家好，我是练习生坤坤，向各位评委呈上：<title>
 <document link>"
 ```
 
