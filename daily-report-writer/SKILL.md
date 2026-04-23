@@ -32,8 +32,8 @@ Create a daily work report in Citadel/KM using the selected profile in [config.y
 9. Create the document with `citadel createDocument --title "<title>" --content "<content>" --parentId <parent_document.content_id> --mis <user_mis>`.
 10. Verify the result with `citadel getDocumentMetaInfo`; confirm title, owner, and parent ID.
 11. If `delivery.enabled` is true, grant the configured Daxiang group browse access with `citadel grant --url "https://km.sankuai.com/collabpage/<contentId>" --xm-group-ids "<delivery.daxiang_group_id>" --perm "<delivery.permission>" --mis <user_mis>`.
-12. If delivery is enabled and authorization succeeded, ensure the configured bot is in the group when `delivery.ensure_bot_member` is true: `oa-skills daxiang-group addGroupMember --gid <delivery.daxiang_group_id> --bots '["<delivery.bot_id>"]'`. Treat "already present" or success as OK.
-13. Send the group message with the verified visible path: `oa-skills daxiang-group sendGroupMsg --gid <delivery.daxiang_group_id> --sendMsgInfo '{"type":"text","body":"{\"text\":\"<message>\"}","extension":"{\"fileType\":\"markdown\"}"}'`. The `sendGroupTextMsg` convenience method may return success without visible group output in some groups, so use it only as a fallback and mark the delivery as unverified unless the user confirms visibility.
+12. If delivery is enabled and authorization succeeded, send through [send-daxiang-group-text.mjs](scripts/send-daxiang-group-text.mjs). It first ensures the configured bot is in the group, then sends `sendGroupMsg` with `body.text` and markdown extension using safe JSON construction.
+13. Do not hand-write nested shell JSON for group delivery. Use `node scripts/send-daxiang-group-text.mjs --gid <delivery.daxiang_group_id> --bot-id <delivery.bot_id> --text "<message>"`. Use `--dry-run` when debugging quoting. The `sendGroupTextMsg` convenience method may return success without visible group output in some groups, so use it only as a fallback and mark the delivery as unverified unless the user confirms visibility.
 14. Return the document link plus a short source, permission, and delivery coverage summary.
 
 ## Source Policy

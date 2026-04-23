@@ -102,6 +102,8 @@ Use `sendGroupMsg` with `body.text` for visible delivery:
 }
 ```
 
+Build this JSON through `scripts/send-daxiang-group-text.mjs`; do not manually escape it in shell commands.
+
 Optional third line when useful:
 
 ```text
