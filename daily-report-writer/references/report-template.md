@@ -21,12 +21,12 @@ Use the configured section names from `report.sections.done` and `report.section
 
 - <事件标题>：<一句话总结>
   - 进展：<关键过程或当前状态>
-  - 证据：<链接或 commit/PR 信息>
+  - 证据：[<链接标题>](<URL>)
   - 下一步：<如有>
 
 - <事件标题>：<一句话总结>
-  - 文档：<KM link>
-  - 代码：<repo/branch/commit/PR>
+  - 文档：[<文档标题>](<KM URL>)
+  - 代码：[<repo/branch/commit/PR>](<Devtools URL>)
 
 # <report.sections.next>
 
@@ -38,30 +38,19 @@ Use the configured section names from `report.sections.done` and `report.section
 
 - The existing report style is bullet-first and compact, but this skill should include enough nested detail to explain process.
 - Keep top-level bullets readable; put branch names, commit hashes, and links in nested bullets.
-- Use inline links when the label is meaningful, otherwise show the raw URL if that matches the source style.
-- When using raw URLs, put the URL at the end of a line or add one plain space after it. KM may not auto-link a raw URL when Chinese text, punctuation, or `)` immediately follows the URL.
+- Use Markdown links for every artifact link: `[label](https://...)`.
+- Do not write raw URLs in the KM document body. This includes standalone raw URLs and label-plus-URL text.
 - Do not use marketing language, exaggerated impact, or performance-review wording.
 - Prefer the configured next-section name; if updating an old document that used an alias in `report.legacy_next_section_aliases`, preserve the existing section name.
 
 ## Link Formatting
 
-Preferred:
+Required:
 
 ```markdown
-- 文档：https://km.sankuai.com/collabpage/<contentId>
-- Commit：https://dev.sankuai.com/code/repo-detail/<project>/<repo>/commit/<commitHash>
-```
-
-Also acceptable when text must follow the URL on the same line:
-
-```markdown
-- 文档：https://km.sankuai.com/collabpage/<contentId> 已补充方案背景
-```
-
-Avoid:
-
-```markdown
-- 文档：https://km.sankuai.com/collabpage/<contentId>（已补充方案背景）
+- 文档：[<文档标题>](https://km.sankuai.com/collabpage/<contentId>)
+- Commit：[<commit message or short hash>](https://dev.sankuai.com/code/repo-detail/<project>/<repo>/commit/<commitHash>)
+- PR：[<PR title or PR number>](https://dev.sankuai.com/code/repo-detail/<project>/<repo>/pr/<prId>/commit)
 ```
 
 ## Evidence Examples
@@ -70,7 +59,7 @@ Document event:
 
 ```markdown
 - <方案或文档主题>：继续梳理核心链路并沉淀技术方案
-  - 文档：https://km.sankuai.com/collabpage/<contentId>
+  - 文档：[方案文档](https://km.sankuai.com/collabpage/<contentId>)
   - 进展：明确模块拆分、关键字段和待验证问题
   - 下一步：继续验证方案可扩展性并补充风险点
 ```
@@ -81,15 +70,15 @@ Code event:
 - <功能或缺陷修复>：完成分支上的核心逻辑提交并进入联调
   - 仓库：<project>/<repo>
   - 分支：<branch>
-  - Commit：https://dev.sankuai.com/code/repo-detail/<project>/<repo>/commit/<commitHash>
+  - Commit：[<shortHash>](https://dev.sankuai.com/code/repo-detail/<project>/<repo>/commit/<commitHash>)
 ```
 
 Mixed event:
 
 ```markdown
 - <联动事项>：完成字段补充、埋点或接口调整并同步记录
-  - PR：https://dev.sankuai.com/code/repo-detail/<project>/<repo>/pr/<prId>/commit
-  - 记录文档：https://km.sankuai.com/collabpage/<contentId>
+  - PR：[PR <prId>](https://dev.sankuai.com/code/repo-detail/<project>/<repo>/pr/<prId>/commit)
+  - 记录文档：[记录文档](https://km.sankuai.com/collabpage/<contentId>)
   - 状态：自测完成，待继续观察联调反馈
 ```
 
