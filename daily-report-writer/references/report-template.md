@@ -94,6 +94,7 @@ After creating the document, summarize source coverage in the assistant response
 已创建：<link>
 覆盖来源：学城最近编辑、显式 dev 链接、日历
 群授权：已为 <delivery.daxiang_group_id> 授予 <delivery.permission> 权限
+权限备份清理：已删除本次授权产生的 <count> 份备份文档
 群通知：已发送到 <delivery.daxiang_group_id>
 未覆盖：TT/ONES 未找到当天记录或认证不可用
 假设：无显式阻塞时，明日展望从未完成事项推导

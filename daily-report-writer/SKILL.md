@@ -11,7 +11,7 @@ Create a daily work report in Citadel/KM using the selected profile in [config.y
 
 - Read [config.yaml](references/config.yaml) at the start of every run.
 - Select the profile requested by the user when they provide a profile ID, MIS, or name; otherwise use `active_profile`.
-- Keep all personalized fields in `config.yaml`: MIS, display name, author email, timezone, target parent document, title pattern, report section names, optional plan reference document, Daxiang group, bot ID, permission, and message template.
+- Keep all personalized fields in `config.yaml`: MIS, display name, author email, timezone, target parent document, title pattern, report section names, optional plan reference document, Daxiang group, bot ID, permission, permission-backup cleanup settings, and message template.
 - If a required field is missing, ask for that field instead of falling back to a hardcoded value.
 - Default mode: fully automated creation when authentication and required source data are available.
 - Report style: concise event summaries with useful evidence; include process detail only when it clarifies a real work outcome, decision, blocker, or next action.
@@ -33,10 +33,10 @@ Create a daily work report in Citadel/KM using the selected profile in [config.y
 9. Generate CitadelMD with the structure in [report-template.md](references/report-template.md).
 10. Create the document with `citadel createDocument --title "<title>" --content "<content>" --parentId <parent_document.content_id> --mis <user_mis>`.
 11. Verify the result with `citadel getDocumentMetaInfo`; confirm title, owner, and parent ID.
-12. If `delivery.enabled` is true, grant the configured Daxiang group browse access with `citadel grant --url "https://km.sankuai.com/collabpage/<contentId>" --xm-group-ids "<delivery.daxiang_group_id>" --perm "<delivery.permission>" --mis <user_mis>`.
+12. If `delivery.enabled` is true, grant the configured Daxiang group browse access with [grant-and-clean-permission-backup.mjs](scripts/grant-and-clean-permission-backup.mjs). This wraps `citadel grant`, extracts backup-document links from that grant output, verifies they match the configured cleanup safety checks, and deletes only those backup documents.
 13. If delivery is enabled and authorization succeeded, send through [send-daxiang-group-text.mjs](scripts/send-daxiang-group-text.mjs). It first ensures the configured bot is in the group, then sends `sendGroupMsg` with `body.text` and markdown extension using safe JSON construction.
 14. Do not hand-write nested shell JSON for group delivery. Use `node scripts/send-daxiang-group-text.mjs --gid <delivery.daxiang_group_id> --bot-id <delivery.bot_id> --text "<message>"`. Use `--dry-run` when debugging quoting. The `sendGroupTextMsg` convenience method may return success without visible group output in some groups, so use it only as a fallback and mark the delivery as unverified unless the user confirms visibility.
-15. Return the document link plus a short source, permission, and delivery coverage summary.
+15. Return the document link plus a short source, permission, permission-backup cleanup, and delivery coverage summary.
 
 ## Source Policy
 
@@ -49,6 +49,7 @@ Create a daily work report in Citadel/KM using the selected profile in [config.y
 - Treat calendar meetings as supporting evidence only. Include a meeting only when it is tied to a WorkEvent and at least one of these is true: the user organized/owned it, presented or drove a topic, received/created a clear action item, reached a decision, resolved a blocker, or identified a follow-up.
 - Exclude routine attendance, FYI sessions, unrelated meetings, and meetings whose only note is role metadata such as `我不是会议发起者`, `非本人发起`, `仅参会`, or `无明确产出`.
 - If `report.plan_reference.content_id` is configured, read that KM document with `citadel getMarkdown --contentId <id> --mis <user_mis>` and treat it as a planning backlog, not evidence for completed work.
+- If `cleanup.permission_backups.enabled` is true, cleanup must be limited to backup document links returned by the current `citadel grant` run. Never search the whole personal space and bulk-delete matches during daily-report creation.
 - Do not send the report link to the group until `citadel grant` succeeds. If authorization fails, stop before message delivery and report the failure.
 
 ## Writing Rules
@@ -71,7 +72,9 @@ Create a daily work report in Citadel/KM using the selected profile in [config.y
 - Before creating, scan the KM document body for `http://` or `https://`. Every URL must be inside a Markdown link target `](...)`; rewrite the draft if any raw URL remains.
 - Before creating, ensure the title date matches the target date.
 - After creating, verify the parent ID matches `parent_document.content_id`.
-- After authorization, verify the grant command reported success before sending the group message.
+- After authorization, verify the grant wrapper reported success before sending the group message.
+- Before deleting any permission backup, verify all configured cleanup checks: the candidate link came from the current grant output, title starts with `cleanup.permission_backups.title_prefix`, creator and owner equal `user_mis`, and the space ID equals `cleanup.permission_backups.space_id` when configured. If any check fails, skip deletion and report it.
+- If permission-backup cleanup fails after authorization succeeds, keep the new report document and continue group delivery; report the cleanup failure in the final response.
 - For Daxiang delivery, prefer a user-visible confirmation signal over a CLI success flag. If the CLI reports success but visibility is unknown, state that explicitly.
 - If authentication requires CIBA/SSO, ask the user to approve in the relevant app and continue after confirmation.
 
@@ -84,5 +87,6 @@ After creation, report:
 - Profile ID and MIS used.
 - Sources used and sources skipped.
 - Group authorization result when delivery is enabled.
+- Permission-backup cleanup result when enabled.
 - Group message delivery result when delivery is enabled.
 - Any assumptions, especially if no commits/TT/ONES/calendar data were found.

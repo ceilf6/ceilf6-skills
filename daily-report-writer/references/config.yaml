@@ -41,6 +41,14 @@ profiles:
       message_template: |-
         {document_link}
 
+    cleanup:
+      permission_backups:
+        enabled: true
+        space_url: "https://km.sankuai.com/space/~wangjinghong02"
+        space_id: "7025572"
+        title_prefix: "权限备份-grant-"
+        delete_only_grant_output_links: true
+
     sources:
       citadel_recent_edit_limit: 30
       commit_author_email: "{author_email}"

@@ -14,6 +14,8 @@ Placeholders in this file refer to the selected profile:
 - `<delivery.daxiang_group_id>`: `profiles.<profile>.delivery.daxiang_group_id`
 - `<delivery.bot_id>`: `profiles.<profile>.delivery.bot_id`
 - `<delivery.permission>`: `profiles.<profile>.delivery.permission`
+- `<cleanup.permission_backups.space_id>`: `profiles.<profile>.cleanup.permission_backups.space_id`
+- `<cleanup.permission_backups.title_prefix>`: `profiles.<profile>.cleanup.permission_backups.title_prefix`
 
 ## Required Source
 
@@ -33,13 +35,14 @@ Useful operations:
 - `getMarkdown --contentId <id>`
 - `getDocumentMetaInfo --contentId <id>`
 - `createDocument --title "<title>" --content "<content>" --parentId <parent_document.content_id> --mis <user_mis>`
-- `grant --url "https://km.sankuai.com/collabpage/<contentId>" --xm-group-ids "<delivery.daxiang_group_id>" --perm "<delivery.permission>" --mis <user_mis>`
+- `node scripts/grant-and-clean-permission-backup.mjs --url "https://km.sankuai.com/collabpage/<contentId>" --mis <user_mis> --xm-group-ids "<delivery.daxiang_group_id>" --perm "<delivery.permission>" --backup-space-id "<cleanup.permission_backups.space_id>" --backup-title-prefix "<cleanup.permission_backups.title_prefix>"`
 
 Rules:
 - The final document must be created under the configured parent document.
 - Do not create a duplicate report when a child document already has the same date title.
 - Recent edits are evidence candidates, not automatic accomplishments. Read or summarize before using.
 - After creating and verifying the report, grant the configured group the configured permission before sharing the link.
+- Use the grant wrapper when permission-backup cleanup is enabled. It deletes only backup documents returned by the current grant command after validating title, owner, creator, and configured space ID.
 - If group authorization fails, do not send the report link to the group.
 
 ## Code Sources
@@ -156,6 +159,33 @@ Rules:
 
 ## Delivery Destination
 
+### Permission Backup Cleanup
+
+Configured at:
+- `profiles.<profile>.cleanup.permission_backups`
+
+Use when:
+- `delivery.enabled` is true and `cleanup.permission_backups.enabled` is true.
+- `citadel grant` creates root-level personal-space documents like `权限备份-grant-2026-04-23 07:49:30`.
+
+Preferred command:
+
+```bash
+node scripts/grant-and-clean-permission-backup.mjs \
+  --url "https://km.sankuai.com/collabpage/<contentId>" \
+  --mis <user_mis> \
+  --xm-group-ids <delivery.daxiang_group_id> \
+  --perm "<delivery.permission>" \
+  --backup-space-id <cleanup.permission_backups.space_id> \
+  --backup-title-prefix "<cleanup.permission_backups.title_prefix>"
+```
+
+Safety rules:
+- Delete only backup document IDs extracted from the current grant command output.
+- Verify metadata before deletion: title prefix, creator, owner, and configured space ID must match.
+- Do not search the whole personal space and bulk-delete matches during normal report creation.
+- If cleanup fails but grant succeeded, continue delivery and report cleanup failure to the user.
+
 ### Daxiang Group Notification
 
 Configured group:
@@ -179,7 +209,7 @@ Fallback skills discovered via SkillHub:
 - `xm-pro-sender` for CatClaw/OpenClaw personal-identity sending.
 
 Rules:
-- Send only after `citadel grant` succeeds.
+- Send only after the grant wrapper or `citadel grant` succeeds.
 - Add the configured bot to the group before sending. This is idempotent and prevents "success but invisible" sends.
 - Message should be short: report title + link + optional one-line source coverage.
 - Do not include raw collected source data in the group message.
