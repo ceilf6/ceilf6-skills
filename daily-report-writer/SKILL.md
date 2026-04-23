@@ -50,6 +50,7 @@ Create a daily work report in Citadel/KM using the selected profile in [config.y
 
 - Use the configured report section names as top-level sections.
 - Preserve useful evidence links inline or as nested bullets.
+- For Citadel/KM raw URLs, always terminate the URL with whitespace or a newline. Prefer putting each URL on its own nested bullet line. Do not attach Chinese punctuation, parentheses, or explanatory text directly after a raw URL, because KM may render it as plain text instead of a link.
 - Include process detail when it clarifies progress: branch, commit/PR, document, validation, blocker, and next action.
 - Keep each top-level bullet focused on one event. Use nested bullets for evidence and details.
 - Prefer concrete verbs: 完成、推进、联调、分析、整理、验证、沉淀、跟进.
@@ -58,6 +59,7 @@ Create a daily work report in Citadel/KM using the selected profile in [config.y
 ## Safety Checks
 
 - Before writing, scan the draft for unsupported claims. Every concrete artifact must map to a collected source or explicit user input.
+- Before creating, scan every `http://` or `https://` occurrence and ensure the URL is followed by a space, newline, or end of content.
 - Before creating, ensure the title date matches the target date.
 - After creating, verify the parent ID matches `parent_document.content_id`.
 - After authorization, verify the grant command reported success before sending the group message.

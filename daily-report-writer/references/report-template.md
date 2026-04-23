@@ -39,8 +39,30 @@ Use the configured section names from `report.sections.done` and `report.section
 - The existing report style is bullet-first and compact, but this skill should include enough nested detail to explain process.
 - Keep top-level bullets readable; put branch names, commit hashes, and links in nested bullets.
 - Use inline links when the label is meaningful, otherwise show the raw URL if that matches the source style.
+- When using raw URLs, put the URL at the end of a line or add one plain space after it. KM may not auto-link a raw URL when Chinese text, punctuation, or `)` immediately follows the URL.
 - Do not use marketing language, exaggerated impact, or performance-review wording.
 - Prefer the configured next-section name; if updating an old document that used an alias in `report.legacy_next_section_aliases`, preserve the existing section name.
+
+## Link Formatting
+
+Preferred:
+
+```markdown
+- 文档：https://km.sankuai.com/collabpage/<contentId>
+- Commit：https://dev.sankuai.com/code/repo-detail/<project>/<repo>/commit/<commitHash>
+```
+
+Also acceptable when text must follow the URL on the same line:
+
+```markdown
+- 文档：https://km.sankuai.com/collabpage/<contentId> 已补充方案背景
+```
+
+Avoid:
+
+```markdown
+- 文档：https://km.sankuai.com/collabpage/<contentId>（已补充方案背景）
+```
 
 ## Evidence Examples
 
