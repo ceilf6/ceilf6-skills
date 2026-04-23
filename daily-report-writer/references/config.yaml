@@ -30,6 +30,24 @@ profiles:
         - "回来展望"
       style: "detailed_process"
 
+    weekly_report:
+      week_start: "monday"
+      compare_previous_week: true
+      minimum_baseline_reports: 2
+      parent_document:
+        inherit_from_daily: true
+      title:
+        pattern: "{yy}年第{iso_week}周 {display_name}周报"
+      sections:
+        overview: "本周概览"
+        highlights: "重点成果"
+        workstreams: "核心工作线"
+        trends: "趋势对比"
+        risks: "风险与阻塞"
+        next: "下周计划"
+      delivery:
+        inherit_from_daily: true
+
     delivery:
       enabled: true
       daxiang_group_id: "70507076229"
