@@ -30,7 +30,7 @@ source_notes:
 - `summary`: one sentence describing what happened and why it matters.
 - `process`: concrete steps, validation, discussion, implementation detail, or state transition.
 - `evidence`: every link/hash/id mentioned in the report must appear here first.
-- `next_actions`: feed `明日展望`.
+- `next_actions`: feed `明日展望`, together with explicit user plans and relevant items from the configured plan reference document.
 - `confidence`: `high` for explicit user input or source-backed evidence, `medium` for inferred grouping, `low` for weak clues.
 - `source_notes`: record source failures or ambiguity for internal coverage reporting. Do not copy source diagnostics into the KM report body.
 
@@ -59,7 +59,7 @@ Do not create WorkEvents for routine attendance, FYI sessions, unrelated meeting
 Map events to sections:
 
 - `今日完成`: events with `completed`, `in_progress`, or `blocked` status that had work today.
-- `明日展望`: next actions from events plus explicit user plans.
+- `明日展望`: next actions from events plus explicit user plans and actionable items from `report.plan_reference`.
 
 Top-level bullet shape:
 
@@ -74,6 +74,12 @@ Keep event detail compact:
 - use at most 2-3 nested lines for a normal event;
 - omit source diagnostics and skipped-source explanations from the KM report body;
 - never include lines whose only purpose is to explain why a meeting was not used.
+
+For `明日展望`:
+- prefer 1-3 concrete plan bullets;
+- use the configured plan reference as a backlog of possible next actions, not as completed-work evidence;
+- select only items relevant to today's unfinished work, active blockers, or explicit user priorities;
+- do not copy the entire backlog or add vague tasks that are not actionable tomorrow.
 
 For low-confidence events:
 

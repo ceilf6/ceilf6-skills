@@ -30,7 +30,7 @@ Use the configured section names from `report.sections.done` and `report.section
 
 # <report.sections.next>
 
-- <具体计划 1>
+- <具体计划 1：优先来自未完成事项、显式计划或 plan_reference 中的相关 todo>
 - <具体计划 2>
 ```
 
@@ -44,6 +44,7 @@ Use the configured section names from `report.sections.done` and `report.section
 - Do not use marketing language, exaggerated impact, or performance-review wording.
 - Do not write source diagnostics or negative provenance in the KM document body, such as `我不是会议发起者`, `非本人发起`, `仅参会`, `无明确产出`, `未找到相关会议`, or `无相关会议`.
 - Only include meeting/calendar content when it is directly tied to a work event and produced a user-owned outcome, decision, blocker, or next action. Otherwise omit it entirely.
+- In the next-plan section, use `report.plan_reference` as an optional backlog reference. Select only actionable items that match current work, and keep the section to 1-3 concise bullets unless the user asks for more.
 - Prefer the configured next-section name; if updating an old document that used an alias in `report.legacy_next_section_aliases`, preserve the existing section name.
 
 ## Link Formatting

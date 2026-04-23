@@ -11,7 +11,7 @@ Create a daily work report in Citadel/KM using the selected profile in [config.y
 
 - Read [config.yaml](references/config.yaml) at the start of every run.
 - Select the profile requested by the user when they provide a profile ID, MIS, or name; otherwise use `active_profile`.
-- Keep all personalized fields in `config.yaml`: MIS, display name, author email, timezone, target parent document, title pattern, report section names, Daxiang group, bot ID, permission, and message template.
+- Keep all personalized fields in `config.yaml`: MIS, display name, author email, timezone, target parent document, title pattern, report section names, optional plan reference document, Daxiang group, bot ID, permission, and message template.
 - If a required field is missing, ask for that field instead of falling back to a hardcoded value.
 - Default mode: fully automated creation when authentication and required source data are available.
 - Report style: concise event summaries with useful evidence; include process detail only when it clarifies a real work outcome, decision, blocker, or next action.
@@ -26,6 +26,7 @@ Create a daily work report in Citadel/KM using the selected profile in [config.y
    - `citadel` recent edits and relevant KM document content.
    - Devtools commit/PR links via `git-commit-browser` and `pr-code-analysis` patterns.
    - ONES, TT, calendar, and approved message-summary sources when available.
+   - The configured `report.plan_reference` KM document when present; use it only to shape the next-plan section.
 6. Normalize all raw findings into work events before writing. See [event-schema.md](references/event-schema.md).
 7. Merge duplicate signals about the same work item. A document, commit, PR, TT, and meeting can describe one event; report it once with nested evidence.
 8. Drop low-value context before drafting. Do not keep calendar or meeting records that only prove attendance and have no user-owned action, decision, blocker, or follow-up.
@@ -47,6 +48,7 @@ Create a daily work report in Citadel/KM using the selected profile in [config.y
 - Treat Daxiang/group messages and C4+ material as sensitive: summarize only work-relevant facts and avoid copying raw chat content into the report.
 - Treat calendar meetings as supporting evidence only. Include a meeting only when it is tied to a WorkEvent and at least one of these is true: the user organized/owned it, presented or drove a topic, received/created a clear action item, reached a decision, resolved a blocker, or identified a follow-up.
 - Exclude routine attendance, FYI sessions, unrelated meetings, and meetings whose only note is role metadata such as `我不是会议发起者`, `非本人发起`, `仅参会`, or `无明确产出`.
+- If `report.plan_reference.content_id` is configured, read that KM document with `citadel getMarkdown --contentId <id> --mis <user_mis>` and treat it as a planning backlog, not evidence for completed work.
 - Do not send the report link to the group until `citadel grant` succeeds. If authorization fails, stop before message delivery and report the failure.
 
 ## Writing Rules
@@ -58,6 +60,7 @@ Create a daily work report in Citadel/KM using the selected profile in [config.y
 - Keep each top-level bullet focused on one event. Use nested bullets for evidence and details.
 - Keep the KM document concise: prefer 1 summary line plus at most 2-3 nested detail lines per event unless the user explicitly asks for a detailed process.
 - Do not write negative or low-signal provenance into the KM document, such as `我不是会议发起者`, `未找到相关会议`, `只是参会`, `无产出`, or skipped-source explanations. Put source coverage only in the assistant response after creation.
+- For the next-plan section, combine unfinished WorkEvent `next_actions`, explicit user plans, and actionable items from `report.plan_reference`. Prefer 1-3 concrete bullets; do not copy the whole backlog or include the reference link unless it is directly useful.
 - Prefer concrete verbs: 完成、推进、联调、分析、整理、验证、沉淀、跟进.
 - Status language should be honest: `已完成`, `进行中`, `联调中`, `待确认`, `有阻塞`.
 

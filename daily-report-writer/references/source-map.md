@@ -79,6 +79,24 @@ Daily report usage:
 
 ## Planning And Tracking Sources
 
+### Plan Reference KM Document
+
+Configured at:
+- `profiles.<profile>.report.plan_reference`
+
+Use when:
+- Drafting `report.sections.next`, usually `明日展望`.
+- The configured document exists and can be read with the selected profile MIS.
+
+Preferred tool:
+- `citadel getMarkdown --contentId <report.plan_reference.content_id> --mis <user_mis>`
+
+Daily report usage:
+- Treat the document as a backlog of possible next actions, not as evidence of completed work.
+- Select only items relevant to today's unfinished work, explicit user priorities, blockers, or active documents/code/tasks.
+- Prefer 1-3 concrete plan bullets in the KM report.
+- Do not copy the whole backlog, include raw CitadelMD, or add the reference link by default.
+
 ### ONES
 
 Preferred skill:
