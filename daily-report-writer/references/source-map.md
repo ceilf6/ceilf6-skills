@@ -114,6 +114,10 @@ Use when:
 
 Daily report usage:
 - Meetings are context, not accomplishments by themselves. Convert them into progress only when they produced an output or decision.
+- Prefer attaching meeting evidence to an existing work event instead of creating a standalone meeting item.
+- Include a meeting only when at least one work-relevant signal exists: the user organized/owned it, drove or presented a topic, received/created an action item, resolved/escalated a blocker, made a decision, or created a follow-up.
+- Exclude routine attendance, FYI meetings, unrelated meetings, and role-only calendar notes. Do not write phrases such as `我不是会议发起者`, `非本人发起`, `仅参会`, `无明确产出`, or `未找到相关会议` into the KM report.
+- If all calendar findings are filtered out, mention that only in the assistant response coverage summary when useful, not in the report body.
 
 ## Message Sources
 

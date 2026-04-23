@@ -36,11 +36,14 @@ Use the configured section names from `report.sections.done` and `report.section
 
 ## Writing Style
 
-- The existing report style is bullet-first and compact, but this skill should include enough nested detail to explain process.
+- The report should be bullet-first and concise. Include nested detail only when it explains concrete progress, evidence, a blocker, or a next action.
 - Keep top-level bullets readable; put branch names, commit hashes, and links in nested bullets.
+- For normal events, use at most 2-3 nested detail lines. Merge or remove lower-value lines rather than expanding the report.
 - Use Markdown links for every artifact link: `[label](https://...)`.
 - Do not write raw URLs in the KM document body. This includes standalone raw URLs and label-plus-URL text.
 - Do not use marketing language, exaggerated impact, or performance-review wording.
+- Do not write source diagnostics or negative provenance in the KM document body, such as `我不是会议发起者`, `非本人发起`, `仅参会`, `无明确产出`, `未找到相关会议`, or `无相关会议`.
+- Only include meeting/calendar content when it is directly tied to a work event and produced a user-owned outcome, decision, blocker, or next action. Otherwise omit it entirely.
 - Prefer the configured next-section name; if updating an old document that used an alias in `report.legacy_next_section_aliases`, preserve the existing section name.
 
 ## Link Formatting
@@ -84,7 +87,7 @@ Mixed event:
 
 ## Coverage Summary
 
-After creating the document, summarize source coverage in the assistant response, not in the KM document:
+After creating the document, summarize source coverage in the assistant response, not in the KM document. Mention skipped/filtered sources only here when useful; keep the KM report itself focused on work events.
 
 ```markdown
 已创建：<link>

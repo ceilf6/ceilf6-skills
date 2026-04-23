@@ -14,7 +14,7 @@ Create a daily work report in Citadel/KM using the selected profile in [config.y
 - Keep all personalized fields in `config.yaml`: MIS, display name, author email, timezone, target parent document, title pattern, report section names, Daxiang group, bot ID, permission, and message template.
 - If a required field is missing, ask for that field instead of falling back to a hardcoded value.
 - Default mode: fully automated creation when authentication and required source data are available.
-- Report style: detailed process, evidence-backed bullets, not a terse standup.
+- Report style: concise event summaries with useful evidence; include process detail only when it clarifies a real work outcome, decision, blocker, or next action.
 
 ## Workflow
 
@@ -28,13 +28,14 @@ Create a daily work report in Citadel/KM using the selected profile in [config.y
    - ONES, TT, calendar, and approved message-summary sources when available.
 6. Normalize all raw findings into work events before writing. See [event-schema.md](references/event-schema.md).
 7. Merge duplicate signals about the same work item. A document, commit, PR, TT, and meeting can describe one event; report it once with nested evidence.
-8. Generate CitadelMD with the structure in [report-template.md](references/report-template.md).
-9. Create the document with `citadel createDocument --title "<title>" --content "<content>" --parentId <parent_document.content_id> --mis <user_mis>`.
-10. Verify the result with `citadel getDocumentMetaInfo`; confirm title, owner, and parent ID.
-11. If `delivery.enabled` is true, grant the configured Daxiang group browse access with `citadel grant --url "https://km.sankuai.com/collabpage/<contentId>" --xm-group-ids "<delivery.daxiang_group_id>" --perm "<delivery.permission>" --mis <user_mis>`.
-12. If delivery is enabled and authorization succeeded, send through [send-daxiang-group-text.mjs](scripts/send-daxiang-group-text.mjs). It first ensures the configured bot is in the group, then sends `sendGroupMsg` with `body.text` and markdown extension using safe JSON construction.
-13. Do not hand-write nested shell JSON for group delivery. Use `node scripts/send-daxiang-group-text.mjs --gid <delivery.daxiang_group_id> --bot-id <delivery.bot_id> --text "<message>"`. Use `--dry-run` when debugging quoting. The `sendGroupTextMsg` convenience method may return success without visible group output in some groups, so use it only as a fallback and mark the delivery as unverified unless the user confirms visibility.
-14. Return the document link plus a short source, permission, and delivery coverage summary.
+8. Drop low-value context before drafting. Do not keep calendar or meeting records that only prove attendance and have no user-owned action, decision, blocker, or follow-up.
+9. Generate CitadelMD with the structure in [report-template.md](references/report-template.md).
+10. Create the document with `citadel createDocument --title "<title>" --content "<content>" --parentId <parent_document.content_id> --mis <user_mis>`.
+11. Verify the result with `citadel getDocumentMetaInfo`; confirm title, owner, and parent ID.
+12. If `delivery.enabled` is true, grant the configured Daxiang group browse access with `citadel grant --url "https://km.sankuai.com/collabpage/<contentId>" --xm-group-ids "<delivery.daxiang_group_id>" --perm "<delivery.permission>" --mis <user_mis>`.
+13. If delivery is enabled and authorization succeeded, send through [send-daxiang-group-text.mjs](scripts/send-daxiang-group-text.mjs). It first ensures the configured bot is in the group, then sends `sendGroupMsg` with `body.text` and markdown extension using safe JSON construction.
+14. Do not hand-write nested shell JSON for group delivery. Use `node scripts/send-daxiang-group-text.mjs --gid <delivery.daxiang_group_id> --bot-id <delivery.bot_id> --text "<message>"`. Use `--dry-run` when debugging quoting. The `sendGroupTextMsg` convenience method may return success without visible group output in some groups, so use it only as a fallback and mark the delivery as unverified unless the user confirms visibility.
+15. Return the document link plus a short source, permission, and delivery coverage summary.
 
 ## Source Policy
 
@@ -44,6 +45,8 @@ Create a daily work report in Citadel/KM using the selected profile in [config.y
 - Never invent links, commit hashes, document titles, TT IDs, ONES IDs, branch names, or statuses.
 - If a source fails, continue with remaining sources and record the missing source in the coverage summary.
 - Treat Daxiang/group messages and C4+ material as sensitive: summarize only work-relevant facts and avoid copying raw chat content into the report.
+- Treat calendar meetings as supporting evidence only. Include a meeting only when it is tied to a WorkEvent and at least one of these is true: the user organized/owned it, presented or drove a topic, received/created a clear action item, reached a decision, resolved a blocker, or identified a follow-up.
+- Exclude routine attendance, FYI sessions, unrelated meetings, and meetings whose only note is role metadata such as `我不是会议发起者`, `非本人发起`, `仅参会`, or `无明确产出`.
 - Do not send the report link to the group until `citadel grant` succeeds. If authorization fails, stop before message delivery and report the failure.
 
 ## Writing Rules
@@ -53,12 +56,15 @@ Create a daily work report in Citadel/KM using the selected profile in [config.y
 - In the KM document body, write every artifact link as Markdown link syntax: `[label](https://...)`. Never write raw URLs, standalone URLs, or label text followed by a raw URL.
 - Include process detail when it clarifies progress: branch, commit/PR, document, validation, blocker, and next action.
 - Keep each top-level bullet focused on one event. Use nested bullets for evidence and details.
+- Keep the KM document concise: prefer 1 summary line plus at most 2-3 nested detail lines per event unless the user explicitly asks for a detailed process.
+- Do not write negative or low-signal provenance into the KM document, such as `我不是会议发起者`, `未找到相关会议`, `只是参会`, `无产出`, or skipped-source explanations. Put source coverage only in the assistant response after creation.
 - Prefer concrete verbs: 完成、推进、联调、分析、整理、验证、沉淀、跟进.
 - Status language should be honest: `已完成`, `进行中`, `联调中`, `待确认`, `有阻塞`.
 
 ## Safety Checks
 
-- Before writing, scan the draft for unsupported claims. Every concrete artifact must map to a collected source or explicit user input.
+- Before writing, scan the draft for unsupported claims and low-value context. Every concrete artifact must map to a collected source or explicit user input, and every included meeting must have a concrete user-owned outcome, decision, blocker, or next action.
+- Before creating, scan the KM document body for noise phrases such as `我不是会议发起者`, `非本人发起`, `仅参会`, `无明确产出`, `未找到相关会议`, and `无相关会议`; remove those lines unless the user explicitly asked for source diagnostics in the document.
 - Before creating, scan the KM document body for `http://` or `https://`. Every URL must be inside a Markdown link target `](...)`; rewrite the draft if any raw URL remains.
 - Before creating, ensure the title date matches the target date.
 - After creating, verify the parent ID matches `parent_document.content_id`.

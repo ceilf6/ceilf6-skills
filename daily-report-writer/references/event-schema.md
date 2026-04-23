@@ -32,7 +32,19 @@ source_notes:
 - `evidence`: every link/hash/id mentioned in the report must appear here first.
 - `next_actions`: feed `明日展望`.
 - `confidence`: `high` for explicit user input or source-backed evidence, `medium` for inferred grouping, `low` for weak clues.
-- `source_notes`: record source failures or ambiguity.
+- `source_notes`: record source failures or ambiguity for internal coverage reporting. Do not copy source diagnostics into the KM report body.
+
+## Relevance Filter
+
+Drop a source finding before it becomes a WorkEvent when it has no clear user-owned work signal.
+
+For calendar and meeting findings, create or attach a WorkEvent only when the meeting produced at least one of these signals:
+- the user organized or owned the meeting;
+- the user presented, reviewed, coordinated, or drove a topic;
+- the meeting produced a decision, blocker resolution, action item, or follow-up owned by the user;
+- the meeting is direct evidence for another code, document, ONES, TT, or support event.
+
+Do not create WorkEvents for routine attendance, FYI sessions, unrelated meetings, or role-only notes such as `我不是会议发起者`, `非本人发起`, `仅参会`, `无明确产出`, or `未找到相关会议`. Keep those details out of `process`, `evidence`, and the final report.
 
 ## Merge Rules
 
@@ -40,6 +52,7 @@ source_notes:
 - Prefer one rich event over several link-only bullets.
 - Keep separate events when the work differs in purpose even if it happened in the same repo.
 - If one source says complete and another says in progress, use the more recent timestamp and note uncertainty.
+- Merge relevant meeting evidence into the related work event instead of writing a standalone meeting bullet whenever possible.
 
 ## Drafting From Events
 
@@ -56,6 +69,11 @@ Top-level bullet shape:
   - 证据：<label/link>
   - 状态：<status or blocker>
 ```
+
+Keep event detail compact:
+- use at most 2-3 nested lines for a normal event;
+- omit source diagnostics and skipped-source explanations from the KM report body;
+- never include lines whose only purpose is to explain why a meeting was not used.
 
 For low-confidence events:
 
