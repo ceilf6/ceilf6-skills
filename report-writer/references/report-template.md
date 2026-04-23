@@ -118,10 +118,4 @@ Use `sendGroupMsg` with `body.text` for visible delivery:
 }
 ```
 
-Build this JSON through `scripts/send-daxiang-group-text.mjs`; do not manually escape it in shell commands.
-
-Optional third line when useful:
-
-```text
-覆盖来源：学城 / 代码提交 / PR / ONES / TT / 日历
-```
+Build this JSON through `scripts/send-daxiang-group-text.mjs`; do not manually escape it in shell commands. Keep source coverage in the assistant response instead of the group message.
