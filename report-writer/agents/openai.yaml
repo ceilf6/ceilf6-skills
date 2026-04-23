@@ -1,4 +1,4 @@
 interface:
-  display_name: "Daily Report Writer"
+  display_name: "Report Writer"
   short_description: "Create evidence-backed KM daily and weekly reports"
-  default_prompt: "Use $daily-report-writer to create the requested KM daily or weekly report. For daily reports, collect today's work from KM, code commits, PRs, ONES, TT, and calendar. For weekly reports, aggregate this week's daily reports into workstreams and trend signals before creating the weekly report."
+  default_prompt: "Use $report-writer to create the requested KM daily or weekly report. For daily reports, collect today's work from KM, code commits, PRs, ONES, TT, and calendar. For weekly reports, aggregate this week's daily reports into workstreams and trend signals before creating the weekly report."

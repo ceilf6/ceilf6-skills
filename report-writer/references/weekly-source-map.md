@@ -29,7 +29,7 @@ Weekly fields:
 Recommended command shape after fetching files:
 
 ```bash
-node daily-report-writer/scripts/weekly-report-prep.mjs \
+node report-writer/scripts/weekly-report-prep.mjs \
   --week-start-date 2026-04-20 \
   --current 2026-04-20=/tmp/reports/26.04.20.md \
   --current 2026-04-21=/tmp/reports/26.04.21.md \

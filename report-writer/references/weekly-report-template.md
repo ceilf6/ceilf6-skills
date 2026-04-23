@@ -1,6 +1,6 @@
 # Weekly Report Template
 
-Use this structure when `daily-report-writer` is in weekly mode.
+Use this structure when `report-writer` is in weekly mode.
 
 ## Title
 

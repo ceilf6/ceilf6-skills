@@ -1,9 +1,9 @@
 ---
-name: daily-report-writer
+name: report-writer
 description: "可配置地自动生成并创建个人或团队工作日报/周报。用于写日报、生成日报、今日工作总结、代码提交日报、学城日报、日报创建、本周总结、周报、weekly report 等场景；按 references/config.yaml 中的用户画像、学城目录和群通知配置，日报从学城最近编辑、dev.sankuai.com commit/PR、ONES、TT、日历和用户显式输入中采集当天工作，周报默认基于一周日报聚合工作线和趋势，并通过 citadel 创建、授权或通知。"
 ---
 
-# Daily Report Writer
+# Report Writer
 
 Create a daily or weekly work report in Citadel/KM using the selected profile in [config.yaml](references/config.yaml).
 
