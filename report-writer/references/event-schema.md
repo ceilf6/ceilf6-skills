@@ -22,6 +22,18 @@ source_notes:
   - string
 ```
 
+## Source Coverage Ledger
+
+Before creating WorkEvents, keep an internal coverage ledger for all fetched daily sources:
+- `source`: platform and source type.
+- `id_or_url`: document ID, commit hash, PR ID, ticket ID, meeting ID, or local identifier.
+- `date_match`: whether it belongs to the target date in the configured timezone.
+- `read_status`: `read`, `unreadable`, `truncated`, or `skipped_after_content_review`.
+- `disposition`: `included_in_event`, `merged_into_event`, `excluded_after_content_review`, or `coverage_only`.
+- `reason`: short reason for exclusion, merge, or failure.
+
+This ledger is for source completeness and assistant coverage reporting. Do not copy it verbatim into the KM report body.
+
 ## Field Rules
 
 - `title`: one human-readable event title, not a raw link.
@@ -36,7 +48,9 @@ source_notes:
 
 ## Relevance Filter
 
-Drop a source finding before it becomes a WorkEvent when it has no clear user-owned work signal.
+Drop a source finding before it becomes a WorkEvent only after its content has been fetched or the source has been marked unreadable. Title-only filtering is not allowed.
+
+For KM recent edits, read every returned target-date document before deciding whether to create, merge, or exclude a WorkEvent. A document with a tooling/configuration title can still be evidence for real work.
 
 For calendar and meeting findings, create or attach a WorkEvent only when the meeting produced at least one of these signals:
 - the user organized or owned the meeting;

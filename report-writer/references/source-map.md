@@ -17,6 +17,17 @@ Placeholders in this file refer to the selected profile:
 - `<cleanup.permission_backups.space_id>`: `profiles.<profile>.cleanup.permission_backups.space_id`
 - `<cleanup.permission_backups.title_prefix>`: `profiles.<profile>.cleanup.permission_backups.title_prefix`
 
+## Exhaustive Daily Collection Rule
+
+Daily reports must gather all available user-related information for the selected user and target date before drafting.
+
+Rules:
+- Do not pre-filter by document title, repository name, meeting title, ticket summary, or perceived business relevance before reading the source.
+- Use broad user/date queries first: selected `user_mis`, configured `author_email`, and target date in the configured timezone.
+- Read every returned target-date KM recent-edit document with `getMarkdown` before deciding whether it is a WorkEvent.
+- If a platform returns more candidates than the configured limit or does not expose complete pagination, raise the practical limit when possible and report the remaining coverage risk in the assistant response.
+- The KM document should still stay focused: include work-relevant events and evidence after content-based normalization, not a raw dump of all collected material.
+
 ## Required Source
 
 ### Citadel / KM
@@ -24,7 +35,7 @@ Placeholders in this file refer to the selected profile:
 Purpose:
 - Create the final report.
 - List existing daily reports under the parent document.
-- Collect recently edited documents and read relevant content.
+- Collect all target-date recently edited documents for the selected MIS and read their content.
 
 Preferred tool:
 - `citadel` official skill / `oa-skills citadel`.
@@ -40,7 +51,9 @@ Useful operations:
 Rules:
 - The final document must be created under the configured parent document.
 - Do not create a duplicate report when a child document already has the same date title.
-- Recent edits are evidence candidates, not automatic accomplishments. Read or summarize before using.
+- Recent edits are evidence candidates, not automatic accomplishments. Read every returned target-date recent edit before using or excluding it.
+- Never skip a recent-edit document solely because its title looks like tooling, configuration, meeting notes, backup, or a non-business topic. Title-based exclusion is not allowed.
+- Keep a coverage ledger of target-date recent edits: read, unreadable, excluded after content review, and included in WorkEvents.
 - After creating and verifying the report, grant the configured group the configured permission before sharing the link.
 - Use the grant wrapper when permission-backup cleanup is enabled. It deletes only backup documents returned by the current grant command after validating title, owner, creator, and configured space ID.
 - If group authorization fails, do not send the report link to the group.
@@ -64,6 +77,7 @@ Capabilities to reuse:
 - Fetch commit diff when the report needs concrete change detail.
 
 Daily report usage:
+- Query all available commits by configured author and target date; do not rely only on explicit links or obvious branch names.
 - Top-level event: summarize the user-visible purpose.
 - Nested evidence: repo, branch, commit hash, commit message, PR if available.
 
@@ -77,6 +91,7 @@ Preferred skill:
 - `pr-code-analysis` (SkillHub ID `12754`).
 
 Daily report usage:
+- Query available PRs related to the configured author or explicit user links for the target date; do not rely only on title relevance.
 - Use PR title, commits, changed-line summary, and contributor stats as evidence.
 - Do not include AI generation rate unless the source explicitly provides it.
 
@@ -110,7 +125,7 @@ Use when:
 - A commit/branch needs to be connected to a requirement.
 
 Daily report usage:
-- Merge ONES items into the same event as related code/docs.
+- Query available target-date/user-related ONES items when the source is authenticated. Merge ONES items into the same event as related code/docs.
 - Do not fabricate ONES links. Use actual IDs from the tool.
 
 ### TT
@@ -122,7 +137,7 @@ Use when:
 - The user handled support tickets, defects, incidents, or operational work.
 
 Daily report usage:
-- Merge similar tickets into one operation/support event.
+- Query available target-date/user-related tickets when the source is authenticated. Merge similar tickets into one operation/support event.
 - Include counts and representative links when available.
 
 ### Calendar

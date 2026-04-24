@@ -24,6 +24,7 @@ Create a daily or weekly work report in Citadel/KM using the selected profile in
 - Weekly defaults: Monday week start, compare previous week when available, and require at least `weekly_report.minimum_baseline_reports` previous-week daily reports for strong trend comparison.
 - If a required field is missing, ask for that field instead of falling back to a hardcoded value.
 - Default mode: fully automated creation when authentication and required source data are available.
+- Daily collection mode: exhaustive for the selected user and target date. Gather all available user-related candidate sources first, read their contents when readable, and only then decide whether each item belongs in the report.
 - Report style: concise event summaries with useful evidence; include process detail only when it clarifies a real work outcome, decision, blocker, or next action.
 
 ## Daily Workflow
@@ -33,13 +34,13 @@ Create a daily or weekly work report in Citadel/KM using the selected profile in
 3. Check the target directory with `citadel getChildContent --contentId <parent_document.content_id>` before creating anything.
 4. If a report for the target date already exists, do not create a duplicate. Read it and update/append only when the user clearly asks to update; otherwise return the existing link and explain what would be added.
 5. Collect source data. Start from explicit user links, then gather discoverable sources in this order:
-   - `citadel` recent edits and relevant KM document content.
-   - Devtools commit/PR links via `git-commit-browser` and `pr-code-analysis` patterns.
-   - ONES, TT, calendar, and approved message-summary sources when available.
+   - `citadel` recent edits for the selected MIS and target date. Read every returned target-date document before judging relevance; never skip a KM document solely because of its title.
+   - Devtools commits/PRs for the configured author and target date, plus explicit dev links via `git-commit-browser` and `pr-code-analysis` patterns.
+   - All available user-related ONES, TT, calendar, and approved message-summary sources for the target date.
    - The configured `report.plan_reference` KM document when present; use it only to shape the next-plan section.
 6. Normalize all raw findings into work events before writing. See [event-schema.md](references/event-schema.md).
 7. Merge duplicate signals about the same work item. A document, commit, PR, TT, and meeting can describe one event; report it once with nested evidence.
-8. Drop low-value context before drafting. Do not keep calendar or meeting records that only prove attendance and have no user-owned action, decision, blocker, or follow-up.
+8. Drop low-value context only after reading or fetching the underlying source content. Do not keep calendar or meeting records that only prove attendance and have no user-owned action, decision, blocker, or follow-up.
 9. Generate CitadelMD with the structure in [report-template.md](references/report-template.md).
 10. Create the document with `citadel createDocument --title "<title>" --content "<content>" --parentId <parent_document.content_id> --mis <user_mis>`.
 11. Verify the result with `citadel getDocumentMetaInfo`; confirm title, owner, and parent ID.
@@ -73,6 +74,9 @@ Create a daily or weekly work report in Citadel/KM using the selected profile in
 - Use `skillhub` to discover missing source skills only when the required data source is not already available.
 - Never invent links, commit hashes, document titles, TT IDs, ONES IDs, branch names, or statuses.
 - If a source fails, continue with remaining sources and record the missing source in the coverage summary.
+- Do not use titles, repository names, meeting names, or ticket summaries as a pre-filter that prevents source reading. They are only hints for grouping after content has been fetched.
+- For daily mode, collect all available target-date information related to `user_mis` / `author_email` from configured sources before drafting. If an API has a limit or missing pagination, increase the configured limit when practical and report any truncation or inaccessible items in the assistant response.
+- Every target-date Citadel recent-edit item returned by `getLatestEdit` must be read with `getMarkdown` or explicitly recorded as unreadable before the report is drafted.
 - Treat Daxiang/group messages and C4+ material as sensitive: summarize only work-relevant facts and avoid copying raw chat content into the report.
 - Treat calendar meetings as supporting evidence only. Include a meeting only when it is tied to a WorkEvent and at least one of these is true: the user organized/owned it, presented or drove a topic, received/created a clear action item, reached a decision, resolved a blocker, or identified a follow-up.
 - Exclude routine attendance, FYI sessions, unrelated meetings, and meetings whose only note is role metadata such as `我不是会议发起者`, `非本人发起`, `仅参会`, or `无明确产出`.
@@ -98,6 +102,7 @@ Create a daily or weekly work report in Citadel/KM using the selected profile in
 ## Safety Checks
 
 - Before writing, scan the draft for unsupported claims and low-value context. Every concrete artifact must map to a collected source or explicit user input, and every included meeting must have a concrete user-owned outcome, decision, blocker, or next action.
+- Before writing, verify the source coverage ledger: all returned target-date KM recent edits were read or listed as unreadable; all configured user/date source queries were attempted or listed as skipped with a concrete reason.
 - Before creating, scan the KM document body for noise phrases such as `我不是会议发起者`, `非本人发起`, `仅参会`, `无明确产出`, `未找到相关会议`, and `无相关会议`; remove those lines unless the user explicitly asked for source diagnostics in the document.
 - Before creating, scan the KM document body for `http://` or `https://`. Every URL must be inside a Markdown link target `](...)`; rewrite the draft if any raw URL remains.
 - Before creating, ensure the title date matches the target date.

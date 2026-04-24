@@ -69,6 +69,8 @@ profiles:
         delete_only_grant_output_links: true
 
     sources:
-      citadel_recent_edit_limit: 30
+      exhaustive_user_related_collection: true
+      citadel_recent_edit_limit: 200
+      citadel_read_all_target_date_recent_edits: true
       commit_author_email: "{author_email}"
       date_timezone: "{timezone}"

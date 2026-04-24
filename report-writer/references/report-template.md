@@ -37,6 +37,7 @@ Use the configured section names from `report.sections.done` and `report.section
 ## Writing Style
 
 - The report should be bullet-first and concise. Include nested detail only when it explains concrete progress, evidence, a blocker, or a next action.
+- Include every content-reviewed source that becomes a relevant WorkEvent in the KM report body. Do not leave a relevant finding only in the assistant response.
 - Keep top-level bullets readable; put branch names, commit hashes, and links in nested bullets.
 - For normal events, use at most 2-3 nested detail lines. Merge or remove lower-value lines rather than expanding the report.
 - Use Markdown links for every artifact link: `[label](https://...)`.
