@@ -45,8 +45,8 @@ Create a daily or weekly work report in Citadel/KM using the selected profile in
 10. Create the document with `citadel createDocument --title "<title>" --content "<content>" --parentId <parent_document.content_id> --mis <user_mis>`.
 11. Verify the result with `citadel getDocumentMetaInfo`; confirm title, owner, and parent ID.
 12. If `delivery.enabled` is true, grant the configured Daxiang group browse access with [grant-and-clean-permission-backup.mjs](scripts/grant-and-clean-permission-backup.mjs). This wraps `citadel grant`, extracts backup-document links from that grant output, verifies they match the configured cleanup safety checks, and deletes only those backup documents.
-13. If delivery is enabled and authorization succeeded, send through [send-daxiang-group-text.mjs](scripts/send-daxiang-group-text.mjs). It first ensures the configured bot is in the group, then sends `sendGroupMsg` with `body.text` and markdown extension using safe JSON construction.
-14. Do not hand-write nested shell JSON for group delivery. Use `node scripts/send-daxiang-group-text.mjs --gid <delivery.daxiang_group_id> --bot-id <delivery.bot_id> --text "<message>"`. Use `--dry-run` when debugging quoting. The `sendGroupTextMsg` convenience method may return success without visible group output in some groups, so use it only as a fallback and mark the delivery as unverified unless the user confirms visibility.
+13. If delivery is enabled and authorization succeeded, send through [send-daxiang-group-text.mjs](scripts/send-daxiang-group-text.mjs). It first ensures the configured bot is in the group, then sends `sendGroupMsg` with `body.text` and markdown extension using safe JSON construction. Render the report link in the group message with the same Markdown link syntax used in KM documents: `[{title}]({document_link})`.
+14. Do not hand-write nested shell JSON for group delivery. Use `node scripts/send-daxiang-group-text.mjs --gid <delivery.daxiang_group_id> --bot-id <delivery.bot_id> --text "今日日报已创建：[{title}]({document_link})"`. Use `--dry-run` when debugging quoting. The `sendGroupTextMsg` convenience method may return success without visible group output in some groups, so use it only as a fallback and mark the delivery as unverified unless the user confirms visibility.
 15. Return the document link plus a short source, permission, permission-backup cleanup, and delivery coverage summary.
 
 ## Weekly Workflow
@@ -89,6 +89,7 @@ Create a daily or weekly work report in Citadel/KM using the selected profile in
 - Use the configured report section names as top-level sections.
 - Preserve useful evidence links inline or as nested bullets.
 - In the KM document body, write every artifact link as Markdown link syntax: `[label](https://...)`. Never write raw URLs, standalone URLs, or label text followed by a raw URL.
+- In the Daxiang group message, write the report link with the same Markdown link syntax: `今日日报已创建：[<title>](<document_link>)`. Never put the report URL on its own line.
 - Include process detail when it clarifies progress: branch, commit/PR, document, validation, blocker, and next action.
 - Keep each top-level bullet focused on one event. Use nested bullets for evidence and details.
 - Keep the KM document concise: prefer 1 summary line plus at most 2-3 nested detail lines per event unless the user explicitly asks for a detailed process.

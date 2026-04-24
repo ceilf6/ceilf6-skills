@@ -57,8 +57,7 @@ profiles:
       visible_text_body_field: "text"
       extension: '{"fileType":"markdown"}'
       message_template: |-
-        今日日报已创建：{title}
-        {document_link}
+        今日日报已创建：[{title}]({document_link})
 
     cleanup:
       permission_backups:

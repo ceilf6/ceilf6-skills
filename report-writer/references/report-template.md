@@ -106,7 +106,7 @@ After creating the document, summarize source coverage in the assistant response
 Send only after group authorization succeeds:
 
 ```text
-<delivery.message_template rendered with title and document_link>
+今日日报已创建：[<title>](<document_link>)
 ```
 
 Use `sendGroupMsg` with `body.text` for visible delivery:

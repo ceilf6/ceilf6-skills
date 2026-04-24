@@ -226,7 +226,7 @@ Fallback skills discovered via SkillHub:
 Rules:
 - Send only after the grant wrapper or `citadel grant` succeeds.
 - Add the configured bot to the group before sending. This is idempotent and prevents "success but invisible" sends.
-- Message should match the configured two-line daily format: `今日日报已创建：<title>` followed by the report link.
+- Message should match the configured Markdown-link daily format: `今日日报已创建：[<title>](<document_link>)`. Do not send the report link as a standalone raw URL.
 - Do not include raw collected source data in the group message.
 - Prefer the bundled script because it avoids shell quoting bugs with nested JSON and multiline report messages.
 - Internally use `sendGroupMsg` with `body.text` and markdown extension. `sendGroupTextMsg` uses the convenience `content` field and can report success while not rendering visibly in the target group.
