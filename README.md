@@ -13,7 +13,7 @@
 
 ---
 
-以下 3 个 skill 学习、提炼自 Claude Code **交互**架构，覆盖 CLI 入口层、终端渲染层、状态管理层
+以下 4 个 skill 学习、提炼自 Claude Code **交互**架构，覆盖 CLI 入口层、终端渲染层、状态管理层、权限安全控制面
 
 # agent-cli-architect
 审计和设计 AI Agent CLI 的多模式入口架构：快路径检测、生命周期钩子、入口收敛复用、可扩展命令注册表
@@ -23,6 +23,9 @@
 
 # agent-state-architect
 设计流式 AI Agent 界面的分层状态架构：三级状态分层(全局/本地/外部)、集中式副作用处理器、跨 React/非React 边界状态桥接
+
+# agent-security-architect
+设计、审计和重构 AI Agent 与编码工具的权限安全控制面：命令/工具审批、权限决策流水线、沙箱快捷路径、分类器辅助判定、模式化安全切换、远程/无头审批、危险 allow 规则剥离与 fail-closed 运行护栏
 
 ---
 
