@@ -44,7 +44,6 @@ When implementing in a target repository:
 - Add PR templates with structured self-check fields. For critical changes, require risk level, touched skeleton, GitNexus impact, and verification result.
 - Add workflow contract tests before adding merge automation. Open-source projects should usually prefer branch protection and maintainer review over custom auto-merge.
 - If GitHub `pull_request_target` is used, keep checked-out code and token use conservative; do not run untrusted fork code with write tokens.
-- Do not default to training-camp mechanics such as points, claim comments, maintainer magic words, or progress scoreboards. Use them only when the target repository is explicitly a cohort, contest, or internal training project.
 - If enterprise login or private platform setup is needed, ask the user before proceeding.
 
 ## Output Contract

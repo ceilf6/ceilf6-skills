@@ -49,7 +49,6 @@ Use this checklist before claiming a repository Harness is ready. Evidence must 
 - Project board, milestones, changelog, or release notes provide public progress visibility.
 - Stale automation, if present, requests missing information before closing issues.
 - Merge automation, if present, waits for required checks and maintainer review.
-- Training-specific scoreboards, claim comments, or point systems are absent unless the repository is explicitly running a cohort.
 
 ## Completion Evidence
 

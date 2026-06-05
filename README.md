@@ -103,7 +103,7 @@ repo-guard 通过 git submodule 引用本仓库，运行时始终拉取最新版
 
 从 0 到 1 建设仓库 Harness 工程的冷启动 skill，提炼自 [code-tape](https://github.com/ceilf6/code-tape) 的工程实践。
 
-它面向开源社区，而不是训练营模板：把新仓库的 agent 协作基建拆成社区治理、权威文档、SDD/TDD、Issue/PR 分诊、Git hooks、本地/CI 质量门、GitNexus 影响契约、release/security 自动化和 repo-guard/Codex/Copilot 评审循环几层，指导 agent 先搭最小可运行闭环，再逐层收紧质量门。
+它把新仓库的 agent 协作基建拆成社区治理、权威文档、SDD/TDD、Issue/PR 分诊、Git hooks、本地/CI 质量门、GitNexus 影响契约、release/security 自动化和 repo-guard/Codex/Copilot 评审循环几层，指导 agent 先搭最小可运行闭环，再逐层收紧质量门。
 
 ---
 

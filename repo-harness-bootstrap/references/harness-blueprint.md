@@ -1,6 +1,6 @@
 # Harness Blueprint
 
-Use this reference to design an open-source repository Harness from zero to one. The pattern is distilled from `/Users/ceilf6/Desktop/code-tape`, especially its Harness loop, authority docs, local quality gates, GitNexus contract, repo-guard review loop, and workflow tests. Do not copy its training-camp scoring or claim mechanics unless the target repository is explicitly running a cohort or contest.
+Use this reference to design an open-source repository Harness from zero to one. The pattern is distilled from `/Users/ceilf6/Desktop/code-tape`, especially its Harness loop, authority docs, local quality gates, GitNexus contract, repo-guard review loop, and workflow tests.
 
 ## 1. Core Mental Model
 
@@ -86,7 +86,7 @@ Use SDD to enforce:
 
 ## 5. Community Contribution Layer
 
-For open-source repositories, model work as public issues, discussions, and PRs. The default is voluntary contribution and maintainer review, not assignment by points.
+For open-source repositories, model work as public issues, discussions, and PRs. The default is voluntary contribution and maintainer review.
 
 Recommended labels:
 
@@ -104,13 +104,8 @@ Recommended rules:
 - PRs should link issues when relevant, but small docs/test fixes may stand alone.
 - Maintainers merge through branch protection, required checks, and code owner review.
 - Stale policies should ask for missing information and close only when there is no maintainer or contributor signal.
-- Merge queues or GitHub auto-merge are acceptable after required checks and review, but custom magic-word merge flows are rarely appropriate for open source.
+- Merge queues or GitHub auto-merge are acceptable after required checks and review, but custom command-based merge flows are rarely appropriate for open source.
 - Security issues must not be forced through public issues; route them through `SECURITY.md`.
-
-Training/campaign mechanics:
-
-- Points, exact claim comments, scoreboards, and timeout ownership rules are optional variants for cohorts, hackathons, or internal training.
-- Keep these mechanics out of the default open-source Harness because they discourage casual contributors and add governance noise.
 
 ## 6. Local Quality Gate Layer
 
@@ -187,7 +182,7 @@ Minimum GitHub workflows:
 - `release.yml`: build, test, package, provenance/SBOM if relevant, and publish only from trusted refs.
 - Optional `issue-triage.yml`: label or comment on new issues, without closing aggressively.
 - Optional `stale.yml`: request missing information or close abandoned issues after a clear grace period.
-- Optional `scorecard.yml`: OpenSSF Scorecard or similar repository hygiene signal.
+- Optional repository hygiene workflow such as OpenSSF Scorecard when appropriate.
 - Optional `repo-guard.yml`: run automated issue/PR review.
 
 Review loop:
@@ -238,11 +233,11 @@ For open-source repositories, prefer low-friction public signals:
 - CI status, coverage, benchmark, or compatibility badges when they reflect real gates.
 - Maintainer-facing dashboards only after the public workflow is reliable.
 
-Avoid default scoreboards:
+Observability boundaries:
 
-- `docs/progress.json` and rendered score reports are useful for training cohorts.
-- For open source, they usually add process weight without helping casual contributors.
-- If used, protect them with CODEOWNERS and workflow-only updates.
+- Prefer signals that help contributors decide what to do next.
+- Keep private maintainer dashboards separate from contributor-facing workflow.
+- Protect generated status files with CODEOWNERS and workflow-only updates if the project uses them.
 
 ## 11. Rollout Order
 
@@ -266,7 +261,7 @@ Stop after each layer to run the relevant checks.
 - Adding a PR template with required fields but no CI validation.
 - Adding merge automation before workflow tests and branch protection are correct.
 - Hardcoding `code-tape` critical paths instead of deriving target-repo critical skeleton.
-- Copying training-camp mechanics such as points, exact claim comments, scoreboards, or magic maintainer merge words into a community project.
+- Adding custom social workflow automation before maintainers have stable triage and review habits.
 - Treating GitNexus output as a ritual instead of requiring concrete detect/query/context/impact conclusions.
 - Letting agents bypass authority docs because the local code seems obvious.
 - Running untrusted PR code under `pull_request_target` with write tokens.
