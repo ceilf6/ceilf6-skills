@@ -57,6 +57,14 @@
 
 ---
 
+# xuecheng-batch-exporter
+
+批量导出学城/KM/Citadel 文档到本地 Markdown 的 skill，适合父文档目录、日报目录、collabpage 列表迁移到 Notion 或归档场景。
+
+它内置 `export_batch.mjs` 脚本，支持按父文档、显式 ID 列表或 ID 文件导出，并生成带源链接的 Markdown 与 `manifest.json`。同时通过 git submodule 引用 [ceilf6/XueChengCopyPlugin](https://github.com/ceilf6/XueChengCopyPlugin)，保留浏览器页面内导出和块级 Markdown 转换逻辑作为高保真转换参考。
+
+---
+
 # code-reviewer
 面向自动 CR 机器人的代码评审 skill，不关心变更来自代码托管平台、内部 CR 平台还是本地 diff，而是专注判断代码本身是否应该合入。
 
