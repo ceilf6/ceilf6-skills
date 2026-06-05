@@ -80,6 +80,77 @@ export function documentsFromIds(ids) {
   return ids.map((id) => ({ id }));
 }
 
+export function collectDocumentTree(parentId, getChildrenForParent, ancestors = [], depth = 0, nodeParentId = null, path = []) {
+  const children = getChildrenForParent(parentId);
+  return children.map((child) => {
+    if (ancestors.includes(child.id)) {
+      throw new Error(`Cycle detected while walking KM children: ${[...ancestors, child.id].join(' -> ')}`);
+    }
+
+    const title = child.title || child.id;
+    const childPath = [...path, title];
+    const nextAncestors = [...ancestors, child.id];
+    return {
+      id: child.id,
+      title,
+      parentId: nodeParentId,
+      depth,
+      path: childPath,
+      children: collectDocumentTree(child.id, getChildrenForParent, nextAncestors, depth + 1, child.id, childPath),
+    };
+  });
+}
+
+export function flattenDocumentTree(tree) {
+  const docs = [];
+  for (const node of tree) {
+    docs.push({
+      id: node.id,
+      title: node.title,
+      parentId: node.parentId,
+      depth: node.depth,
+      path: node.path,
+      childIds: node.children.map((child) => child.id),
+    });
+    docs.push(...flattenDocumentTree(node.children));
+  }
+  return docs;
+}
+
+function maxDepthForDocuments(docs) {
+  return docs.reduce((maxDepth, doc) => Math.max(maxDepth, doc.depth ?? 0), 0);
+}
+
+function directDocumentsFromChildren(children) {
+  return children.map((child) => {
+    const title = child.title || child.id;
+    return {
+      id: child.id,
+      title,
+      parentId: null,
+      depth: 0,
+      path: [title],
+      childIds: [],
+    };
+  });
+}
+
+function enrichTreeWithExportedDocuments(tree, exportedById) {
+  return tree.map((node) => {
+    const exported = exportedById.get(node.id);
+    return {
+      id: node.id,
+      title: exported?.title ?? node.title,
+      parentId: node.parentId,
+      depth: node.depth,
+      path: node.path,
+      sourceUrl: exported?.sourceUrl,
+      outputPath: exported?.outputPath,
+      children: enrichTreeWithExportedDocuments(node.children, exportedById),
+    };
+  });
+}
+
 function tryParseJson(text) {
   try {
     return JSON.parse(text);
@@ -184,20 +255,22 @@ function getChildren(parentId, options) {
   return parseChildContentOutput(output);
 }
 
-function collectDocumentsFromParent(parentId, options, seen = new Set()) {
-  const children = getChildren(parentId, options);
-  const docs = [];
-  for (const child of children) {
-    if (seen.has(child.id)) {
-      continue;
-    }
-    seen.add(child.id);
-    docs.push(child);
-    if (options.recursive) {
-      docs.push(...collectDocumentsFromParent(child.id, options, seen));
-    }
+function collectParentExport(parentId, options) {
+  if (options.recursive || options.dryRun) {
+    const tree = collectDocumentTree(parentId, (contentId) => getChildren(contentId, options));
+    return {
+      tree,
+      docs: flattenDocumentTree(tree),
+      recursive: true,
+    };
   }
-  return docs;
+
+  const docs = directDocumentsFromChildren(getChildren(parentId, options));
+  return {
+    tree: docs.map((doc) => ({ ...doc, children: [] })),
+    docs,
+    recursive: false,
+  };
 }
 
 function exportDocument(doc, index, options) {
@@ -229,6 +302,10 @@ function exportDocument(doc, index, options) {
   return {
     id: doc.id,
     title,
+    parentId: doc.parentId ?? null,
+    depth: doc.depth ?? 0,
+    path: doc.path ?? [title],
+    childIds: doc.childIds ?? [],
     sourceUrl,
     outputPath,
   };
@@ -245,27 +322,40 @@ export async function main(argv = process.argv.slice(2)) {
     throw new Error('Provide --parent, --ids, or --ids-file');
   }
 
-  const docs = options.parent
-    ? collectDocumentsFromParent(options.parent, options)
-    : documentsFromIds(options.ids);
+  const parentExport = options.parent
+    ? collectParentExport(options.parent, options)
+    : null;
+  const docs = parentExport?.docs ?? documentsFromIds(options.ids);
 
   if (docs.length === 0) {
     throw new Error('No child documents found to export');
   }
 
   if (options.dryRun) {
-    console.log(JSON.stringify({ count: docs.length, docs }, null, 2));
+    console.log(JSON.stringify({
+      count: docs.length,
+      directCount: parentExport?.tree.length ?? docs.length,
+      maxDepth: maxDepthForDocuments(docs),
+      recursive: parentExport?.recursive ?? false,
+      docs,
+      tree: parentExport?.tree ?? [],
+    }, null, 2));
     return 0;
   }
 
   mkdirSync(options.outDir, { recursive: true });
   const exported = docs.map((doc, index) => exportDocument(doc, index, options));
+  const exportedById = new Map(exported.map((doc) => [doc.id, doc]));
   const manifest = {
     exportedAt: new Date().toISOString(),
     sourceParentId: options.parent ?? null,
     pluginSubmodule: join(__dirname, '..', 'assets', 'XueChengCopyPlugin'),
+    recursive: parentExport?.recursive ?? false,
+    directCount: parentExport?.tree.length ?? exported.length,
+    maxDepth: maxDepthForDocuments(exported),
     count: exported.length,
     documents: exported,
+    tree: parentExport ? enrichTreeWithExportedDocuments(parentExport.tree, exportedById) : [],
   };
   writeFileSync(join(options.outDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`Exported ${exported.length} document(s) to ${options.outDir}`);

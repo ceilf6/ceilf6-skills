@@ -4,7 +4,9 @@ import test from 'node:test';
 import {
   buildMarkdownDocument,
   cleanSimpleMarkdown,
+  collectDocumentTree,
   documentsFromIds,
+  flattenDocumentTree,
   parseChildContentOutput,
   parseIdList,
   slugifyFileName,
@@ -91,6 +93,123 @@ test('parseChildContentOutput parses formatted citadel child lists', () => {
     { id: '2754890255', title: '26.04.01 王景宏日报' },
     { id: '2755021188', title: '26.04.02 王景宏日报' },
   ]);
+});
+
+test('collectDocumentTree recursively preserves parent, depth, path, and children', () => {
+  const childrenByParent = new Map([
+    ['root', [
+      { id: '100001', title: 'A' },
+      { id: '100002', title: 'B' },
+    ]],
+    ['100001', [
+      { id: '100003', title: 'A-1' },
+      { id: '100004', title: 'A-2' },
+    ]],
+    ['100003', [
+      { id: '100005', title: 'A-1-a' },
+    ]],
+  ]);
+
+  const tree = collectDocumentTree('root', (parentId) => childrenByParent.get(parentId) ?? []);
+
+  assert.deepEqual(tree, [
+    {
+      id: '100001',
+      title: 'A',
+      parentId: null,
+      depth: 0,
+      path: ['A'],
+      children: [
+        {
+          id: '100003',
+          title: 'A-1',
+          parentId: '100001',
+          depth: 1,
+          path: ['A', 'A-1'],
+          children: [
+            {
+              id: '100005',
+              title: 'A-1-a',
+              parentId: '100003',
+              depth: 2,
+              path: ['A', 'A-1', 'A-1-a'],
+              children: [],
+            },
+          ],
+        },
+        {
+          id: '100004',
+          title: 'A-2',
+          parentId: '100001',
+          depth: 1,
+          path: ['A', 'A-2'],
+          children: [],
+        },
+      ],
+    },
+    {
+      id: '100002',
+      title: 'B',
+      parentId: null,
+      depth: 0,
+      path: ['B'],
+      children: [],
+    },
+  ]);
+});
+
+test('flattenDocumentTree returns pre-order documents with child id references', () => {
+  const tree = [
+    {
+      id: '100001',
+      title: 'A',
+      parentId: null,
+      depth: 0,
+      path: ['A'],
+      children: [
+        {
+          id: '100002',
+          title: 'A-1',
+          parentId: '100001',
+          depth: 1,
+          path: ['A', 'A-1'],
+          children: [],
+        },
+      ],
+    },
+  ];
+
+  assert.deepEqual(flattenDocumentTree(tree), [
+    {
+      id: '100001',
+      title: 'A',
+      parentId: null,
+      depth: 0,
+      path: ['A'],
+      childIds: ['100002'],
+    },
+    {
+      id: '100002',
+      title: 'A-1',
+      parentId: '100001',
+      depth: 1,
+      path: ['A', 'A-1'],
+      childIds: [],
+    },
+  ]);
+});
+
+test('collectDocumentTree rejects recursive cycles instead of silently omitting documents', () => {
+  const childrenByParent = new Map([
+    ['root', [{ id: '100001', title: 'A' }]],
+    ['100001', [{ id: '100002', title: 'B' }]],
+    ['100002', [{ id: '100001', title: 'A again' }]],
+  ]);
+
+  assert.throws(
+    () => collectDocumentTree('root', (parentId) => childrenByParent.get(parentId) ?? []),
+    /Cycle detected/,
+  );
 });
 
 test('slugifyFileName keeps CJK text and removes filesystem separators', () => {

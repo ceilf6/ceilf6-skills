@@ -25,10 +25,12 @@ Use `--dry-run` before large exports:
 node scripts/export_batch.mjs --parent 2754620560 --out /tmp/xuecheng-export --mis wangjinghong02 --dry-run
 ```
 
+For parent exports, `--dry-run` always walks descendants deeply and prints `count`, `directCount`, `maxDepth`, a pre-order `docs` list, and a nested `tree`. Use this to spot nested articles before choosing whether the real export should include `--recursive`.
+
 ## Source Discovery
 
 - Extract IDs directly from `https://km.sankuai.com/collabpage/<id>` or `https://km.sankuai.com/page/<id>`.
-- For a parent directory, export its child documents with `--parent`; add `--recursive` only after checking whether nested child pages should be included.
+- For a parent directory, inspect with `--dry-run` first. If `maxDepth` is greater than `0` and the destination should preserve the full hierarchy, run the real export with `--recursive`.
 - For explicit document sets, use `--ids` or `--ids-file`.
 - If enterprise auth needs a MIS and the user has not provided one, ask. Do not guess.
 
@@ -47,8 +49,8 @@ The plugin flow is page-local: it parses the document ID, calls the KM recent-do
 ## Export Workflow
 
 1. Resolve the source IDs or parent ID.
-2. Run `--dry-run` for parent exports and confirm the count matches expectations.
-3. Run the export script to a fresh output directory.
+2. Run `--dry-run` for parent exports and confirm `count`, `directCount`, `maxDepth`, and `tree` match expectations.
+3. Run the export script to a fresh output directory. Add `--recursive` when nested child pages should be included.
 4. Scan exported Markdown for KM-hosted images or attachments:
    ```bash
    rg -n '!\\[|km\\.sankuai\\.com/api/file|附件|cdn' /tmp/xuecheng-export
@@ -58,7 +60,7 @@ The plugin flow is page-local: it parses the document ID, calls the KM recent-do
 
 ## Notion Handoff
 
-For Notion migration, create/import pages from the exported Markdown files in `manifest.json` order. Preserve duplicate KM titles unless the destination requires unique names; rely on the source link and file name to disambiguate duplicates.
+For Notion migration, use `manifest.json` as the source of truth. Create/import pages from `manifest.documents` in pre-order, and use each document's `parentId` or the nested `manifest.tree` to preserve the original hierarchy. Preserve duplicate KM titles unless the destination requires unique names; rely on the source link and file name to disambiguate duplicates.
 
 ## Verification
 
@@ -78,6 +80,7 @@ node xuecheng-batch-exporter/scripts/export_batch.mjs --ids "2754890255" --out /
 ## Common Mistakes
 
 - Do not export a parent directory without checking child count first.
+- Do not ignore `maxDepth` in dry-run output; a value above `0` means a flat export would omit nested articles unless the real export uses `--recursive`.
 - Do not leave the Citadel read-only warning block in destination Markdown.
 - Do not drop source KM links; they are the audit trail.
 - Do not assume KM CDN images will render in Notion or external docs.
