@@ -24,13 +24,21 @@ REQUIRED_TEXT = {
         "所有标题和加粗字段名必须与输出契约完全一致",
         "关联 issue 是产品意图和验收标准的主要证据",
         "对照关联 issue 的 problem statement、acceptance criteria 和约束",
+        "references/structural-quality.md",
+        "结构质量 finding 必须说明",
         "不要在任何评审平台发布、修改或关闭内容",
     ],
     "code-reviewer/references/review-rubric.md": [
         "## GitHub 评论质量",
+        "## 结构质量标准",
         "### 行级评论卫生",
         "### 无发现评审",
         "PR 是否满足关联 issue 的验收标准",
+    ],
+    "code-reviewer/references/structural-quality.md": [
+        "# 结构质量审查",
+        "PR 让文件从 1000 行以下跨过 1000 行",
+        "不要把纯偏好、命名风格或没有明确收益的大重写当作阻塞项",
     ],
     "issue-reviewer/SKILL.md": [
         "你是 issue 分析机器人",
