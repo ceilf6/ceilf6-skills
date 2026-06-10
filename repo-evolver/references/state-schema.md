@@ -41,9 +41,10 @@ consecutive_empty_scans: 0         # 连续空 backlog 扫描次数
 
 | Issue | PR | Branch | Status | Agent |
 |-------|-----|--------|--------|-------|
-| #42 | #50 | improve/remove-legacy-helper | pr_created | agent-1 |
-| #43 | #51 | improve/fix-type-error | ci_passing | agent-2 |
+| #42 | #50 | improve/remove-legacy-helper | merged | agent-1 |
 | #44 | - | improve/add-tests | implementing | agent-3 |
+
+Status 取值：`implementing` → `pr_created` → `ci_passing` → `merged`
 
 ## Quality Log
 

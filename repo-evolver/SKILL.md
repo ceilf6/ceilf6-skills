@@ -113,11 +113,11 @@ digraph repo_evolver {
 2. 对每个 issue，使用 Agent tool 派发一个子智能体（`isolation: "worktree"`），prompt 包含：
    - Issue 编号和描述
    - repo-guard 的约束条件（如有）
-   - 明确指令：创建分支 → 编写方案 → 实现 → 提 PR → 等待 repo-guard 审评 → 处理反馈 → 退出
+   - 明确指令：创建分支 → 编写方案 → 实现 → 提 PR → 等待 repo-guard 审评 → 处理反馈 → 合并 → 退出
    - **REQUIRED SUB-SKILL:** superpowers:writing-plans, superpowers:subagent-driven-development, superpowers:finishing-a-development-branch
 3. 所有子智能体并行执行，互不干扰（worktree 隔离）。
-4. 等待所有子智能体完成，收集每个的 PR 编号和 repo-guard 质量分。
-5. 设置 phase=collect，记录所有 PR 编号和质量分，更新状态文件。**然后停止。**
+4. 等待所有子智能体完成，收集每个的 PR 编号、合并状态和 repo-guard 质量分。
+5. 设置 phase=collect，记录所有 PR 编号、合并状态和质量分，更新状态文件。**然后停止。**
 
 **子智能体 prompt 模板：**
 
@@ -137,8 +137,9 @@ digraph repo_evolver {
 7. 对有效建议（具体、可操作）：实施修复，push 到同一分支
 8. 对无效建议（误报、泛泛）：忽略
 9. 确认 CI 通过（gh pr checks）。如果失败，修复并 push
+10. 审评反馈已处理且 CI 全部通过后，合并 PR
 
-完成后报告：PR 编号、repo-guard 质量评分（参考 quality-evaluation 标准）、是否采纳了建议。
+完成后报告：PR 编号、是否已合并（未合并需附原因）、repo-guard 质量评分（参考 quality-evaluation 标准）、是否采纳了建议。
 ```
 
 **并行上限**：最多同时派发 5 个子智能体。超过时分批执行。
@@ -147,10 +148,10 @@ digraph repo_evolver {
 
 **本阶段汇总子智能体结果，评估整体 repo-guard 质量。**
 
-1. 读取所有子智能体报告的 PR 编号和质量分。
-2. 将所有质量分记录到 quality_log。
+1. 读取所有子智能体报告的 PR 编号、合并状态和质量分。
+2. 将所有质量分记录到 quality_log。对未能合并的 PR，将其编号和未合并原因记入状态文件（下一轮 scan 前优先处理，而不是重新创建 issue）。
 3. 计算滚动平均质量分。如果 < 3 且距上次 meta-improve >= 5 次迭代：设置 phase=meta_improve。
-4. 否则：标记所有改进完成，从 backlog 移除，设置 phase=scan（进入下一轮）。**然后停止。**
+4. 否则：标记已合并的改进完成，从 backlog 移除，设置 phase=scan（进入下一轮）。**然后停止。**
 
 ### Phase 4: META-IMPROVE
 
@@ -171,7 +172,7 @@ digraph repo_evolver {
 
 ## 防护边界
 
-- 不直接合并 PR。所有变更必须通过 PR + CI。
+- 所有变更必须通过 PR + CI，禁止绕过 PR 直接 commit 到默认分支。
 - 不 force-push。不删除分支（除非是自己创建的已合并分支）。
 - 不修改项目的 CLAUDE.md 或 .claude/settings。
 - Meta-improvement 每 5 次迭代最多触发 1 次。超过限制时跳过 Phase 4，直接回到 Phase 1。
