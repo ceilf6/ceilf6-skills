@@ -87,6 +87,23 @@ digraph repo_evolver {
 
 这意味着：Phase 1 结束后退出，Phase 2 在下次调用时执行，以此类推。这确保每个 phase 之间有明确的状态持久化点，且 repo-guard 有时间产生评论。
 
+### 模型分配
+
+各环节按判断密度分配模型档位。**派发子智能体时必须显式传 `model` 参数**，与下表一致：
+
+| 角色 | 模型 | 职责 |
+|------|------|------|
+| 主循环 | 继承会话 | SCAN 发现与评分、COLLECT 质量评估、META-IMPROVE |
+| 每 issue 编排者 | `opus` | 流程协调、repo-guard 审评建议取舍、合并决策 |
+| 方案规划者 | `fable` | 在 worktree 内探索代码，用 writing-plans 产出技术方案 |
+| 任务执行者 | `sonnet` | 按 plan 逐任务实现 |
+| 轮询者 | `haiku` | 等 repo-guard 评论、等 CI，超时或到点返回结果原文 |
+
+两条原则：
+
+- **判断不下放**：发现与评分、方案设计、审评建议取舍、合并决策、meta-improve 诊断必须由主循环或 opus 编排者完成，禁止交给 sonnet/haiku。
+- **机械必下放**：按 plan 写代码、轮询 API、等 CI、汇总报告用弱模型；长时间等待一律 haiku。
+
 ### Phase 1: SCAN + ISSUE
 
 **本阶段只允许读取项目文件和创建 GitHub Issues。禁止修改任何项目代码。**
@@ -99,7 +116,7 @@ digraph repo_evolver {
 6. 如果 backlog 为空且无新发现，输出 `<promise>NO_MORE_IMPROVEMENTS</promise>` 终止循环。
 7. 取 backlog 中得分最高的 N 个独立项（N = min(backlog 中互不冲突的项数, 5)）。
 8. 为每个选中项用 `gh issue create` 创建 GitHub Issue。
-9. 等待 repo-guard 的 issue review 评论（轮询每个 issue，最多等待 3 分钟）。
+9. 派发一个轮询子智能体（`model: "haiku"`）等待 repo-guard 的 issue review 评论：每 30 秒轮询一次所有 issue，最多等待 3 分钟，返回每个 issue 的评论原文（无评论则报告超时）。主循环不自行轮询。
 10. 读取 `references/quality-evaluation.md`，对 repo-guard 评论评分，将有价值建议记录为约束条件。
 11. 设置 phase=dispatch，记录所有 issue 编号和约束条件，更新状态文件。**然后停止。**
 
@@ -110,7 +127,7 @@ digraph repo_evolver {
 **本阶段为每个 Issue 派发一个子智能体，每个子智能体在独立 worktree 中完成 plan → implement → PR → 处理 repo-guard 审评 的完整流程。**
 
 1. 读取状态文件中的 issue 列表和约束条件。
-2. 对每个 issue，使用 Agent tool 派发一个子智能体（`isolation: "worktree"`），prompt 包含：
+2. 对每个 issue，使用 Agent tool 派发一个编排子智能体（`model: "opus"`, `isolation: "worktree"`），prompt 包含：
    - Issue 编号和描述
    - repo-guard 的约束条件（如有）
    - 明确指令：创建分支 → 编写方案 → 实现 → 提 PR → 等待 repo-guard 审评 → 处理反馈 → 合并 → 退出
@@ -127,16 +144,20 @@ digraph repo_evolver {
 约束条件（来自 repo-guard issue review）：
 {constraints}
 
+模型分配（派发子智能体时必须显式传 model 参数）：
+- 方案规划者用 fable，任务执行者用 sonnet，轮询者用 haiku
+- repo-guard 建议的取舍、plan 是否合格、是否合并由你自己判断，不下放给子智能体
+
 执行步骤：
 1. 创建分支 improve/{slug}
-2. 使用 writing-plans 编写技术方案
-3. 使用 subagent-driven-development 执行方案
-4. 使用 finishing-a-development-branch 创建 PR（目标分支: {default_branch}）
-5. 在 PR 描述中引用 Issue: "Closes #{number}"
-6. 等待 repo-guard PR review 评论（轮询 gh api，最多 5 分钟，间隔 30 秒）
-7. 对有效建议（具体、可操作）：实施修复，push 到同一分支
-8. 对无效建议（误报、泛泛）：忽略
-9. 确认 CI 通过（gh pr checks）。如果失败，修复并 push
+2. 派发方案规划子智能体（model: "fable"）：在当前 worktree 内探索代码，使用 writing-plans 编写技术方案，返回 plan 文件路径
+3. 检查 plan 是否覆盖上述约束条件。不覆盖则附上缺口反馈重新派发规划者（最多重试 1 次）
+4. 使用 subagent-driven-development 执行 plan，每个 task 子智能体显式传 model: "sonnet"
+5. 使用 finishing-a-development-branch 创建 PR（目标分支: {default_branch}），描述中引用 Issue: "Closes #{number}"
+6. 派发轮询子智能体（model: "haiku"）等待 repo-guard PR review 评论：每 30 秒轮询 gh api，最多 5 分钟，返回评论原文
+7. 逐条判断建议：有效（具体、可操作）→ 派 sonnet 子智能体实施修复并 push 到同一分支；无效（误报、泛泛）→ 记录忽略理由
+8. 派发轮询子智能体（model: "haiku"）等待 CI 结果（gh pr checks）。CI 失败时自己诊断原因，派 sonnet 子智能体修复并 push
+9. 同一任务 sonnet 连续失败 2 次时，改用 model: "opus" 重试一次该任务；仍失败则停止该任务并在报告中说明原因
 10. 审评反馈已处理且 CI 全部通过后，合并 PR
 
 完成后报告：PR 编号、是否已合并（未合并需附原因）、repo-guard 质量评分（参考 quality-evaluation 标准）、是否采纳了建议。
@@ -181,3 +202,5 @@ digraph repo_evolver {
 - 不创建超过 10 个未合并 PR。如果未合并 PR 数量 >= 10，暂停创建新 PR，优先处理已有 PR 的 review 反馈。
 - 并行子智能体最多 5 个。超过时分批。
 - 子智能体必须使用 worktree 隔离（`isolation: "worktree"`）。禁止多个子智能体在同一工作目录操作。
+- 模型升级兜底：同一任务 sonnet 连续失败 2 次后，编排者必须用 opus 重试一次，不得直接放弃；仍失败才走失败上报流程。
+- 判断不下放：repo-guard 建议取舍、技术方案审定、合并决策必须由主循环或 opus 编排者完成，禁止交给 sonnet/haiku 子智能体。
