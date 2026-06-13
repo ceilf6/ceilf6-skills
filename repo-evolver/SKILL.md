@@ -62,7 +62,7 @@ digraph repo_evolver {
     init -> meta [label="phase=meta_improve"];
 
     scan -> implement [label="issues 已创建入队"];
-    scan -> done [label="backlog 为空\n输出 completion promise"];
+    scan -> done [label="连续 3 次空 backlog\n输出 completion promise"];
     implement -> done [label="队首 Issue 已合并\n队列仍非空，下次继续"];
     implement -> collect [label="队列已空"];
     collect -> done [label="质量正常，进入下一轮"];
@@ -119,7 +119,7 @@ digraph repo_evolver {
 3. 使用 GitNexus 查询死代码、高复杂度函数、未使用导出。
 4. grep TODO/FIXME/HACK，检查过时依赖。
 5. 对每个发现按 scan-rubric 评分，写入 backlog（去重：不重复已有 issue 或已尝试过的改进）。
-6. 如果 backlog 为空且无新发现，输出 `<promise>NO_MORE_IMPROVEMENTS</promise>` 终止循环。
+6. 如果本次扫描 backlog 为空且无新发现：`consecutive_empty_scans++`。若 `consecutive_empty_scans >= 3`，输出 `<promise>NO_MORE_IMPROVEMENTS</promise>` 终止循环；否则保持 phase=scan，更新状态文件后停止（下次调用重新扫描）。如果有新发现：将 `consecutive_empty_scans` 重置为 0，继续下一步。
 7. 取 backlog 中得分最高的 N 个独立项（N = min(backlog 中互不冲突的项数, 3)）。它们将在 Phase 2 中逐个串行实现，不并行。
 8. 为每个选中项用 `gh issue create` 创建 GitHub Issue。
 9. 派 1 个轮询子代理（`model: "haiku"`）等待 repo-guard 的 issue review 评论：每 30 秒用 `gh api` 轮询一次所有 issue，最多 3 分钟，返回每个 issue 的评论原文（无评论则报告超时）。阻塞等它返回，主循环不自行轮询。
