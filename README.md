@@ -97,6 +97,9 @@ repo-guard 通过 git submodule 引用本仓库，运行时始终拉取最新版
 
 独特能力是 meta-improvement：当 repo-guard 的审评质量持续偏低（滚动窗口平均分 < 3）时，自动切换到 repo-guard 仓库改进其 prompts 和 skills，形成评审质量的自我进化闭环。内置频率限制和硬上限防止无限元循环。
 
+# repo-evolver-fast
+支持子代理、并行开发版本的 repo-evolver ，但是 tokens 会烧的更快，并且假如你的帐号到达了上限会导致子代理线程信息有丢失风险
+
 ---
 
 # repo-harness-bootstrap
