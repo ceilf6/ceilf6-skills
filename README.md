@@ -119,3 +119,15 @@ repo-guard 通过 git submodule 引用本仓库，运行时始终拉取最新版
 纯本地 Semgrep 静态代码分析 skill，对指定仓库执行全量扫描，查找 Blocker（ERROR）和 Critical（WARNING）级别的安全与质量问题，输出结构化 Markdown 报告。
 
 支持 TypeScript、JavaScript、Python、HTML、CSS 等 30+ 语言。核心设计点是精准识别源码目录、排除依赖和生成文件（node_modules、.venv、onnx 模型等），避免产生大量无效告警。工作流程：安装 Semgrep → 识别源码目录 → 执行扫描 → 二次过滤 → 获取代码上下文 → 生成带修复建议的报告。
+
+---
+
+## Friendly Links
+
+- [Linux.do](https://linux.do/) - Chinese AI learning and developer community.
+- [Aionui](https://github.com/iOfficeAI/AionUi) - Mobile remote-control UI for letting AI agents operate tasks from a phone.
+- [OfficeCLI](https://github.com/iOfficeAI/OfficeCLI) - Office suite designed for AI agents.
+- [deepseek-pp](https://github.com/zhu1090093659/deepseek-pp) - Browser extension for DeepSeek web conversations.
+- [MuseAI](https://github.com/yejiming/MuseAI) - Local AI companion, text adventure, and interactive fiction app.
+- [RedBox](https://github.com/Jamailar/RedBox) - Local AI creation workspace for Xiaohongshu creators.
+- [1flowbase](https://github.com/taichuy/1flowbase) - Virtual model gateway for publishing multi-model workflows as OpenAI/Claude-compatible endpoints, with trace, token, latency, and cost visibility.
