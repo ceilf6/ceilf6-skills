@@ -1,0 +1,43 @@
+# ByteDance daily report profile configuration.
+
+active_profile: "wangjinghong.ceilf6"
+
+profiles:
+  wangjinghong.ceilf6:
+    username: "wangjinghong.ceilf6"
+    display_name: "王景宏"
+    email: "wangjinghong.ceilf6@bytedance.com"
+    employee_id: "9507267"
+    feishu_open_id: "ou_c501034db06707b7116eb9ec11896a7d"
+    timezone: "Asia/Shanghai"
+
+    parent_wiki:
+      title: "日结"
+      url: "https://bytedance.larkoffice.com/wiki/ZDvbwhN4eiFRoHkUh1ocXSeInSb"
+      node_token: "ZDvbwhN4eiFRoHkUh1ocXSeInSb"
+      space_id: "7658115519924686035"
+
+    title:
+      pattern: "{yy}.{mm}.{dd}"
+      example: "26.07.08"
+
+    report:
+      sections:
+        done: "今日完成"
+        next: "明日展望"
+      plan_reference:
+        title: "明日展望数据源"
+        url: "https://bytedance.larkoffice.com/wiki/Np5LwAHU6igvgAkl4PLcHASLnOp"
+      style: "concise_evidence_backed"
+
+    delivery:
+      enabled: false
+      note: "Only create or update the Feishu wiki document. Do not notify groups."
+
+    sources:
+      lark_drive_page_size: 20
+      im_page_size: 50
+      mail_summary_limit: 20
+      codebase_page_size: 50
+      include_sensitive_sources: true
+      skip_attendance_by_default: true
