@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Iterable
@@ -69,7 +70,7 @@ def parse_jsonl(path: Path) -> tuple[list[dict], list[str]]:
             try:
                 value = json.loads(stripped)
             except json.JSONDecodeError as exc:
-                errors.append(f"{path}:{line_number}: {exc.msg}")
+                errors.append(f"invalid json line {line_number}: {exc.msg}")
                 continue
             if isinstance(value, dict):
                 rows.append(value)
@@ -125,7 +126,15 @@ def rows_for_date(rows: list[dict], target_date: date, timezone_name: str) -> li
 
 
 def short_text(value: str) -> str:
-    return " ".join(value.split())[:200]
+    return sanitize_text(" ".join(value.split()))
+
+
+def sanitize_text(text: str) -> str:
+    sanitized = re.sub(r"sk-[A-Za-z0-9_-]{8,}", "[redacted]", text)
+    sanitized = re.sub(r"(?i)(secret(?:[_-]?key)?|token|password|api[_-]?key)=\S+", "[redacted]", sanitized)
+    if len(sanitized) > 220:
+        sanitized = sanitized[:220] + "..."
+    return sanitized
 
 
 def record_for_session(
@@ -141,6 +150,9 @@ def record_for_session(
 ) -> dict:
     work_signals = [short_text(message) for message in messages if short_text(message)]
     title = work_signals[0] if work_signals else f"{source} {record_kind}"
+    record_limitations = list(limitations)
+    if any(sanitize_text(message) != message for message in messages):
+        record_limitations.append("redacted sensitive content")
     timestamps = [
         text
         for text in (row.get("timestamp") or row.get("message_summary_time") for row in rows)
@@ -158,7 +170,7 @@ def record_for_session(
         "work_signals": work_signals,
         "evidence_label": f"{source}:{session_id}",
         "confidence": confidence,
-        "limitations": limitations,
+        "limitations": record_limitations,
         "counts": {"records_read": len(rows), "messages_seen": len(messages)},
     }
 
@@ -211,9 +223,11 @@ def trae_cn_messages(rows: list[dict]) -> list[str]:
     return messages
 
 
-def coverage_for_paths(source: str, path_pattern: str, records_found: int, roots_exist: bool) -> dict:
+def coverage_for_paths(source: str, path_pattern: str, records_found: int, roots_exist: bool, has_parse_warnings: bool = False) -> dict:
+    if has_parse_warnings:
+        return coverage_item(source, path_pattern, "partially_read", "parse warnings encountered", records_found)
     if records_found:
-        return coverage_item(source, path_pattern, "ok", "records found", records_found)
+        return coverage_item(source, path_pattern, "read", "records found", records_found)
     if roots_exist:
         return coverage_item(source, path_pattern, "empty", "no records for target date", 0)
     return coverage_item(source, path_pattern, "missing", "source path does not exist", 0)
@@ -222,9 +236,11 @@ def coverage_for_paths(source: str, path_pattern: str, records_found: int, roots
 def collect_claude(target_date: date, timezone_name: str, home: Path) -> tuple[list[dict], dict]:
     root = home / ".claude" / "projects"
     records = []
+    has_parse_warnings = False
     if root.exists():
         for path in sorted(root.glob("**/*.jsonl")):
             rows, errors = parse_jsonl(path)
+            has_parse_warnings = has_parse_warnings or bool(errors)
             matched_rows = rows_for_date(rows, target_date, timezone_name)
             if not matched_rows:
                 continue
@@ -232,7 +248,7 @@ def collect_claude(target_date: date, timezone_name: str, home: Path) -> tuple[l
             cwd = first_payload_value(matched_rows, ("cwd",))
             messages = claude_messages(matched_rows)
             records.append(record_for_session("claude", session_id, path, "conversation", rows, messages, cwd, "high", errors))
-    return records, coverage_for_paths("claude", str(default_path_pattern(home, "claude")), len(records), root.exists())
+    return records, coverage_for_paths("claude", str(default_path_pattern(home, "claude")), len(records), root.exists(), has_parse_warnings)
 
 
 def collect_codex(target_date: date, timezone_name: str, home: Path) -> tuple[list[dict], dict]:
@@ -243,23 +259,25 @@ def collect_codex(target_date: date, timezone_name: str, home: Path) -> tuple[li
         paths.extend(sorted(dated_root.glob("*.jsonl")))
     if archive_root.exists():
         paths.extend(sorted(archive_root.glob(f"rollout-{target_date.isoformat()}*.jsonl")))
-    records = collect_rollout_paths("codex", paths, target_date, timezone_name)
+    records, has_parse_warnings = collect_rollout_paths("codex", paths, target_date, timezone_name)
     roots_exist = dated_root.exists() or archive_root.exists()
     pattern = f"{dated_root}/*.jsonl; {archive_root}/rollout-{target_date.isoformat()}*.jsonl"
-    return records, coverage_for_paths("codex", pattern, len(records), roots_exist)
+    return records, coverage_for_paths("codex", pattern, len(records), roots_exist, has_parse_warnings)
 
 
 def collect_trae(target_date: date, timezone_name: str, home: Path) -> tuple[list[dict], dict]:
     root = home / ".trae" / "cli" / "sessions" / f"{target_date:%Y}" / f"{target_date:%m}" / f"{target_date:%d}"
     paths = sorted(root.glob("*.jsonl")) if root.exists() else []
-    records = collect_rollout_paths("trae", paths, target_date, timezone_name)
-    return records, coverage_for_paths("trae", str(default_path_pattern(home, "trae")), len(records), root.exists())
+    records, has_parse_warnings = collect_rollout_paths("trae", paths, target_date, timezone_name)
+    return records, coverage_for_paths("trae", str(default_path_pattern(home, "trae")), len(records), root.exists(), has_parse_warnings)
 
 
-def collect_rollout_paths(source: str, paths: list[Path], target_date: date, timezone_name: str) -> list[dict]:
+def collect_rollout_paths(source: str, paths: list[Path], target_date: date, timezone_name: str) -> tuple[list[dict], bool]:
     records = []
+    has_parse_warnings = False
     for path in paths:
         rows, errors = parse_jsonl(path)
+        has_parse_warnings = has_parse_warnings or bool(errors)
         matched_rows = rows_for_date(rows, target_date, timezone_name)
         if not matched_rows:
             continue
@@ -267,15 +285,17 @@ def collect_rollout_paths(source: str, paths: list[Path], target_date: date, tim
         cwd = first_payload_value(matched_rows, ("cwd",))
         messages = rollout_messages(matched_rows)
         records.append(record_for_session(source, session_id, path, "rollout", rows, messages, cwd, "high", errors))
-    return records
+    return records, has_parse_warnings
 
 
 def collect_trae_cn(target_date: date, timezone_name: str, home: Path) -> tuple[list[dict], dict]:
     root = home / ".trae-cn" / "memory" / "projects"
     records = []
+    has_parse_warnings = False
     if root.exists():
         for path in sorted(root.glob(f"*/{target_date:%Y%m%d}/session_memory_*.jsonl")):
             rows, errors = parse_jsonl(path)
+            has_parse_warnings = has_parse_warnings or bool(errors)
             matched_rows = rows_for_date(rows, target_date, timezone_name) or rows
             if not matched_rows:
                 continue
@@ -295,7 +315,7 @@ def collect_trae_cn(target_date: date, timezone_name: str, home: Path) -> tuple[
                     limitations,
                 )
             )
-    return records, coverage_for_paths("trae-cn", str(default_path_pattern(home, "trae-cn")), len(records), root.exists())
+    return records, coverage_for_paths("trae-cn", str(default_path_pattern(home, "trae-cn")), len(records), root.exists(), has_parse_warnings)
 
 
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:

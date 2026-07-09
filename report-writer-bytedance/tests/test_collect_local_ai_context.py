@@ -203,6 +203,80 @@ class LocalAiSourceDiscoveryTests(unittest.TestCase):
         self.assertIn("records_read 计数", signals)
         self.assertNotIn("非目标日期工作", signals)
 
+    def test_bad_jsonl_line_is_reported_without_aborting(self):
+        parser = load_parser_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            write_jsonl(
+                home / ".codex" / "sessions" / "2026" / "07" / "09" / "rollout-2026-07-09T10-00-00-bad.jsonl",
+                [
+                    {"type": "session_meta", "timestamp": "2026-07-09T02:00:00Z", "payload": {"session_id": "codex-bad", "cwd": "/workspace"}},
+                    "{not valid json",
+                    {"type": "event_msg", "timestamp": "2026-07-09T02:01:00Z", "payload": {"message": "继续处理有效记录"}},
+                ],
+            )
+
+            result = parser.collect_all(date(2026, 7, 9), "Asia/Shanghai", home, ["codex"])
+
+        self.assertEqual(len(result["records"]), 1)
+        self.assertIn("invalid json line", " ".join(result["records"][0]["limitations"]))
+        self.assertEqual(result["coverage"][0]["status"], "partially_read")
+
+    def test_sensitive_content_is_not_copied_to_summary_or_signals(self):
+        parser = load_parser_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            write_jsonl(
+                home / ".claude" / "projects" / "-Users-bytedance" / "secret.jsonl",
+                [
+                    {
+                        "type": "user",
+                        "sessionId": "claude-secret",
+                        "timestamp": "2026-07-09T01:00:00.000Z",
+                        "message": {"role": "user", "content": "验证部署 token sk-test-1234567890abcdef SECRET_KEY=abc123"},
+                    }
+                ],
+            )
+
+            result = parser.collect_all(date(2026, 7, 9), "Asia/Shanghai", home, ["claude"])
+
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertNotIn("sk-test-1234567890abcdef", serialized)
+        self.assertNotIn("SECRET_KEY=abc123", serialized)
+        self.assertIn("[redacted]", serialized)
+
+    def test_jsonl_cli_outputs_records_and_coverage_lines(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            write_jsonl(
+                home / ".trae" / "cli" / "sessions" / "2026" / "07" / "09" / "rollout-2026-07-09T12-00-00-jsonl.jsonl",
+                [
+                    {"type": "session_meta", "timestamp": "2026-07-09T04:00:00Z", "payload": {"id": "trae-jsonl", "cwd": "/workspace"}},
+                    {"type": "event_msg", "timestamp": "2026-07-09T04:01:00Z", "payload": {"message": "输出 JSONL"}},
+                ],
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT_PATH),
+                    "--date",
+                    "2026-07-09",
+                    "--home",
+                    str(home),
+                    "--source",
+                    "trae",
+                    "--format",
+                    "jsonl",
+                ],
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+
+        rows = [json.loads(line) for line in completed.stdout.splitlines()]
+        self.assertEqual(rows[0]["source"], "trae")
+        self.assertIn("coverage", rows[-1])
+
 
 if __name__ == "__main__":
     unittest.main()
