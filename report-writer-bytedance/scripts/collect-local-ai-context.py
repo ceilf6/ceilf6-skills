@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import date
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Iterable
+from zoneinfo import ZoneInfo
 
 
 ALL_SOURCES = ["claude", "codex", "trae", "trae-cn"]
@@ -32,18 +33,19 @@ def coverage_item(source: str, path_pattern: str, status: str, reason: str, reco
 
 
 def collect_all(target_date: date, timezone_name: str, home: Path, sources: list[str]) -> dict:
-    del target_date, timezone_name
+    collectors = {
+        "claude": collect_claude,
+        "codex": collect_codex,
+        "trae": collect_trae,
+        "trae-cn": collect_trae_cn,
+    }
+    records = []
     coverage = []
     for source in sources:
-        coverage.append(
-            coverage_item(
-                source=source,
-                path_pattern=str(default_path_pattern(home, source)),
-                status="missing",
-                reason="source path does not exist",
-            )
-        )
-    return {"records": [], "coverage": coverage}
+        source_records, source_coverage = collectors[source](target_date, timezone_name, home)
+        records.extend(source_records)
+        coverage.append(source_coverage)
+    return {"records": records, "coverage": coverage}
 
 
 def default_path_pattern(home: Path, source: str) -> Path:
@@ -54,6 +56,246 @@ def default_path_pattern(home: Path, source: str) -> Path:
         "trae-cn": home / ".trae-cn" / "memory" / "projects" / "*" / "YYYYMMDD" / "session_memory_*.jsonl",
     }
     return patterns[source]
+
+
+def parse_jsonl(path: Path) -> tuple[list[dict], list[str]]:
+    rows = []
+    errors = []
+    with path.open("r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                value = json.loads(stripped)
+            except json.JSONDecodeError as exc:
+                errors.append(f"{path}:{line_number}: {exc.msg}")
+                continue
+            if isinstance(value, dict):
+                rows.append(value)
+    return rows, errors
+
+
+def parse_timestamp(value: object, timezone_name: str) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        if value.endswith("Z"):
+            parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+        else:
+            parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+    timezone = ZoneInfo(timezone_name)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone)
+    return parsed.astimezone(timezone)
+
+
+def text_from_value(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts = [text_from_value(item) for item in value]
+        return " ".join(part for part in parts if part)
+    if isinstance(value, dict):
+        for key in ("text", "message", "content", "intent", "outcome"):
+            if key in value:
+                text = text_from_value(value[key])
+                if text:
+                    return text
+    return ""
+
+
+def target_bounds(target_date: date, timezone_name: str) -> tuple[datetime, datetime]:
+    timezone = ZoneInfo(timezone_name)
+    start = datetime.combine(target_date, time.min, tzinfo=timezone)
+    return start, start + timedelta(days=1)
+
+
+def rows_for_date(rows: list[dict], target_date: date, timezone_name: str) -> list[dict]:
+    start, end = target_bounds(target_date, timezone_name)
+    matched = []
+    for row in rows:
+        timestamp = parse_timestamp(row.get("timestamp") or row.get("message_summary_time"), timezone_name)
+        if timestamp is not None and start <= timestamp < end:
+            matched.append(row)
+    return matched
+
+
+def short_text(value: str) -> str:
+    return " ".join(value.split())[:200]
+
+
+def record_for_session(
+    source: str,
+    session_id: str,
+    path: Path,
+    record_kind: str,
+    rows: list[dict],
+    messages: list[str],
+    cwd: str | None,
+    confidence: str,
+    limitations: list[str],
+) -> dict:
+    work_signals = [short_text(message) for message in messages if short_text(message)]
+    title = work_signals[0] if work_signals else f"{source} {record_kind}"
+    timestamps = [
+        text
+        for text in (row.get("timestamp") or row.get("message_summary_time") for row in rows)
+        if isinstance(text, str)
+    ]
+    return {
+        "source": source,
+        "session_id": session_id,
+        "path": str(path),
+        "record_kind": record_kind,
+        "time_range": {"start": min(timestamps) if timestamps else None, "end": max(timestamps) if timestamps else None},
+        "project": {"cwd": cwd} if cwd else {},
+        "title": title,
+        "summary": f"Local {source.title()} {record_kind} with {len(rows)} records and {len(work_signals)} work signals.",
+        "work_signals": work_signals,
+        "evidence_label": f"{source}:{session_id}",
+        "confidence": confidence,
+        "limitations": limitations,
+        "counts": {"records_read": len(rows), "messages_seen": len(messages)},
+    }
+
+
+def first_payload_value(rows: list[dict], keys: tuple[str, ...]) -> str | None:
+    for row in rows:
+        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        for container in (row, payload):
+            for key in keys:
+                value = container.get(key)
+                if isinstance(value, str) and value:
+                    return value
+    return None
+
+
+def claude_messages(rows: list[dict]) -> list[str]:
+    messages = []
+    for row in rows:
+        if row.get("type") != "user":
+            continue
+        message = row.get("message") if isinstance(row.get("message"), dict) else {}
+        text = text_from_value(message.get("content"))
+        if text:
+            messages.append(text)
+    return messages
+
+
+def rollout_messages(rows: list[dict]) -> list[str]:
+    messages = []
+    for row in rows:
+        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        if row.get("type") == "event_msg" and payload.get("type") == "user_message":
+            text = text_from_value(payload.get("message"))
+        elif row.get("type") == "response_item" and payload.get("role") == "assistant":
+            text = text_from_value(payload.get("content"))
+        else:
+            text = ""
+        if text:
+            messages.append(text)
+    return messages
+
+
+def trae_cn_messages(rows: list[dict]) -> list[str]:
+    messages = []
+    for row in rows:
+        for key in ("intent", "actions", "outcome"):
+            text = text_from_value(row.get(key))
+            if text:
+                messages.append(text)
+    return messages
+
+
+def coverage_for_paths(source: str, path_pattern: str, records_found: int, roots_exist: bool) -> dict:
+    if records_found:
+        return coverage_item(source, path_pattern, "ok", "records found", records_found)
+    if roots_exist:
+        return coverage_item(source, path_pattern, "empty", "no records for target date", 0)
+    return coverage_item(source, path_pattern, "missing", "source path does not exist", 0)
+
+
+def collect_claude(target_date: date, timezone_name: str, home: Path) -> tuple[list[dict], dict]:
+    root = home / ".claude" / "projects"
+    records = []
+    if root.exists():
+        for path in sorted(root.glob("**/*.jsonl")):
+            rows, errors = parse_jsonl(path)
+            matched_rows = rows_for_date(rows, target_date, timezone_name)
+            if not matched_rows:
+                continue
+            session_id = first_payload_value(matched_rows, ("sessionId", "session_id", "id")) or path.stem
+            cwd = first_payload_value(matched_rows, ("cwd",))
+            messages = claude_messages(matched_rows)
+            records.append(record_for_session("claude", session_id, path, "conversation", rows, messages, cwd, "high", errors))
+    return records, coverage_for_paths("claude", str(default_path_pattern(home, "claude")), len(records), root.exists())
+
+
+def collect_codex(target_date: date, timezone_name: str, home: Path) -> tuple[list[dict], dict]:
+    dated_root = home / ".codex" / "sessions" / f"{target_date:%Y}" / f"{target_date:%m}" / f"{target_date:%d}"
+    archive_root = home / ".codex" / "archived_sessions"
+    paths = []
+    if dated_root.exists():
+        paths.extend(sorted(dated_root.glob("*.jsonl")))
+    if archive_root.exists():
+        paths.extend(sorted(archive_root.glob(f"rollout-{target_date.isoformat()}*.jsonl")))
+    records = collect_rollout_paths("codex", paths, target_date, timezone_name)
+    roots_exist = dated_root.exists() or archive_root.exists()
+    pattern = f"{dated_root}/*.jsonl; {archive_root}/rollout-{target_date.isoformat()}*.jsonl"
+    return records, coverage_for_paths("codex", pattern, len(records), roots_exist)
+
+
+def collect_trae(target_date: date, timezone_name: str, home: Path) -> tuple[list[dict], dict]:
+    root = home / ".trae" / "cli" / "sessions" / f"{target_date:%Y}" / f"{target_date:%m}" / f"{target_date:%d}"
+    paths = sorted(root.glob("*.jsonl")) if root.exists() else []
+    records = collect_rollout_paths("trae", paths, target_date, timezone_name)
+    return records, coverage_for_paths("trae", str(default_path_pattern(home, "trae")), len(records), root.exists())
+
+
+def collect_rollout_paths(source: str, paths: list[Path], target_date: date, timezone_name: str) -> list[dict]:
+    records = []
+    for path in paths:
+        rows, errors = parse_jsonl(path)
+        matched_rows = rows_for_date(rows, target_date, timezone_name)
+        if not matched_rows:
+            continue
+        session_id = first_payload_value(matched_rows, ("session_id", "id")) or path.stem
+        cwd = first_payload_value(matched_rows, ("cwd",))
+        messages = rollout_messages(matched_rows)
+        records.append(record_for_session(source, session_id, path, "rollout", rows, messages, cwd, "high", errors))
+    return records
+
+
+def collect_trae_cn(target_date: date, timezone_name: str, home: Path) -> tuple[list[dict], dict]:
+    root = home / ".trae-cn" / "memory" / "projects"
+    records = []
+    if root.exists():
+        for path in sorted(root.glob(f"*/{target_date:%Y%m%d}/session_memory_*.jsonl")):
+            rows, errors = parse_jsonl(path)
+            matched_rows = rows_for_date(rows, target_date, timezone_name) or rows
+            if not matched_rows:
+                continue
+            session_id = first_payload_value(matched_rows, ("message_id",)) or path.stem
+            messages = trae_cn_messages(matched_rows)
+            limitations = errors + ["Trae-CN current source is memory summary, not raw conversation."]
+            records.append(
+                record_for_session(
+                    "trae-cn",
+                    session_id,
+                    path,
+                    "memory_summary",
+                    matched_rows,
+                    messages,
+                    None,
+                    "medium",
+                    limitations,
+                )
+            )
+    return records, coverage_for_paths("trae-cn", str(default_path_pattern(home, "trae-cn")), len(records), root.exists())
 
 
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
