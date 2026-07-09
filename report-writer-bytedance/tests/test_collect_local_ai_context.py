@@ -64,6 +64,14 @@ class LocalAiContextParserTests(unittest.TestCase):
         self.assertEqual(payload["records"], [])
         self.assertEqual({item["source"] for item in payload["coverage"]}, {"claude", "codex", "trae", "trae-cn"})
 
+    def test_sanitize_text_caps_truncated_text_at_220_chars(self):
+        parser = load_parser_module()
+
+        result = parser.sanitize_text("x" * 221)
+
+        self.assertLessEqual(len(result), 220)
+        self.assertTrue(result.endswith("..."))
+
 
 def write_jsonl(path: Path, rows: list[dict | str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)

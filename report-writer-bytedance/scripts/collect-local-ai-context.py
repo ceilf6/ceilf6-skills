@@ -133,7 +133,7 @@ def sanitize_text(text: str) -> str:
     sanitized = re.sub(r"sk-[A-Za-z0-9_-]{8,}", "[redacted]", text)
     sanitized = re.sub(r"(?i)(secret(?:[_-]?key)?|token|password|api[_-]?key)=\S+", "[redacted]", sanitized)
     if len(sanitized) > 220:
-        sanitized = sanitized[:220] + "..."
+        sanitized = sanitized[:217] + "..."
     return sanitized
 
 
