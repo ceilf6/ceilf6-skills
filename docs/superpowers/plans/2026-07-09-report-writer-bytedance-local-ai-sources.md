@@ -666,8 +666,10 @@ Under `profiles.wangjinghong.ceilf6.sources`, add:
       local_ai_parser: "report-writer-bytedance/scripts/collect-local-ai-context.py"
       local_ai_sources:
         claude: "~/.claude/projects/**/*.jsonl"
-        codex: "~/.codex/sessions/{yyyy}/{mm}/{dd}/rollout-*.jsonl"
-        trae: "~/.trae/cli/sessions/{yyyy}/{mm}/{dd}/rollout-*.jsonl"
+        codex:
+          - "~/.codex/sessions/{yyyy}/{mm}/{dd}/rollout-*.jsonl"
+          - "~/.codex/archived_sessions/rollout-*.jsonl"
+        trae: "~/.trae/cli/sessions/{yyyy}/{mm}/{dd}/rollout-*.jsonl; ~/.trae/cli/history.jsonl"
         trae_cn: "~/.trae-cn/memory/projects/*/{yyyymmdd}/session_memory_*.jsonl"
 ```
 

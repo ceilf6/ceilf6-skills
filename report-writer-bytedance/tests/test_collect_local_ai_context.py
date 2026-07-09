@@ -407,6 +407,25 @@ class LocalAiFinalReviewRegressionTests(unittest.TestCase):
         self.assertIn("用户要求", signals)
         self.assertNotIn("ASSISTANT_RESPONSE_TEXT_MUST_BE_EXCLUDED", signals)
 
+    def test_rollout_work_signals_exclude_assistant_event_messages_without_role(self):
+        parser = load_parser_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            write_jsonl(
+                home / ".codex" / "sessions" / "2026" / "07" / "09" / "rollout-assistant-event.jsonl",
+                [
+                    {"type": "session_meta", "timestamp": "2026-07-09T02:00:00Z", "payload": {"session_id": "codex-assistant-event"}},
+                    {"type": "event_msg", "timestamp": "2026-07-09T02:01:00Z", "payload": {"type": "agent_message", "message": "assistant raw text"}},
+                    {"type": "event_msg", "timestamp": "2026-07-09T02:02:00Z", "payload": {"type": "user_message", "message": "user raw text"}},
+                ],
+            )
+
+            result = parser.collect_all(date(2026, 7, 9), "Asia/Shanghai", home, ["codex"])
+
+        signals = " ".join(result["records"][0]["work_signals"])
+        self.assertIn("user raw text", signals)
+        self.assertNotIn("assistant raw text", signals)
+
     def test_project_object_includes_null_keys_when_unknown(self):
         parser = load_parser_module()
         with tempfile.TemporaryDirectory() as tmp:

@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 
 ALL_SOURCES = ["claude", "codex", "trae", "trae-cn"]
+ASSISTANT_EVENT_TYPES = {"agent_message", "assistant_message"}
 
 
 def normalize_sources(source: str) -> list[str]:
@@ -249,10 +250,16 @@ def claude_messages(rows: list[dict]) -> list[str]:
     return messages
 
 
+def is_assistant_event(row: dict, payload: dict) -> bool:
+    return payload.get("type") in ASSISTANT_EVENT_TYPES or row.get("type") in ASSISTANT_EVENT_TYPES
+
+
 def rollout_messages(rows: list[dict]) -> list[str]:
     messages = []
     for row in rows:
         payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        if is_assistant_event(row, payload):
+            continue
         if row.get("type") == "event_msg" and payload.get("type") == "user_message":
             text = text_from_value(payload.get("message"))
         elif row.get("type") == "event_msg" and payload.get("role") != "assistant":
@@ -268,6 +275,8 @@ def history_messages(rows: list[dict]) -> list[str]:
     messages = []
     for row in rows:
         payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        if is_assistant_event(row, payload):
+            continue
         if row.get("role") == "assistant" or payload.get("role") == "assistant":
             continue
         text = ""

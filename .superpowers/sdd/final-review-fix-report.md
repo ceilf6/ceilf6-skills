@@ -163,3 +163,88 @@ Result:
 
 - Mixed timestamp fallback intentionally lowers record confidence to `low` when untimestamped rows are included by path-date or mtime fallback.
 - Real local parser output still had no Trae records for the target date in aggregate coverage; Trae status remained `empty`.
+
+## Final Assistant Event-Type Re-Review Fix Addendum
+
+Fixed the last assistant leakage finding:
+
+- `rollout_messages()` and `history_messages()` now skip known assistant event types `agent_message` and `assistant_message`, even when no assistant role field is present.
+- Codex local AI config now lists both active sessions and archived sessions as explicit YAML entries.
+- The local AI source plan config sample now matches the archived Codex and Trae history paths.
+
+## RED Evidence
+
+Focused regression before parser implementation:
+
+```bash
+python3 -m unittest report-writer-bytedance.tests.test_collect_local_ai_context.LocalAiFinalReviewRegressionTests.test_rollout_work_signals_exclude_assistant_event_messages_without_role -v
+```
+
+Result:
+
+- Exit code: 1
+- Ran: 1 test
+- Failure: assistant event fixture text was unexpectedly present in `work_signals`.
+
+## GREEN Evidence
+
+Focused regression after parser implementation:
+
+```bash
+python3 -m unittest report-writer-bytedance.tests.test_collect_local_ai_context.LocalAiFinalReviewRegressionTests.test_rollout_work_signals_exclude_assistant_event_messages_without_role -v
+```
+
+Result:
+
+- Exit code: 0
+- Ran: 1 test
+- Status: OK
+
+Full parser unittest:
+
+```bash
+python3 -m unittest report-writer-bytedance/tests/test_collect_local_ai_context.py -v
+```
+
+Result:
+
+- Exit code: 0
+- Ran: 21 tests
+- Status: OK
+
+Real parser JSON validation:
+
+```bash
+python3 report-writer-bytedance/scripts/collect-local-ai-context.py --date 2026-07-09 --timezone Asia/Shanghai --source all --format json > /tmp/report-writer-local-ai-context.json
+python3 -m json.tool /tmp/report-writer-local-ai-context.json >/tmp/report-writer-local-ai-context.pretty.json
+```
+
+Result:
+
+- Exit code: 0 for parser generation.
+- Exit code: 0 for JSON validation.
+- Aggregate-only inspection: 26 records; record sources `['claude', 'codex', 'trae-cn']`; coverage `{'claude': 'read', 'codex': 'read', 'trae': 'empty', 'trae-cn': 'read'}`.
+
+Config/docs grep:
+
+```bash
+rg -n "archived_sessions|codex:|trae:" report-writer-bytedance/references/config.yaml docs/superpowers/plans/2026-07-09-report-writer-bytedance-local-ai-sources.md report-writer-bytedance/references/local-ai-sources.md docs/superpowers/specs/2026-07-09-report-writer-bytedance-local-ai-sources-design.md
+```
+
+Result:
+
+- Exit code: 0
+- Config and referenced docs include Codex archived sessions.
+- Config and plan sample include Trae `history.jsonl`.
+
+## Files Changed
+
+- `report-writer-bytedance/scripts/collect-local-ai-context.py`
+- `report-writer-bytedance/tests/test_collect_local_ai_context.py`
+- `report-writer-bytedance/references/config.yaml`
+- `docs/superpowers/plans/2026-07-09-report-writer-bytedance-local-ai-sources.md`
+- `.superpowers/sdd/final-review-fix-report.md`
+
+## Concerns
+
+- Real local parser output still had no Trae records for the target date in aggregate coverage; Trae status remained `empty`.
