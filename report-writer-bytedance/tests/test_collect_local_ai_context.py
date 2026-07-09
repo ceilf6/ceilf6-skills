@@ -170,6 +170,39 @@ class LocalAiSourceDiscoveryTests(unittest.TestCase):
         self.assertEqual(record["confidence"], "medium")
         self.assertIn("memory summary", " ".join(record["limitations"]))
 
+    def test_trae_cn_records_read_counts_all_parsed_rows_but_signals_use_target_date(self):
+        parser = load_parser_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            write_jsonl(
+                home / ".trae-cn" / "memory" / "projects" / "-Users-bytedance" / "20260709" / "session_memory_mixed.jsonl",
+                [
+                    {
+                        "message_summary_time": "2026-07-09 10:00:00",
+                        "message_id": "msg-target",
+                        "intent": "修复 Trae-CN records_read 计数",
+                        "actions": ["新增目标日期信号"],
+                        "outcome": "验证只保留目标日期工作信号",
+                    },
+                    {
+                        "message_summary_time": "2026-07-08 10:00:00",
+                        "message_id": "msg-other",
+                        "intent": "非目标日期工作不应进入信号",
+                        "actions": ["旧日期动作"],
+                        "outcome": "旧日期结果",
+                    },
+                ],
+            )
+
+            result = parser.collect_all(date(2026, 7, 9), "Asia/Shanghai", home, ["trae-cn"])
+
+        self.assertEqual(len(result["records"]), 1)
+        record = result["records"][0]
+        self.assertEqual(record["counts"]["records_read"], 2)
+        signals = " ".join(record["work_signals"])
+        self.assertIn("records_read 计数", signals)
+        self.assertNotIn("非目标日期工作", signals)
+
 
 if __name__ == "__main__":
     unittest.main()

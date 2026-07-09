@@ -288,7 +288,7 @@ def collect_trae_cn(target_date: date, timezone_name: str, home: Path) -> tuple[
                     session_id,
                     path,
                     "memory_summary",
-                    matched_rows,
+                    rows,
                     messages,
                     None,
                     "medium",
