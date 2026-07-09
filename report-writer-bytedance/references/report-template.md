@@ -59,6 +59,7 @@ Section rules:
 - Reflection cliché blacklist — never write these or close paraphrases; before publishing, scan the draft and treat any hit as a blocking finding: 学到了很多、收获满满、受益匪浅、感触很深、成长了不少.
 - SOP format: numbered steps, one action per step, include branch conditions such as 若 X 则 Y, executable as written.
 - Use Markdown links for all artifacts: `[label](https://...)`.
+- For local AI evidence without a public URL, write the evidence label as plain text, for example `证据：local_trae_session trae:<session_id>`; keep local file paths out of the document body.
 - Do not write raw URLs in the document body.
 - Do not include source diagnostics in the document body, such as `未查到任务`, `无会议`, `空结果`, or `仅参会`.
 - Do not include raw Feishu message or mail body text. Summarize work-relevant decisions or blockers.
@@ -75,6 +76,7 @@ After writing the document, keep diagnostics in the assistant response:
 覆盖来源：飞书云文档、飞书消息、Codebase、Bits、...
 空结果：Meego、Cloud Ticket、Oncall、...
 跳过：考勤（lark-cli 标记为 write 风险）
+本地 AI 覆盖：Claude/Codex/Trae/Trae-CN <read|empty|missing|skipped>，本地路径仅在需要排障时于助手回复中概述
 审查：mentor/主管/HR 共 <N> 条意见（阻塞 <X>、建议 <Y>），修订 <R> 轮
 沉淀库：已追加「<条目标题>」 / 本日无新增
 通知：未发送群通知

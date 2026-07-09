@@ -27,7 +27,7 @@ When creating or updating Feishu docs, also read the current embedded Lark docs 
 1. Resolve the profile from `config.yaml`; use `active_profile` unless the user explicitly provides another profile.
 2. Resolve the target date in the profile timezone. If the user says today, use the actual current date in `Asia/Shanghai`.
 3. Compute the report title from `title.pattern`, e.g. `26.07.08`.
-4. Perform the tool and auth preflight from `source-map.md` before collecting data, including local parser availability with `python3`. If `lark-cli` or `bytedcli` is missing, if the local AI parser cannot run with `python3`, or if a required auth flow is unavailable, stop and ask the user to authorize/install instead of silently continuing with partial coverage.
+4. Perform the tool and auth preflight from `source-map.md` before collecting data, including local parser availability with `python3`. If `lark-cli`, `bytedcli`, or a required ByteDance auth flow is unavailable, stop and ask the user to authorize/install instead of silently continuing with partial ByteDance coverage. If the local AI parser is missing or cannot run, mark local AI sources skipped with the concrete reason and continue ByteDance source collection unless the user explicitly required local AI coverage.
 5. Inspect the parent wiki and list its children before writing. If a child with the target title exists, update that document; otherwise create a new document under the parent wiki.
 6. Collect all available target-date user activity from ByteDance sources in `source-map.md` and local AI assistant sources in `local-ai-sources.md`. Start from explicit user links, then use broad user/date queries. Read underlying source content before deciding relevance.
 7. Read `report.plan_reference.url` only for `明日展望`. Treat it as a backlog or planning source, not evidence of completed work.
@@ -41,7 +41,7 @@ When creating or updating Feishu docs, also read the current embedded Lark docs 
 
 ## Source Rules
 
-- Use ByteDance sources only. Do not use Meituan TT, ONES, Citadel/KM, Daxiang, or C4 terminology for this skill.
+- Use ByteDance platform sources plus approved local AI assistant sources only. Do not use Meituan TT, ONES, Citadel/KM, Daxiang, or C4 terminology for this skill.
 - Use `lark-cli` for Feishu docs/wiki/drive, messages, calendar, tasks, minutes, VC, mail, and approval metadata.
 - Use `bytedcli` for Codebase, Bits, Meego, Cloud Ticket, Oncall, and ByteCloud-related sources.
 - Treat Feishu messages and mail as sensitive. Summarize work-relevant facts only; do not copy raw private chat or mail body into the report.

@@ -53,7 +53,7 @@ def default_path_pattern(home: Path, source: str) -> Path:
     patterns = {
         "claude": home / ".claude" / "projects" / "**" / "*.jsonl",
         "codex": home / ".codex" / "sessions" / "YYYY" / "MM" / "DD" / "*.jsonl",
-        "trae": home / ".trae" / "cli" / "sessions" / "YYYY" / "MM" / "DD" / "*.jsonl",
+        "trae": home / ".trae" / "cli" / "{sessions/YYYY/MM/DD/*.jsonl,history.jsonl}",
         "trae-cn": home / ".trae-cn" / "memory" / "projects" / "*" / "YYYYMMDD" / "session_memory_*.jsonl",
     }
     return patterns[source]
@@ -125,6 +125,48 @@ def rows_for_date(rows: list[dict], target_date: date, timezone_name: str) -> li
     return matched
 
 
+def rows_for_date_or_fallback(path: Path, rows: list[dict], target_date: date, timezone_name: str) -> tuple[list[dict], str, list[str]]:
+    matched = rows_for_date(rows, target_date, timezone_name)
+    if matched:
+        return matched, "high", []
+    if not rows or has_reliable_timestamp(rows, timezone_name):
+        return [], "high", []
+    if path_date_matches(path, target_date):
+        return rows, "low", ["timestamp unavailable; used path date fallback"]
+    if file_mtime_matches(path, target_date, timezone_name):
+        return rows, "low", ["timestamp unavailable; used file modified time fallback"]
+    return [], "high", []
+
+
+def has_reliable_timestamp(rows: list[dict], timezone_name: str) -> bool:
+    return any(
+        parse_timestamp(row.get("timestamp") or row.get("message_summary_time"), timezone_name) is not None
+        for row in rows
+    )
+
+
+def path_date_matches(path: Path, target_date: date) -> bool:
+    parts = path.parts
+    yyyy = f"{target_date:%Y}"
+    mm = f"{target_date:%m}"
+    dd = f"{target_date:%d}"
+    yyyymmdd = f"{target_date:%Y%m%d}"
+    iso_date = target_date.isoformat()
+    return (
+        any(part == yyyymmdd for part in parts)
+        or iso_date in path.name
+        or any(parts[index : index + 3] == (yyyy, mm, dd) for index in range(max(len(parts) - 2, 0)))
+    )
+
+
+def file_mtime_matches(path: Path, target_date: date, timezone_name: str) -> bool:
+    try:
+        modified = datetime.fromtimestamp(path.stat().st_mtime, ZoneInfo(timezone_name))
+    except OSError:
+        return False
+    return modified.date() == target_date
+
+
 def short_text(value: str) -> str:
     return sanitize_text(" ".join(value.split()))
 
@@ -164,7 +206,7 @@ def record_for_session(
         "path": str(path),
         "record_kind": record_kind,
         "time_range": {"start": min(timestamps) if timestamps else None, "end": max(timestamps) if timestamps else None},
-        "project": {"cwd": cwd} if cwd else {},
+        "project": {"cwd": cwd, "name": None},
         "title": title,
         "summary": f"Local {source.title()} {record_kind} with {len(rows)} records and {len(work_signals)} work signals.",
         "work_signals": work_signals,
@@ -204,10 +246,29 @@ def rollout_messages(rows: list[dict]) -> list[str]:
         payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
         if row.get("type") == "event_msg" and payload.get("type") == "user_message":
             text = text_from_value(payload.get("message"))
-        elif row.get("type") == "response_item" and payload.get("role") == "assistant":
-            text = text_from_value(payload.get("content"))
+        elif row.get("type") == "event_msg" and payload.get("role") != "assistant":
+            text = text_from_value(payload.get("message"))
         else:
             text = ""
+        if text:
+            messages.append(text)
+    return messages
+
+
+def history_messages(rows: list[dict]) -> list[str]:
+    messages = []
+    for row in rows:
+        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        if row.get("role") == "assistant" or payload.get("role") == "assistant":
+            continue
+        text = ""
+        for container in (row, payload):
+            for key in ("message", "text", "prompt", "content", "intent", "event"):
+                text = text_from_value(container.get(key))
+                if text:
+                    break
+            if text:
+                break
         if text:
             messages.append(text)
     return messages
@@ -241,13 +302,13 @@ def collect_claude(target_date: date, timezone_name: str, home: Path) -> tuple[l
         for path in sorted(root.glob("**/*.jsonl")):
             rows, errors = parse_jsonl(path)
             has_parse_warnings = has_parse_warnings or bool(errors)
-            matched_rows = rows_for_date(rows, target_date, timezone_name)
+            matched_rows, confidence, fallback_limitations = rows_for_date_or_fallback(path, rows, target_date, timezone_name)
             if not matched_rows:
                 continue
             session_id = first_payload_value(matched_rows, ("sessionId", "session_id", "id")) or path.stem
             cwd = first_payload_value(matched_rows, ("cwd",))
             messages = claude_messages(matched_rows)
-            records.append(record_for_session("claude", session_id, path, "conversation", rows, messages, cwd, "high", errors))
+            records.append(record_for_session("claude", session_id, path, "conversation", rows, messages, cwd, confidence, errors + fallback_limitations))
     return records, coverage_for_paths("claude", str(default_path_pattern(home, "claude")), len(records), root.exists(), has_parse_warnings)
 
 
@@ -266,10 +327,15 @@ def collect_codex(target_date: date, timezone_name: str, home: Path) -> tuple[li
 
 
 def collect_trae(target_date: date, timezone_name: str, home: Path) -> tuple[list[dict], dict]:
-    root = home / ".trae" / "cli" / "sessions" / f"{target_date:%Y}" / f"{target_date:%m}" / f"{target_date:%d}"
+    cli_root = home / ".trae" / "cli"
+    root = cli_root / "sessions" / f"{target_date:%Y}" / f"{target_date:%m}" / f"{target_date:%d}"
+    history_path = cli_root / "history.jsonl"
     paths = sorted(root.glob("*.jsonl")) if root.exists() else []
     records, has_parse_warnings = collect_rollout_paths("trae", paths, target_date, timezone_name)
-    return records, coverage_for_paths("trae", str(default_path_pattern(home, "trae")), len(records), root.exists(), has_parse_warnings)
+    history_records, history_warnings = collect_trae_history_path(history_path, target_date, timezone_name)
+    records.extend(history_records)
+    roots_exist = root.exists() or history_path.exists()
+    return records, coverage_for_paths("trae", str(default_path_pattern(home, "trae")), len(records), roots_exist, has_parse_warnings or history_warnings)
 
 
 def collect_rollout_paths(source: str, paths: list[Path], target_date: date, timezone_name: str) -> tuple[list[dict], bool]:
@@ -278,14 +344,47 @@ def collect_rollout_paths(source: str, paths: list[Path], target_date: date, tim
     for path in paths:
         rows, errors = parse_jsonl(path)
         has_parse_warnings = has_parse_warnings or bool(errors)
-        matched_rows = rows_for_date(rows, target_date, timezone_name)
+        matched_rows, confidence, fallback_limitations = rows_for_date_or_fallback(path, rows, target_date, timezone_name)
         if not matched_rows:
             continue
         session_id = first_payload_value(matched_rows, ("session_id", "id")) or path.stem
         cwd = first_payload_value(matched_rows, ("cwd",))
         messages = rollout_messages(matched_rows)
-        records.append(record_for_session(source, session_id, path, "rollout", rows, messages, cwd, "high", errors))
+        records.append(record_for_session(source, session_id, path, "rollout", rows, messages, cwd, confidence, errors + fallback_limitations))
     return records, has_parse_warnings
+
+
+def collect_trae_history_path(path: Path, target_date: date, timezone_name: str) -> tuple[list[dict], bool]:
+    if not path.exists():
+        return [], False
+    rows, errors = parse_jsonl(path)
+    matched_rows, confidence, fallback_limitations = rows_for_date_or_fallback(path, rows, target_date, timezone_name)
+    if not matched_rows:
+        return [], bool(errors)
+
+    grouped_rows: dict[str, list[dict]] = {}
+    for row in matched_rows:
+        session_id = first_payload_value([row], ("session_id", "sessionId", "id")) or path.stem
+        grouped_rows.setdefault(session_id, []).append(row)
+
+    records = []
+    for session_id, session_rows in grouped_rows.items():
+        cwd = first_payload_value(session_rows, ("cwd",))
+        messages = history_messages(session_rows)
+        records.append(
+            record_for_session(
+                "trae",
+                session_id,
+                path,
+                "history",
+                rows,
+                messages,
+                cwd,
+                confidence,
+                errors + fallback_limitations,
+            )
+        )
+    return records, bool(errors)
 
 
 def collect_trae_cn(target_date: date, timezone_name: str, home: Path) -> tuple[list[dict], dict]:

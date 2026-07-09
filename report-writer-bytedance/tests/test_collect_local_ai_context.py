@@ -6,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 
@@ -284,6 +284,143 @@ class LocalAiSourceDiscoveryTests(unittest.TestCase):
         rows = [json.loads(line) for line in completed.stdout.splitlines()]
         self.assertEqual(rows[0]["source"], "trae")
         self.assertIn("coverage", rows[-1])
+
+
+class LocalAiFinalReviewRegressionTests(unittest.TestCase):
+    def test_collects_trae_history_jsonl_for_target_date(self):
+        parser = load_parser_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            write_jsonl(
+                home / ".trae" / "cli" / "history.jsonl",
+                [
+                    {
+                        "timestamp": "2026-07-09T09:30:00+08:00",
+                        "session_id": "trae-history-a",
+                        "cwd": "/history-work",
+                        "message": "复盘 Trae history 日报采集缺口",
+                    }
+                ],
+            )
+
+            result = parser.collect_all(date(2026, 7, 9), "Asia/Shanghai", home, ["trae"])
+
+        self.assertEqual(len(result["records"]), 1)
+        record = result["records"][0]
+        self.assertEqual(record["record_kind"], "history")
+        self.assertEqual(record["session_id"], "trae-history-a")
+        self.assertEqual(record["project"]["cwd"], "/history-work")
+        self.assertEqual(record["project"]["name"], None)
+        self.assertIn("history 日报采集", " ".join(record["work_signals"]))
+
+    def test_trae_history_groups_top_level_session_ids(self):
+        parser = load_parser_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            write_jsonl(
+                home / ".trae" / "cli" / "history.jsonl",
+                [
+                    {"timestamp": "2026-07-09T09:30:00+08:00", "session_id": "session-one", "message": "第一条历史记录"},
+                    {"timestamp": "2026-07-09T10:30:00+08:00", "session_id": "session-two", "message": "第二条历史记录"},
+                ],
+            )
+
+            result = parser.collect_all(date(2026, 7, 9), "Asia/Shanghai", home, ["trae"])
+
+        self.assertEqual({record["session_id"] for record in result["records"]}, {"session-one", "session-two"})
+
+    def test_codex_uses_path_date_fallback_when_rows_have_no_timestamps(self):
+        parser = load_parser_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            write_jsonl(
+                home / ".codex" / "sessions" / "2026" / "07" / "09" / "rollout-no-timestamp.jsonl",
+                [
+                    {"type": "session_meta", "payload": {"session_id": "codex-fallback", "cwd": "/fallback-work"}},
+                    {"type": "event_msg", "payload": {"type": "user_message", "message": "用路径日期补齐 Codex 时间"}},
+                ],
+            )
+
+            result = parser.collect_all(date(2026, 7, 9), "Asia/Shanghai", home, ["codex"])
+
+        self.assertEqual(len(result["records"]), 1)
+        record = result["records"][0]
+        self.assertEqual(record["confidence"], "low")
+        self.assertIn("path date", " ".join(record["limitations"]))
+        self.assertEqual(record["time_range"]["start"], None)
+        self.assertIn("路径日期", " ".join(record["work_signals"]))
+
+    def test_claude_uses_file_mtime_fallback_when_rows_have_no_timestamps(self):
+        parser = load_parser_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            path = home / ".claude" / "projects" / "-Users-bytedance" / "mtime-session.jsonl"
+            write_jsonl(
+                path,
+                [
+                    {
+                        "type": "user",
+                        "sessionId": "claude-mtime",
+                        "cwd": "/mtime-work",
+                        "message": {"role": "user", "content": "用文件 mtime 补齐 Claude 时间"},
+                    }
+                ],
+            )
+            mtime = datetime(2026, 7, 9, 12, 0, 0).timestamp()
+            path.touch()
+            import os
+
+            os.utime(path, (mtime, mtime))
+
+            result = parser.collect_all(date(2026, 7, 9), "Asia/Shanghai", home, ["claude"])
+
+        self.assertEqual(len(result["records"]), 1)
+        record = result["records"][0]
+        self.assertEqual(record["confidence"], "low")
+        self.assertIn("file modified time", " ".join(record["limitations"]))
+        self.assertIn("mtime", " ".join(record["work_signals"]))
+
+    def test_rollout_work_signals_exclude_assistant_response_text(self):
+        parser = load_parser_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            write_jsonl(
+                home / ".codex" / "sessions" / "2026" / "07" / "09" / "rollout-assistant-text.jsonl",
+                [
+                    {"type": "session_meta", "timestamp": "2026-07-09T02:00:00Z", "payload": {"session_id": "codex-no-assistant"}},
+                    {"type": "event_msg", "timestamp": "2026-07-09T02:01:00Z", "payload": {"type": "user_message", "message": "用户要求只保留请求文本"}},
+                    {
+                        "type": "response_item",
+                        "timestamp": "2026-07-09T02:02:00Z",
+                        "payload": {
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [{"type": "output_text", "text": "ASSISTANT_RESPONSE_TEXT_MUST_BE_EXCLUDED"}],
+                        },
+                    },
+                ],
+            )
+
+            result = parser.collect_all(date(2026, 7, 9), "Asia/Shanghai", home, ["codex"])
+
+        signals = " ".join(result["records"][0]["work_signals"])
+        self.assertIn("用户要求", signals)
+        self.assertNotIn("ASSISTANT_RESPONSE_TEXT_MUST_BE_EXCLUDED", signals)
+
+    def test_project_object_includes_null_keys_when_unknown(self):
+        parser = load_parser_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            write_jsonl(
+                home / ".trae" / "cli" / "sessions" / "2026" / "07" / "09" / "rollout-no-project.jsonl",
+                [
+                    {"type": "event_msg", "timestamp": "2026-07-09T04:01:00Z", "payload": {"message": "验证 project 空键"}},
+                ],
+            )
+
+            result = parser.collect_all(date(2026, 7, 9), "Asia/Shanghai", home, ["trae"])
+
+        self.assertEqual(result["records"][0]["project"], {"cwd": None, "name": None})
 
 
 if __name__ == "__main__":

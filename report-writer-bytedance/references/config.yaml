@@ -49,5 +49,5 @@ profiles:
       local_ai_sources:
         claude: "~/.claude/projects/**/*.jsonl"
         codex: "~/.codex/sessions/{yyyy}/{mm}/{dd}/rollout-*.jsonl"
-        trae: "~/.trae/cli/sessions/{yyyy}/{mm}/{dd}/rollout-*.jsonl"
+        trae: "~/.trae/cli/sessions/{yyyy}/{mm}/{dd}/rollout-*.jsonl; ~/.trae/cli/history.jsonl"
         trae_cn: "~/.trae-cn/memory/projects/*/{yyyymmdd}/session_memory_*.jsonl"

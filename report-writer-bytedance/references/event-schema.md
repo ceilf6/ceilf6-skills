@@ -13,7 +13,8 @@ process:
   - string
 evidence:
   - label: string
-    url: string
+    url: string | null
+    local_ref: string | null
     type: feishu_doc | feishu_message | calendar | task | minutes | vc | mail | approval | codebase_mr | codebase_commit | bits | meego | cloud_ticket | oncall | user_input | local_claude_session | local_codex_session | local_trae_session | local_trae_cn_session
 next_actions:
   - string
@@ -52,6 +53,17 @@ For local parser coverage, keep `read_status` to the existing values and record 
 
 The ledger is for the assistant response and quality checks. Do not paste the ledger into the Feishu report unless the user asks for diagnostics.
 
+## Local Evidence References
+
+Local AI parser records do not have public URLs. Represent them in `WorkEvent.evidence[]` with:
+
+- `label`: the parser `evidence_label` or a concise local evidence label.
+- `url: null`.
+- `local_ref`: a safe label such as `claude:<session_id>` or `trae:<session_id>`, not a filesystem path.
+- `type`: one of the local AI evidence types.
+
+Keep parser `path` values and local filesystem diagnostics in the assistant coverage summary only. Do not place local paths in the Feishu report body.
+
 ## Relevance Filter
 
 - Include a source as a work event only when it shows a user-owned outcome, progress, decision, blocker, validation, or next action.
@@ -59,7 +71,7 @@ The ledger is for the assistant response and quality checks. Do not paste the le
 - Use low confidence for weak clues and avoid overstating them as completed work.
 - Calendar attendance without outcome is coverage-only.
 - Empty source results are coverage-only.
-- Local AI sessions can be direct evidence when they show user-owned outcome, progress, decision, blocker, validation, or next action; do not paste raw transcript text into the report.
+- Local AI sessions can be direct evidence when they show user-owned outcome, progress, decision, blocker, validation, or next action; do not paste raw transcript text or local filesystem paths into the report.
 
 ## Highlight Selection
 

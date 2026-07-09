@@ -51,14 +51,17 @@ Use Trae-CN records as `local_trae_cn_session` evidence when they show user-owne
 ## Mapping Rules
 
 - Map parser results into `WorkEvent.evidence[]` with the source-specific local evidence type.
+- Local parser evidence has no public URL. Use parser `evidence_label` as the evidence label, set `url: null`, set `local_ref` to a safe source/session label, and keep parser `path` values out of the Feishu report body.
 - Merge local AI evidence with ByteDance platform evidence when they describe the same work item.
 - Local AI evidence can support WorkEvent records directly when it shows user-owned work activity.
 - Treat empty parser results as coverage evidence, not report content.
 - Keep Trae-CN memory summaries labeled as summaries; do not restate them as raw session transcripts.
+- Records included by file path date or file modified time instead of a reliable row timestamp have lower parser confidence and must carry that limitation into `source_notes` or assistant diagnostics.
 
 ## Safety Rules
 
 - Do not paste raw prompts into the Feishu report body.
 - Do not paste raw assistant transcripts into the Feishu report body.
+- Do not paste local filesystem paths into the Feishu report body; keep them in the assistant coverage summary only.
 - Summarize work-relevant facts only.
 - Exclude private, credential, token, and unrelated personal content from the report.
