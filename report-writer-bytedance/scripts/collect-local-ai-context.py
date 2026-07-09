@@ -126,23 +126,31 @@ def rows_for_date(rows: list[dict], target_date: date, timezone_name: str) -> li
 
 
 def rows_for_date_or_fallback(path: Path, rows: list[dict], target_date: date, timezone_name: str) -> tuple[list[dict], str, list[str]]:
-    matched = rows_for_date(rows, target_date, timezone_name)
-    if matched:
-        return matched, "high", []
-    if not rows or has_reliable_timestamp(rows, timezone_name):
+    if not rows:
         return [], "high", []
+
+    start, end = target_bounds(target_date, timezone_name)
+    fallback_limitation = None
     if path_date_matches(path, target_date):
-        return rows, "low", ["timestamp unavailable; used path date fallback"]
-    if file_mtime_matches(path, target_date, timezone_name):
-        return rows, "low", ["timestamp unavailable; used file modified time fallback"]
-    return [], "high", []
+        fallback_limitation = "timestamp unavailable; used path date fallback"
+    elif file_mtime_matches(path, target_date, timezone_name):
+        fallback_limitation = "timestamp unavailable; used file modified time fallback"
 
+    matched = []
+    used_fallback = False
+    for row in rows:
+        timestamp = parse_timestamp(row.get("timestamp") or row.get("message_summary_time"), timezone_name)
+        if timestamp is not None:
+            if start <= timestamp < end:
+                matched.append(row)
+            continue
+        if fallback_limitation is not None:
+            matched.append(row)
+            used_fallback = True
 
-def has_reliable_timestamp(rows: list[dict], timezone_name: str) -> bool:
-    return any(
-        parse_timestamp(row.get("timestamp") or row.get("message_summary_time"), timezone_name) is not None
-        for row in rows
-    )
+    if used_fallback:
+        return matched, "low", [fallback_limitation]
+    return matched, "high", []
 
 
 def path_date_matches(path: Path, target_date: date) -> bool:
@@ -185,6 +193,7 @@ def record_for_session(
     path: Path,
     record_kind: str,
     rows: list[dict],
+    records_read: int,
     messages: list[str],
     cwd: str | None,
     confidence: str,
@@ -208,12 +217,12 @@ def record_for_session(
         "time_range": {"start": min(timestamps) if timestamps else None, "end": max(timestamps) if timestamps else None},
         "project": {"cwd": cwd, "name": None},
         "title": title,
-        "summary": f"Local {source.title()} {record_kind} with {len(rows)} records and {len(work_signals)} work signals.",
+        "summary": f"Local {source.title()} {record_kind} with {records_read} records and {len(work_signals)} work signals.",
         "work_signals": work_signals,
         "evidence_label": f"{source}:{session_id}",
         "confidence": confidence,
         "limitations": record_limitations,
-        "counts": {"records_read": len(rows), "messages_seen": len(messages)},
+        "counts": {"records_read": records_read, "messages_seen": len(messages)},
     }
 
 
@@ -308,7 +317,20 @@ def collect_claude(target_date: date, timezone_name: str, home: Path) -> tuple[l
             session_id = first_payload_value(matched_rows, ("sessionId", "session_id", "id")) or path.stem
             cwd = first_payload_value(matched_rows, ("cwd",))
             messages = claude_messages(matched_rows)
-            records.append(record_for_session("claude", session_id, path, "conversation", rows, messages, cwd, confidence, errors + fallback_limitations))
+            records.append(
+                record_for_session(
+                    "claude",
+                    session_id,
+                    path,
+                    "conversation",
+                    matched_rows,
+                    len(rows),
+                    messages,
+                    cwd,
+                    confidence,
+                    errors + fallback_limitations,
+                )
+            )
     return records, coverage_for_paths("claude", str(default_path_pattern(home, "claude")), len(records), root.exists(), has_parse_warnings)
 
 
@@ -350,7 +372,20 @@ def collect_rollout_paths(source: str, paths: list[Path], target_date: date, tim
         session_id = first_payload_value(matched_rows, ("session_id", "id")) or path.stem
         cwd = first_payload_value(matched_rows, ("cwd",))
         messages = rollout_messages(matched_rows)
-        records.append(record_for_session(source, session_id, path, "rollout", rows, messages, cwd, confidence, errors + fallback_limitations))
+        records.append(
+            record_for_session(
+                source,
+                session_id,
+                path,
+                "rollout",
+                matched_rows,
+                len(rows),
+                messages,
+                cwd,
+                confidence,
+                errors + fallback_limitations,
+            )
+        )
     return records, has_parse_warnings
 
 
@@ -377,7 +412,8 @@ def collect_trae_history_path(path: Path, target_date: date, timezone_name: str)
                 session_id,
                 path,
                 "history",
-                rows,
+                session_rows,
+                len(rows),
                 messages,
                 cwd,
                 confidence,
@@ -395,22 +431,24 @@ def collect_trae_cn(target_date: date, timezone_name: str, home: Path) -> tuple[
         for path in sorted(root.glob(f"*/{target_date:%Y%m%d}/session_memory_*.jsonl")):
             rows, errors = parse_jsonl(path)
             has_parse_warnings = has_parse_warnings or bool(errors)
-            matched_rows = rows_for_date(rows, target_date, timezone_name) or rows
+            matched_rows, row_confidence, fallback_limitations = rows_for_date_or_fallback(path, rows, target_date, timezone_name)
             if not matched_rows:
                 continue
             session_id = first_payload_value(matched_rows, ("message_id",)) or path.stem
             messages = trae_cn_messages(matched_rows)
-            limitations = errors + ["Trae-CN current source is memory summary, not raw conversation."]
+            confidence = "low" if row_confidence == "low" else "medium"
+            limitations = errors + fallback_limitations + ["Trae-CN current source is memory summary, not raw conversation."]
             records.append(
                 record_for_session(
                     "trae-cn",
                     session_id,
                     path,
                     "memory_summary",
-                    rows,
+                    matched_rows,
+                    len(rows),
                     messages,
                     None,
-                    "medium",
+                    confidence,
                     limitations,
                 )
             )

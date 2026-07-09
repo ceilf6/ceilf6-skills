@@ -422,6 +422,69 @@ class LocalAiFinalReviewRegressionTests(unittest.TestCase):
 
         self.assertEqual(result["records"][0]["project"], {"cwd": None, "name": None})
 
+    def test_codex_time_range_uses_target_rows_while_records_read_counts_full_file(self):
+        parser = load_parser_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            write_jsonl(
+                home / ".codex" / "sessions" / "2026" / "07" / "09" / "rollout-mixed-dates.jsonl",
+                [
+                    {"type": "session_meta", "timestamp": "2026-07-09T02:00:00Z", "payload": {"session_id": "codex-mixed-dates"}},
+                    {"type": "event_msg", "timestamp": "2026-07-09T02:05:00Z", "payload": {"type": "user_message", "message": "目标日期的 Codex 工作"}},
+                    {"type": "event_msg", "timestamp": "2026-07-08T02:05:00Z", "payload": {"type": "user_message", "message": "非目标日期不应进入时间范围"}},
+                ],
+            )
+
+            result = parser.collect_all(date(2026, 7, 9), "Asia/Shanghai", home, ["codex"])
+
+        self.assertEqual(len(result["records"]), 1)
+        record = result["records"][0]
+        self.assertEqual(record["counts"]["records_read"], 3)
+        self.assertEqual(record["time_range"], {"start": "2026-07-09T02:00:00Z", "end": "2026-07-09T02:05:00Z"})
+        self.assertIn("目标日期的 Codex 工作", " ".join(record["work_signals"]))
+        self.assertNotIn("非目标日期", " ".join(record["work_signals"]))
+
+    def test_codex_includes_untimestamped_user_row_when_target_path_fallback_applies_per_row(self):
+        parser = load_parser_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            write_jsonl(
+                home / ".codex" / "sessions" / "2026" / "07" / "09" / "rollout-mixed-timestamps.jsonl",
+                [
+                    {"type": "session_meta", "timestamp": "2026-07-09T02:00:00Z", "payload": {"session_id": "codex-mixed-timestamps"}},
+                    {"type": "event_msg", "payload": {"type": "user_message", "message": "无时间戳但路径日期可信的用户工作"}},
+                ],
+            )
+
+            result = parser.collect_all(date(2026, 7, 9), "Asia/Shanghai", home, ["codex"])
+
+        self.assertEqual(len(result["records"]), 1)
+        record = result["records"][0]
+        self.assertIn("无时间戳但路径日期可信", " ".join(record["work_signals"]))
+        self.assertEqual(record["confidence"], "low")
+        self.assertIn("path date", " ".join(record["limitations"]))
+        self.assertEqual(record["time_range"], {"start": "2026-07-09T02:00:00Z", "end": "2026-07-09T02:00:00Z"})
+
+    def test_trae_history_session_time_range_does_not_inherit_other_session_or_day(self):
+        parser = load_parser_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            write_jsonl(
+                home / ".trae" / "cli" / "history.jsonl",
+                [
+                    {"timestamp": "2026-07-09T09:00:00+08:00", "session_id": "target-session", "message": "目标 session 当天记录"},
+                    {"timestamp": "2026-07-09T10:00:00+08:00", "session_id": "other-session", "message": "其他 session 当天记录"},
+                    {"timestamp": "2026-07-08T23:00:00+08:00", "session_id": "target-session", "message": "目标 session 非目标日期记录"},
+                ],
+            )
+
+            result = parser.collect_all(date(2026, 7, 9), "Asia/Shanghai", home, ["trae"])
+
+        records = {record["session_id"]: record for record in result["records"]}
+        self.assertEqual(records["target-session"]["time_range"], {"start": "2026-07-09T09:00:00+08:00", "end": "2026-07-09T09:00:00+08:00"})
+        self.assertEqual(records["other-session"]["time_range"], {"start": "2026-07-09T10:00:00+08:00", "end": "2026-07-09T10:00:00+08:00"})
+        self.assertNotIn("非目标日期", " ".join(records["target-session"]["work_signals"]))
+
 
 if __name__ == "__main__":
     unittest.main()

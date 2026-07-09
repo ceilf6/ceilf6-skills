@@ -99,3 +99,67 @@ Contradiction scan:
 - Timestamp fallback records intentionally have low confidence and may have null `time_range` when no row timestamp exists.
 - Real local parser output had no Trae records for the target date in aggregate coverage; Trae status was `empty`.
 - Local parser paths remain available in parser JSON for diagnostics but must stay out of Feishu report bodies per the updated docs.
+
+## Final Re-Review Fix Addendum
+
+Fixed the remaining parser findings:
+
+- `time_range` now uses only the rows emitted for the target date/session, while `counts.records_read` preserves the full parsed row count for file-level collectors.
+- Timestamp fallback is applied per row: timestamped rows are date-filtered by timestamp, and untimestamped rows can be included via path-date or mtime fallback with reduced confidence and fallback limitations.
+- Trae `history.jsonl` grouped records now compute `time_range` from each grouped session's matched rows, not the full history file.
+
+## RED Evidence
+
+Command:
+
+```bash
+python3 -m unittest report-writer-bytedance/tests/test_collect_local_ai_context.py -v
+```
+
+Result before implementation:
+
+- Exit code: 1
+- Ran: 20 tests
+- Failures: 3
+- Failing behaviors:
+  - Mixed Codex file included the non-target-day timestamp in emitted record `time_range`.
+  - Mixed timestamp Codex file dropped an untimestamped user work signal despite target path-date fallback.
+  - Trae `history.jsonl` session record inherited another session/day in `time_range`.
+
+## GREEN Evidence
+
+Focused/full parser unittest:
+
+```bash
+python3 -m unittest report-writer-bytedance/tests/test_collect_local_ai_context.py -v
+```
+
+Result:
+
+- Exit code: 0
+- Ran: 20 tests
+- Status: OK
+
+Real parser JSON validation from Task 5:
+
+```bash
+python3 report-writer-bytedance/scripts/collect-local-ai-context.py --date 2026-07-09 --timezone Asia/Shanghai --source all --format json > /tmp/report-writer-local-ai-context.json
+python3 -m json.tool /tmp/report-writer-local-ai-context.json >/tmp/report-writer-local-ai-context.pretty.json
+```
+
+Result:
+
+- Exit code: 0 for parser generation.
+- Exit code: 0 for JSON validation.
+- Aggregate-only inspection: 26 records; record sources `{'claude': 6, 'codex': 19, 'trae-cn': 1}`; coverage `{'claude': 'read', 'codex': 'read', 'trae': 'empty', 'trae-cn': 'read'}`.
+
+## Files Changed
+
+- `report-writer-bytedance/scripts/collect-local-ai-context.py`
+- `report-writer-bytedance/tests/test_collect_local_ai_context.py`
+- `.superpowers/sdd/final-review-fix-report.md`
+
+## Concerns
+
+- Mixed timestamp fallback intentionally lowers record confidence to `low` when untimestamped rows are included by path-date or mtime fallback.
+- Real local parser output still had no Trae records for the target date in aggregate coverage; Trae status remained `empty`.
