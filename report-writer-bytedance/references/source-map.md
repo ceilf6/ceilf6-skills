@@ -23,6 +23,21 @@ bytedcli meego auth status
 
 If a required tool or auth is missing, stop and ask the user to install or authorize. The user explicitly wants ByteDance information sources filled in before the report proceeds.
 
+## Local AI Assistant Context
+
+Purpose:
+- Capture target-date Claude, Codex, Trae, and Trae-CN assistant work context as first-class evidence.
+
+Use the dedicated reference:
+
+```bash
+python3 report-writer-bytedance/scripts/collect-local-ai-context.py --date "<YYYY-MM-DD>" --timezone "<profile.timezone>" --source all --format json
+```
+
+Rules:
+- Read `references/local-ai-sources.md` before running the parser.
+- Local AI evidence can support WorkEvent records directly, but raw prompts and assistant transcripts stay out of the Feishu report body.
+
 ## Forbidden Legacy Sources
 
 Do not use these Meituan-era sources for ByteDance reports:

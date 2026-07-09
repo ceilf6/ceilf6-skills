@@ -15,6 +15,7 @@ Read these before running a report:
 
 - [config.yaml](references/config.yaml): profile, wiki destination, title pattern, and plan reference.
 - [source-map.md](references/source-map.md): ByteDance source inventory and command routing.
+- [local-ai-sources.md](references/local-ai-sources.md): local Claude, Codex, Trae, and Trae-CN context collection.
 - [event-schema.md](references/event-schema.md): internal event and coverage ledger shape, highlight selection rules.
 - [report-template.md](references/report-template.md): final document structure and writing rules.
 - [review-panel.md](references/review-panel.md): review roles, blocking criteria, and the bounded revision loop.
@@ -26,9 +27,9 @@ When creating or updating Feishu docs, also read the current embedded Lark docs 
 1. Resolve the profile from `config.yaml`; use `active_profile` unless the user explicitly provides another profile.
 2. Resolve the target date in the profile timezone. If the user says today, use the actual current date in `Asia/Shanghai`.
 3. Compute the report title from `title.pattern`, e.g. `26.07.08`.
-4. Perform the tool and auth preflight from `source-map.md` before collecting data. If `lark-cli` or `bytedcli` is missing, or a required auth flow is unavailable, stop and ask the user to authorize/install instead of silently continuing with partial coverage.
+4. Perform the tool and auth preflight from `source-map.md` before collecting data, including local parser availability with `python3`. If `lark-cli` or `bytedcli` is missing, if the local AI parser cannot run with `python3`, or if a required auth flow is unavailable, stop and ask the user to authorize/install instead of silently continuing with partial coverage.
 5. Inspect the parent wiki and list its children before writing. If a child with the target title exists, update that document; otherwise create a new document under the parent wiki.
-6. Collect all available target-date user activity from ByteDance sources in `source-map.md`. Start from explicit user links, then use broad user/date queries. Read underlying source content before deciding relevance.
+6. Collect all available target-date user activity from ByteDance sources in `source-map.md` and local AI assistant sources in `local-ai-sources.md`. Start from explicit user links, then use broad user/date queries. Read underlying source content before deciding relevance.
 7. Read `report.plan_reference.url` only for `明日展望`. Treat it as a backlog or planning source, not evidence of completed work.
 8. Normalize findings into `WorkEvent` records, merge duplicate signals about the same work item, and mark highlights per the Highlight Selection rules in `event-schema.md` (at least 2 dimensions hit, at most 2 per day).
 9. Draft the report with `report-template.md`. Keep the body focused on work events; keep source diagnostics in the assistant response.
@@ -44,6 +45,7 @@ When creating or updating Feishu docs, also read the current embedded Lark docs 
 - Use `lark-cli` for Feishu docs/wiki/drive, messages, calendar, tasks, minutes, VC, mail, and approval metadata.
 - Use `bytedcli` for Codebase, Bits, Meego, Cloud Ticket, Oncall, and ByteCloud-related sources.
 - Treat Feishu messages and mail as sensitive. Summarize work-relevant facts only; do not copy raw private chat or mail body into the report.
+- Treat local AI assistant sources as sensitive. Summarize work-relevant facts only; do not copy raw prompts or raw assistant transcripts into the report.
 - Treat calendar events as supporting evidence only. Include a meeting as work only when it produced a user-owned decision, action item, blocker resolution, review, or follow-up.
 - Treat empty query results as coverage evidence, not report content.
 - Do not guess unclear platform mappings. If a source name, project, repo, or ownership is uncertain after querying available tools, ask the user.
@@ -64,8 +66,8 @@ After creating or updating the daily report, respond with:
 - Document link and title.
 - Target date and timezone.
 - Whether the document was created or updated.
-- Sources used and sources with empty results.
-- Sources skipped, each with a concrete reason.
+- Sources used and sources with empty results, including local AI sources.
+- Sources skipped, each with a concrete reason, including local AI sources.
 - Review stats: findings per role, blocking/suggestion counts, revision rounds used, unadopted suggestions.
 - SOP library status: entry appended (with title), 本日无新增, or append failure with the pending entry.
 - Confirmation that no group notification was sent.

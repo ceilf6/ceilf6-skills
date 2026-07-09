@@ -14,7 +14,7 @@ process:
 evidence:
   - label: string
     url: string
-    type: feishu_doc | feishu_message | calendar | task | minutes | vc | mail | approval | codebase_mr | codebase_commit | bits | meego | cloud_ticket | oncall | user_input
+    type: feishu_doc | feishu_message | calendar | task | minutes | vc | mail | approval | codebase_mr | codebase_commit | bits | meego | cloud_ticket | oncall | user_input | local_claude_session | local_codex_session | local_trae_session | local_trae_cn_session
 next_actions:
   - string
 confidence: high | medium | low
@@ -48,6 +48,8 @@ disposition: included_in_event | merged_into_event | excluded_after_content_revi
 reason: string
 ```
 
+For local parser coverage, keep `read_status` to the existing values and record parser/source coverage details in `reason`, such as parser unavailable, no matching files, empty target-date results, or source disabled.
+
 The ledger is for the assistant response and quality checks. Do not paste the ledger into the Feishu report unless the user asks for diagnostics.
 
 ## Relevance Filter
@@ -57,6 +59,7 @@ The ledger is for the assistant response and quality checks. Do not paste the le
 - Use low confidence for weak clues and avoid overstating them as completed work.
 - Calendar attendance without outcome is coverage-only.
 - Empty source results are coverage-only.
+- Local AI sessions can be direct evidence when they show user-owned outcome, progress, decision, blocker, validation, or next action; do not paste raw transcript text into the report.
 
 ## Highlight Selection
 

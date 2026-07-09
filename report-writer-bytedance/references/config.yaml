@@ -44,3 +44,10 @@ profiles:
       codebase_page_size: 50
       include_sensitive_sources: true
       skip_attendance_by_default: true
+      include_local_ai_sources: true
+      local_ai_parser: "report-writer-bytedance/scripts/collect-local-ai-context.py"
+      local_ai_sources:
+        claude: "~/.claude/projects/**/*.jsonl"
+        codex: "~/.codex/sessions/{yyyy}/{mm}/{dd}/rollout-*.jsonl"
+        trae: "~/.trae/cli/sessions/{yyyy}/{mm}/{dd}/rollout-*.jsonl"
+        trae_cn: "~/.trae-cn/memory/projects/*/{yyyymmdd}/session_memory_*.jsonl"
