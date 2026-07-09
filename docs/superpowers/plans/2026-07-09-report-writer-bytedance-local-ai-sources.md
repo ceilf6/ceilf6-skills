@@ -752,7 +752,8 @@ Run:
 
 ```bash
 cd /Users/bytedance/Desktop/ceilf/ceilf6-skills
-rg -n 'TB[D]|TO[D]O|待定|占位' report-writer-bytedance docs/superpowers/specs/2026-07-09-report-writer-bytedance-local-ai-sources-design.md docs/superpowers/plans/2026-07-09-report-writer-bytedance-local-ai-sources.md
+pattern="$(printf '%s|%s|%s|%s' 'TB''[D]' 'TO''[D]O' '待''定' '占''位')"
+rg -n "$pattern" report-writer-bytedance docs/superpowers/specs/2026-07-09-report-writer-bytedance-local-ai-sources-design.md docs/superpowers/plans/2026-07-09-report-writer-bytedance-local-ai-sources.md
 ```
 
 Expected: no matches. `rg` exits 1 when there are no matches; that is success for this check.
