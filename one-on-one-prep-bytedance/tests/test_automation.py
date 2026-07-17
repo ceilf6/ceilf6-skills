@@ -31,9 +31,12 @@ class AutomationTemplateTests(unittest.TestCase):
         self.assertIn("--dangerously-bypass-approvals-and-sandbox", runner)
         self.assertIn("shell_environment_policy.inherit=all", runner)
         self.assertIn("--dry-run", runner)
+        self.assertIn("--at", runner)
+        self.assertIn("ONE_ON_ONE_AT", runner)
         self.assertIn("one-on-one-prep-bytedance/SKILL.md", prompt)
         self.assertIn("Asia/Shanghai", prompt)
         self.assertIn("Week-N", prompt)
+        self.assertIn("ONE_ON_ONE_AT", prompt)
 
 
 class AutomationInstallerTests(unittest.TestCase):

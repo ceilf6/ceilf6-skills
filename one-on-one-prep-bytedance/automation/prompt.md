@@ -7,7 +7,7 @@
 执行约束：
 
 1. 完整读取该 SKILL.md 及其 Required Files，所有相对路径以技能目录为基准。
-2. 使用 `scripts/week_window.py` 根据任务实际启动时间推导确定性的 `Week-N` 与 `[上周五15:00, 本周五15:00)`；不得根据旧文档或可变状态猜 Week 编号。
+2. 若 `ONE_ON_ONE_AT` 非空，将它作为回填锚点传给 `scripts/week_window.py --at`；否则根据任务实际启动时间推导确定性的 `Week-N` 与 `[上周五15:00, 本周五15:00)`。不得根据旧文档或可变状态猜 Week 编号。
 3. 使用 `references/config.yaml` 的 active profile，严格预检 Trae、Lark、ByteDance、父 Wiki、私信 recipient 与本地采集器。
 4. 完整采集 `references/source-map.md` 中每个企业和本地来源；企业信息只用 `lark-cli` / `bytedcli`，不以互联网搜索代替。
 5. 信息不确定、同名 Week-N 子文档重复、整类来源不可用或两轮评审后仍有 blocking 时停止，不要猜测或发布。

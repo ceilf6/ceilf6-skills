@@ -26,13 +26,14 @@ Resolve relative paths from this skill directory. Do not silently substitute ano
 - Normal: collect, review, create/update, verify, and notify.
 - Dry run: when `ONE_ON_ONE_DRY_RUN=1` or the request says dry-run, perform all reads, normalization, drafting, and reviews, then stop before every Wiki write and IM send.
 - Forced notification: when `ONE_ON_ONE_FORCE_NOTIFY=1`, a verified same-week rerun may send another success message. This never relaxes document verification or privacy rules.
+- Backfill: when `ONE_ON_ONE_AT` is non-empty, pass that exact ISO-8601 anchor to `week_window.py --at`; otherwise use the actual run time. The derived deterministic Week/window remains authoritative.
 
 ## Weekly Workflow
 
 ### 1. Resolve Profile, Window, And Title
 
 1. Read `references/config.yaml` and select only `active_profile`.
-2. Run:
+2. Run with `ONE_ON_ONE_AT` when provided, otherwise use the current time:
 
    ```bash
    python3 scripts/week_window.py --at "<current ISO-8601 time>" --timezone "<profile.timezone>"

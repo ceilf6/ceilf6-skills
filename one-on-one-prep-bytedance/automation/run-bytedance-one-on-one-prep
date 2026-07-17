@@ -23,9 +23,10 @@ readonly PARENT_WIKI_URL="https://bytedance.larkoffice.com/wiki/ZDvbwhN4eiFRoHkU
 
 mode="normal"
 force_notify=0
+at_override=""
 
 usage() {
-  echo "Usage: $0 [--preflight] [--dry-run] [--force-notify]"
+  echo "Usage: $0 [--preflight] [--dry-run] [--force-notify] [--at ISO_DATETIME]"
 }
 
 check_command() {
@@ -71,6 +72,14 @@ while [[ $# -gt 0 ]]; do
     --force-notify)
       force_notify=1
       ;;
+    --at)
+      if [[ $# -lt 2 ]]; then
+        echo "--at requires an ISO-8601 datetime" >&2
+        exit 2
+      fi
+      at_override="$2"
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -97,10 +106,15 @@ trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT INT TERM
 
 readonly RUN_STAMP="$(date '+%Y%m%d-%H%M%S')"
 readonly RUN_LOG="$LOG_DIR/run-$RUN_STAMP.log"
-window_json="$(python3 "$WINDOW_SCRIPT")" || {
+if [[ -n "$at_override" ]]; then
+  window_json="$(python3 "$WINDOW_SCRIPT" --at "$at_override")"
+else
+  window_json="$(python3 "$WINDOW_SCRIPT")"
+fi
+if [[ $? -ne 0 ]]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] window calculation failed" >> "$RUN_LOG"
   exit 1
-}
+fi
 week_title="$(printf '%s' "$window_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["title"])')" || exit 1
 readonly LAST_MESSAGE="$LOG_DIR/last-message-$week_title.md"
 
@@ -111,6 +125,7 @@ else
 fi
 export ONE_ON_ONE_FORCE_NOTIFY="$force_notify"
 export ONE_ON_ONE_NOTIFICATION_STATE="$STATE_FILE"
+export ONE_ON_ONE_AT="$at_override"
 
 status=1
 {
