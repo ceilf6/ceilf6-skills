@@ -505,5 +505,48 @@ class LocalAiFinalReviewRegressionTests(unittest.TestCase):
         self.assertNotIn("非目标日期", " ".join(records["target-session"]["work_signals"]))
 
 
+class LocalAiRangeTests(unittest.TestCase):
+    def test_range_is_left_closed_right_open(self):
+        parser = load_parser_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            write_jsonl(
+                home / ".trae" / "cli" / "history.jsonl",
+                [
+                    {"timestamp": "2026-07-10T14:59:59+08:00", "session_id": "before", "message": "before"},
+                    {"timestamp": "2026-07-10T15:00:00+08:00", "session_id": "start", "message": "start"},
+                    {"timestamp": "2026-07-17T14:59:59+08:00", "session_id": "inside", "message": "inside"},
+                    {"timestamp": "2026-07-17T15:00:00+08:00", "session_id": "end", "message": "end"},
+                ],
+            )
+            result = parser.collect_all_between(
+                datetime.fromisoformat("2026-07-10T15:00:00+08:00"),
+                datetime.fromisoformat("2026-07-17T15:00:00+08:00"),
+                "Asia/Shanghai",
+                home,
+                ["trae"],
+            )
+        self.assertEqual({row["session_id"] for row in result["records"]}, {"start", "inside"})
+
+    def test_range_cli_requires_start_and_end_together(self):
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT_PATH), "--start", "2026-07-10T15:00:00+08:00"],
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("--end", completed.stderr)
+
+    def test_existing_date_cli_remains_compatible(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            completed = subprocess.run(
+                [sys.executable, str(SCRIPT_PATH), "--date", "2026-07-09", "--home", tmp, "--format", "json"],
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+        self.assertEqual(set(json.loads(completed.stdout)), {"coverage", "records"})
+
+
 if __name__ == "__main__":
     unittest.main()

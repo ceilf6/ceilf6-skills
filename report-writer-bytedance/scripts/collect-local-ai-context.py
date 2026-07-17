@@ -35,19 +35,8 @@ def coverage_item(source: str, path_pattern: str, status: str, reason: str, reco
 
 
 def collect_all(target_date: date, timezone_name: str, home: Path, sources: list[str]) -> dict:
-    collectors = {
-        "claude": collect_claude,
-        "codex": collect_codex,
-        "trae": collect_trae,
-        "trae-cn": collect_trae_cn,
-    }
-    records = []
-    coverage = []
-    for source in sources:
-        source_records, source_coverage = collectors[source](target_date, timezone_name, home)
-        records.extend(source_records)
-        coverage.append(source_coverage)
-    return {"records": records, "coverage": coverage}
+    start, end = target_bounds(target_date, timezone_name)
+    return collect_all_between(start, end, timezone_name, home, sources)
 
 
 def default_path_pattern(home: Path, source: str) -> Path:
@@ -118,31 +107,64 @@ def target_bounds(target_date: date, timezone_name: str) -> tuple[datetime, date
 
 def rows_for_date(rows: list[dict], target_date: date, timezone_name: str) -> list[dict]:
     start, end = target_bounds(target_date, timezone_name)
+    return rows_for_range(rows, start, end, timezone_name)
+
+
+def normalize_bound(value: datetime, timezone_name: str) -> datetime:
+    timezone = ZoneInfo(timezone_name)
+    return value.replace(tzinfo=timezone) if value.tzinfo is None else value.astimezone(timezone)
+
+
+def rows_for_range(rows: list[dict], start: datetime, end: datetime, timezone_name: str) -> list[dict]:
+    normalized_start = normalize_bound(start, timezone_name)
+    normalized_end = normalize_bound(end, timezone_name)
+    if normalized_start >= normalized_end:
+        raise ValueError("start must be earlier than end")
     matched = []
     for row in rows:
         timestamp = parse_timestamp(row.get("timestamp") or row.get("message_summary_time"), timezone_name)
-        if timestamp is not None and start <= timestamp < end:
+        if timestamp is not None and normalized_start <= timestamp < normalized_end:
             matched.append(row)
     return matched
 
 
-def rows_for_date_or_fallback(path: Path, rows: list[dict], target_date: date, timezone_name: str) -> tuple[list[dict], str, list[str]]:
+def iter_local_dates(start: datetime, end: datetime, timezone_name: str) -> Iterable[date]:
+    normalized_start = normalize_bound(start, timezone_name)
+    normalized_end = normalize_bound(end, timezone_name)
+    if normalized_start >= normalized_end:
+        raise ValueError("start must be earlier than end")
+    current = normalized_start.date()
+    final = (normalized_end - timedelta(microseconds=1)).date()
+    while current <= final:
+        yield current
+        current += timedelta(days=1)
+
+
+def rows_for_range_or_fallback(
+    path: Path,
+    rows: list[dict],
+    start: datetime,
+    end: datetime,
+    timezone_name: str,
+) -> tuple[list[dict], str, list[str]]:
     if not rows:
         return [], "high", []
 
-    start, end = target_bounds(target_date, timezone_name)
+    dates = list(iter_local_dates(start, end, timezone_name))
     fallback_limitation = None
-    if path_date_matches(path, target_date):
+    if any(path_date_matches(path, target_date) for target_date in dates):
         fallback_limitation = "timestamp unavailable; used path date fallback"
-    elif file_mtime_matches(path, target_date, timezone_name):
+    elif any(file_mtime_matches(path, target_date, timezone_name) for target_date in dates):
         fallback_limitation = "timestamp unavailable; used file modified time fallback"
 
     matched = []
     used_fallback = False
+    normalized_start = normalize_bound(start, timezone_name)
+    normalized_end = normalize_bound(end, timezone_name)
     for row in rows:
         timestamp = parse_timestamp(row.get("timestamp") or row.get("message_summary_time"), timezone_name)
         if timestamp is not None:
-            if start <= timestamp < end:
+            if normalized_start <= timestamp < normalized_end:
                 matched.append(row)
             continue
         if fallback_limitation is not None:
@@ -152,6 +174,11 @@ def rows_for_date_or_fallback(path: Path, rows: list[dict], target_date: date, t
     if used_fallback:
         return matched, "low", [fallback_limitation]
     return matched, "high", []
+
+
+def rows_for_date_or_fallback(path: Path, rows: list[dict], target_date: date, timezone_name: str) -> tuple[list[dict], str, list[str]]:
+    start, end = target_bounds(target_date, timezone_name)
+    return rows_for_range_or_fallback(path, rows, start, end, timezone_name)
 
 
 def path_date_matches(path: Path, target_date: date) -> bool:
@@ -464,9 +491,221 @@ def collect_trae_cn(target_date: date, timezone_name: str, home: Path) -> tuple[
     return records, coverage_for_paths("trae-cn", str(default_path_pattern(home, "trae-cn")), len(records), root.exists(), has_parse_warnings)
 
 
+def collect_range_paths(
+    source: str,
+    paths: list[Path],
+    start: datetime,
+    end: datetime,
+    timezone_name: str,
+    record_kind: str,
+    message_extractor,
+    session_keys: tuple[str, ...],
+    confidence_cap: str | None = None,
+) -> tuple[list[dict], bool]:
+    records = []
+    has_parse_warnings = False
+    for path in sorted(set(paths)):
+        rows, errors = parse_jsonl(path)
+        has_parse_warnings = has_parse_warnings or bool(errors)
+        matched_rows, confidence, fallback_limitations = rows_for_range_or_fallback(
+            path, rows, start, end, timezone_name
+        )
+        if not matched_rows:
+            continue
+        if confidence_cap == "medium" and confidence == "high":
+            confidence = "medium"
+        session_id = first_payload_value(matched_rows, session_keys) or path.stem
+        cwd = first_payload_value(matched_rows, ("cwd",))
+        limitations = errors + fallback_limitations
+        if source == "trae-cn":
+            limitations.append("Trae-CN current source is memory summary, not raw conversation.")
+        records.append(
+            record_for_session(
+                source,
+                session_id,
+                path,
+                record_kind,
+                matched_rows,
+                len(rows),
+                message_extractor(matched_rows),
+                cwd if source != "trae-cn" else None,
+                confidence,
+                limitations,
+            )
+        )
+    return records, has_parse_warnings
+
+
+def collect_claude_between(start: datetime, end: datetime, timezone_name: str, home: Path) -> tuple[list[dict], dict]:
+    root = home / ".claude" / "projects"
+    paths = list(root.glob("**/*.jsonl")) if root.exists() else []
+    records, warnings = collect_range_paths(
+        "claude", paths, start, end, timezone_name, "conversation", claude_messages, ("sessionId", "session_id", "id")
+    )
+    return records, coverage_for_paths(
+        "claude", str(default_path_pattern(home, "claude")), len(records), root.exists(), warnings
+    )
+
+
+def dated_rollout_paths(root: Path, dates: list[date]) -> list[Path]:
+    paths = []
+    for target_date in dates:
+        dated_root = root / f"{target_date:%Y}" / f"{target_date:%m}" / f"{target_date:%d}"
+        if dated_root.exists():
+            paths.extend(dated_root.glob("*.jsonl"))
+    return paths
+
+
+def collect_codex_between(start: datetime, end: datetime, timezone_name: str, home: Path) -> tuple[list[dict], dict]:
+    sessions_root = home / ".codex" / "sessions"
+    archive_root = home / ".codex" / "archived_sessions"
+    dates = list(iter_local_dates(start, end, timezone_name))
+    paths = dated_rollout_paths(sessions_root, dates)
+    if archive_root.exists():
+        for target_date in dates:
+            paths.extend(archive_root.glob(f"rollout-{target_date.isoformat()}*.jsonl"))
+    records, warnings = collect_range_paths(
+        "codex", paths, start, end, timezone_name, "rollout", rollout_messages, ("session_id", "id")
+    )
+    roots_exist = sessions_root.exists() or archive_root.exists()
+    pattern = f"{sessions_root}/YYYY/MM/DD/*.jsonl; {archive_root}/rollout-YYYY-MM-DD*.jsonl"
+    return records, coverage_for_paths("codex", pattern, len(records), roots_exist, warnings)
+
+
+def collect_trae_history_between(
+    path: Path, start: datetime, end: datetime, timezone_name: str
+) -> tuple[list[dict], bool]:
+    if not path.exists():
+        return [], False
+    rows, errors = parse_jsonl(path)
+    matched_rows, confidence, fallback_limitations = rows_for_range_or_fallback(
+        path, rows, start, end, timezone_name
+    )
+    grouped_rows: dict[str, list[dict]] = {}
+    for row in matched_rows:
+        session_id = first_payload_value([row], ("session_id", "sessionId", "id")) or path.stem
+        grouped_rows.setdefault(session_id, []).append(row)
+
+    records = []
+    for session_id, session_rows in grouped_rows.items():
+        records.append(
+            record_for_session(
+                "trae",
+                session_id,
+                path,
+                "history",
+                session_rows,
+                len(rows),
+                history_messages(session_rows),
+                first_payload_value(session_rows, ("cwd",)),
+                confidence,
+                errors + fallback_limitations,
+            )
+        )
+    return records, bool(errors)
+
+
+def collect_trae_between(start: datetime, end: datetime, timezone_name: str, home: Path) -> tuple[list[dict], dict]:
+    cli_root = home / ".trae" / "cli"
+    sessions_root = cli_root / "sessions"
+    history_path = cli_root / "history.jsonl"
+    dates = list(iter_local_dates(start, end, timezone_name))
+    paths = dated_rollout_paths(sessions_root, dates)
+    records, warnings = collect_range_paths(
+        "trae", paths, start, end, timezone_name, "rollout", rollout_messages, ("session_id", "id")
+    )
+    history_records, history_warnings = collect_trae_history_between(history_path, start, end, timezone_name)
+    records.extend(history_records)
+    roots_exist = sessions_root.exists() or history_path.exists()
+    return records, coverage_for_paths(
+        "trae", str(default_path_pattern(home, "trae")), len(records), roots_exist, warnings or history_warnings
+    )
+
+
+def collect_trae_cn_between(start: datetime, end: datetime, timezone_name: str, home: Path) -> tuple[list[dict], dict]:
+    root = home / ".trae-cn" / "memory" / "projects"
+    paths = []
+    if root.exists():
+        for target_date in iter_local_dates(start, end, timezone_name):
+            paths.extend(root.glob(f"*/{target_date:%Y%m%d}/session_memory_*.jsonl"))
+    records, warnings = collect_range_paths(
+        "trae-cn",
+        paths,
+        start,
+        end,
+        timezone_name,
+        "memory_summary",
+        trae_cn_messages,
+        ("message_id",),
+        confidence_cap="medium",
+    )
+    return records, coverage_for_paths(
+        "trae-cn", str(default_path_pattern(home, "trae-cn")), len(records), root.exists(), warnings
+    )
+
+
+def deduplicate_records(records: list[dict]) -> list[dict]:
+    unique = {}
+    for record in records:
+        time_range = record.get("time_range") or {}
+        key = (
+            record.get("source"),
+            record.get("session_id"),
+            record.get("record_kind"),
+            time_range.get("start"),
+            time_range.get("end"),
+        )
+        unique[key] = record
+    return list(unique.values())
+
+
+def merge_coverage(coverage: list[dict]) -> list[dict]:
+    precedence = {"missing": 0, "empty": 1, "read": 2, "partially_read": 3}
+    merged = {}
+    for item in coverage:
+        source = item["source"]
+        current = merged.get(source)
+        if current is None or precedence[item["status"]] > precedence[current["status"]]:
+            merged[source] = dict(item)
+        elif current is not None:
+            current["records_found"] += item.get("records_found", 0)
+    return list(merged.values())
+
+
+def collect_all_between(
+    start: datetime,
+    end: datetime,
+    timezone_name: str,
+    home: Path,
+    sources: list[str],
+) -> dict:
+    normalized_start = normalize_bound(start, timezone_name)
+    normalized_end = normalize_bound(end, timezone_name)
+    if normalized_start >= normalized_end:
+        raise ValueError("start must be earlier than end")
+    collectors = {
+        "claude": collect_claude_between,
+        "codex": collect_codex_between,
+        "trae": collect_trae_between,
+        "trae-cn": collect_trae_cn_between,
+    }
+    records = []
+    coverage = []
+    for source in sources:
+        source_records, source_coverage = collectors[source](
+            normalized_start, normalized_end, timezone_name, home
+        )
+        records.extend(source_records)
+        coverage.append(source_coverage)
+    return {"records": deduplicate_records(records), "coverage": merge_coverage(coverage)}
+
+
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--date", required=True, help="Target date as YYYY-MM-DD")
+    target = parser.add_mutually_exclusive_group(required=True)
+    target.add_argument("--date", help="Target date as YYYY-MM-DD")
+    target.add_argument("--start", help="Range start as ISO-8601 datetime")
+    parser.add_argument("--end", help="Range end as ISO-8601 datetime; required with --start")
     parser.add_argument("--timezone", default="Asia/Shanghai")
     parser.add_argument("--source", choices=ALL_SOURCES + ["all"], default="all")
     parser.add_argument("--home", type=Path, default=Path.home())
@@ -476,13 +715,25 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Iterable[str] | None = None) -> int:
     args = parse_args(argv)
-    target_date = date.fromisoformat(args.date)
-    result = collect_all(
-        target_date=target_date,
-        timezone_name=args.timezone,
-        home=args.home,
-        sources=normalize_sources(args.source),
-    )
+    if args.start and not args.end:
+        raise SystemExit("--end is required with --start")
+    if args.end and not args.start:
+        raise SystemExit("--end requires --start")
+    if args.date:
+        result = collect_all(
+            target_date=date.fromisoformat(args.date),
+            timezone_name=args.timezone,
+            home=args.home,
+            sources=normalize_sources(args.source),
+        )
+    else:
+        result = collect_all_between(
+            start=datetime.fromisoformat(args.start),
+            end=datetime.fromisoformat(args.end),
+            timezone_name=args.timezone,
+            home=args.home,
+            sources=normalize_sources(args.source),
+        )
     if args.format == "jsonl":
         for record in result["records"]:
             print(json.dumps(record, ensure_ascii=False))

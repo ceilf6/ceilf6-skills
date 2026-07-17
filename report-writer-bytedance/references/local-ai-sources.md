@@ -20,6 +20,17 @@ Collect all local AI assistant sources for the target date:
 python3 report-writer-bytedance/scripts/collect-local-ai-context.py --date "<YYYY-MM-DD>" --timezone "<profile.timezone>" --source all --format json
 ```
 
+Collect an exact left-closed, right-open interval (`start <= timestamp < end`):
+
+```bash
+python3 report-writer-bytedance/scripts/collect-local-ai-context.py \
+  --start "2026-07-10T15:00:00+08:00" \
+  --end "2026-07-17T15:00:00+08:00" \
+  --timezone "Asia/Shanghai" \
+  --source all \
+  --format json
+```
+
 ## Claude
 
 Path pattern:
