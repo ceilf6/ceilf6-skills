@@ -17,8 +17,8 @@ bytedcli auth userinfo
 Also check feature-specific auth when the source will be queried:
 
 ```bash
-bytedcli bits auth login
-bytedcli meego auth status
+bytedcli bits auth status
+bytedcli meego status
 ```
 
 If a required tool or auth is missing, stop and ask the user to install or authorize. The user explicitly wants ByteDance information sources filled in before the report proceeds.
