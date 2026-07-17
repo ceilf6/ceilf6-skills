@@ -50,7 +50,7 @@ Before collecting, verify:
 - `lark-cli auth status --json --verify` succeeds.
 - `bytedcli auth status`, `bytedcli auth userinfo`, `bytedcli bits auth status`, and `bytedcli meego status` succeed.
 - Both scripts respond to `--help` and the local collector can execute.
-- The configured parent Wiki resolves to title `日结`, node token `ZDvbwhN4eiFRoHkUh1ocXSeInSb`, and space ID `7658115519924686035`.
+- The configured parent Wiki resolves to node token `ZDvbwhN4eiFRoHkUh1ocXSeInSb` and space ID `7658115519924686035`. The parent Wiki title is mutable display metadata and must never be used as identity or a blocking check.
 - The configured bot recipient is exactly `ou_c501034db06707b7116eb9ec11896a7d`.
 
 Do not display auth tokens or authentication payloads. Retry one transient network/process failure once with the same idempotency intent. A persistent whole-family Lark, ByteDance, or local failure blocks publication.

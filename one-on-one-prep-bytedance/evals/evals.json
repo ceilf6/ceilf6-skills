@@ -15,7 +15,7 @@
     },
     {
       "id": 3,
-      "prompt": "Prepare the weekly One-on-One when two children under 日结 are both titled Week-2.",
+      "prompt": "Prepare the weekly One-on-One when two children under the configured parent Wiki are both titled Week-2.",
       "expected_output": "Stops before writing, does not guess a target, and returns a duplicate-title failure with write.occurred=false.",
       "files": []
     },

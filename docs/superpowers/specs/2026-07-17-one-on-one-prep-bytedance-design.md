@@ -58,11 +58,11 @@ week_number = 2 + 完整自然周偏移量
 每周材料创建在以下父 Wiki 下：
 
 - URL：`https://bytedance.larkoffice.com/wiki/ZDvbwhN4eiFRoHkUh1ocXSeInSb`
-- 标题：`日结`
+- 标题：可变展示字段，不作为父文档身份或阻断校验
 - node token：`ZDvbwhN4eiFRoHkUh1ocXSeInSb`
 - space ID：`7658115519924686035`
 
-写入前使用 `lark-cli wiki +node-list --as user` 列出子节点：
+父文档身份只由用户提供的 URL、node token 和 space ID 确定；标题变化不改变目标。写入前使用 `lark-cli wiki +node-list --as user` 列出子节点：
 
 - 不存在目标 `Week-N`：新建子文档。
 - 已存在唯一目标 `Week-N`：更新该文档。

@@ -15,7 +15,7 @@
 - Schedule is every Friday at 15:00 in `Asia/Shanghai`.
 - Every window is left-closed/right-open: `[previous Friday 15:00, current Friday 15:00)`.
 - Week numbering anchor is exactly `2026-07-17 = Week-2`; numbering is calculated, never incremented in mutable state.
-- Target parent Wiki is `https://bytedance.larkoffice.com/wiki/ZDvbwhN4eiFRoHkUh1ocXSeInSb`, node token `ZDvbwhN4eiFRoHkUh1ocXSeInSb`, space ID `7658115519924686035`.
+- Target parent Wiki is `https://bytedance.larkoffice.com/wiki/ZDvbwhN4eiFRoHkUh1ocXSeInSb`, node token `ZDvbwhN4eiFRoHkUh1ocXSeInSb`, space ID `7658115519924686035`; its title is mutable display metadata and not identity.
 - Recipient open ID is `ou_c501034db06707b7116eb9ec11896a7d`; notifications use `lark-cli im +messages-send --as bot`.
 - Same-week reruns update the unique `Week-N` child and do not send a second success notification unless explicitly forced.
 - `week1-AI` is unrelated and must never be used as a baseline or update target.
@@ -602,7 +602,7 @@ profiles:
     timezone: Asia/Shanghai
     feishu_open_id: ou_c501034db06707b7116eb9ec11896a7d
     parent_wiki:
-      title: 日结
+      title_policy: mutable_not_identity
       url: https://bytedance.larkoffice.com/wiki/ZDvbwhN4eiFRoHkUh1ocXSeInSb
       node_token: ZDvbwhN4eiFRoHkUh1ocXSeInSb
       space_id: "7658115519924686035"
