@@ -1,0 +1,137 @@
+#!/bin/bash
+
+set -u
+umask 077
+
+export HOME="/Users/bytedance"
+export USER="bytedance"
+export LOGNAME="bytedance"
+export TZ="Asia/Shanghai"
+export LANG="en_US.UTF-8"
+export PATH="/Users/bytedance/.local/bin:/Users/bytedance/.nvm/versions/node/v24.18.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+readonly TRAE="/Users/bytedance/.local/bin/trae-cli"
+readonly SKILL_DIR="/Users/bytedance/Desktop/ceilf/ceilf6-skills/one-on-one-prep-bytedance"
+readonly SKILL_FILE="$SKILL_DIR/SKILL.md"
+readonly PROMPT_FILE="/Users/bytedance/.config/trae-one-on-one-prep/prompt.md"
+readonly WINDOW_SCRIPT="$SKILL_DIR/scripts/week_window.py"
+readonly COLLECTOR="$SKILL_DIR/scripts/collect_local_activity.py"
+readonly LOG_DIR="/Users/bytedance/Library/Logs/trae-one-on-one-prep"
+readonly STATE_FILE="$LOG_DIR/notification-state.json"
+readonly LOCK_DIR="$LOG_DIR/run.lock"
+readonly PARENT_WIKI_URL="https://bytedance.larkoffice.com/wiki/ZDvbwhN4eiFRoHkUh1ocXSeInSb"
+
+mode="normal"
+force_notify=0
+
+usage() {
+  echo "Usage: $0 [--preflight] [--dry-run] [--force-notify]"
+}
+
+check_command() {
+  local label="$1"
+  shift
+  if "$@" >/dev/null 2>&1; then
+    echo "[preflight] $label: ok"
+    return 0
+  fi
+  echo "[preflight] $label: failed" >&2
+  return 1
+}
+
+preflight() {
+  test -x "$TRAE" || { echo "[preflight] Trae executable: failed" >&2; return 1; }
+  test -r "$PROMPT_FILE" || { echo "[preflight] prompt: failed" >&2; return 1; }
+  test -r "$SKILL_FILE" || { echo "[preflight] skill: failed" >&2; return 1; }
+  test -r "$WINDOW_SCRIPT" || { echo "[preflight] window script: failed" >&2; return 1; }
+  test -r "$COLLECTOR" || { echo "[preflight] collector: failed" >&2; return 1; }
+  command -v lark-cli >/dev/null || { echo "[preflight] lark-cli: failed" >&2; return 1; }
+  command -v bytedcli >/dev/null || { echo "[preflight] bytedcli: failed" >&2; return 1; }
+  command -v python3 >/dev/null || { echo "[preflight] python3: failed" >&2; return 1; }
+
+  check_command "Trae login" "$TRAE" login status || return 1
+  check_command "Lark auth" lark-cli auth status --json --verify || return 1
+  check_command "ByteDance auth" bytedcli auth status || return 1
+  check_command "ByteDance user" bytedcli auth userinfo || return 1
+  check_command "Bits auth" bytedcli bits auth status || return 1
+  check_command "Meego auth" bytedcli meego status || return 1
+  check_command "parent Wiki" lark-cli drive +inspect --url "$PARENT_WIKI_URL" || return 1
+  check_command "window calculator" python3 "$WINDOW_SCRIPT" --help || return 1
+  check_command "local collector" python3 "$COLLECTOR" --help || return 1
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --preflight)
+      mode="preflight"
+      ;;
+    --dry-run)
+      mode="dry-run"
+      ;;
+    --force-notify)
+      force_notify=1
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+if [[ "$mode" == "preflight" ]]; then
+  preflight
+  exit $?
+fi
+
+mkdir -p "$LOG_DIR"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  echo "Another one-on-one prep run holds $LOCK_DIR" >&2
+  exit 75
+fi
+trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT INT TERM
+
+readonly RUN_STAMP="$(date '+%Y%m%d-%H%M%S')"
+readonly RUN_LOG="$LOG_DIR/run-$RUN_STAMP.log"
+window_json="$(python3 "$WINDOW_SCRIPT")" || {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] window calculation failed" >> "$RUN_LOG"
+  exit 1
+}
+week_title="$(printf '%s' "$window_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["title"])')" || exit 1
+readonly LAST_MESSAGE="$LOG_DIR/last-message-$week_title.md"
+
+if [[ "$mode" == "dry-run" ]]; then
+  export ONE_ON_ONE_DRY_RUN=1
+else
+  export ONE_ON_ONE_DRY_RUN=0
+fi
+export ONE_ON_ONE_FORCE_NOTIFY="$force_notify"
+export ONE_ON_ONE_NOTIFICATION_STATE="$STATE_FILE"
+
+status=1
+{
+  echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] one-on-one prep started title=$week_title mode=$mode"
+  if preflight; then
+    "$TRAE" \
+      --dangerously-bypass-approvals-and-sandbox \
+      -c shell_environment_policy.inherit=all \
+      exec \
+      --cd "$HOME" \
+      --add-dir "$SKILL_DIR" \
+      --skip-git-repo-check \
+      --color never \
+      --json \
+      --output-last-message "$LAST_MESSAGE" \
+      - < "$PROMPT_FILE"
+    status=$?
+  else
+    status=$?
+  fi
+  echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] one-on-one prep finished status=$status title=$week_title mode=$mode"
+} >> "$RUN_LOG" 2>&1
+
+exit "$status"
