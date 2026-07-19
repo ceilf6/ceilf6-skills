@@ -171,12 +171,19 @@ Failure here means the run failed even if a write already occurred. Report `writ
 Use only:
 
 ```bash
-lark-cli im +messages-send --as bot --user-id "ou_c501034db06707b7116eb9ec11896a7d" --markdown "<message>"
+message=$(<./notify.md)
+lark-cli im +messages-send --as bot \
+  --user-id "ou_c501034db06707b7116eb9ec11896a7d" \
+  --markdown "$message" --format json
 ```
+
+`--markdown` accepts the message string itself; it does not expand file references. Never pass `@notify.md`, `@<path>`, or a bare file path as the `--markdown` value. When a message is staged in a file, read the file into a quoted shell variable as shown above so the actual content crosses the CLI boundary.
 
 Never send to a group, email, webhook, or another user. Send only after successful document verification. The success message includes the `Week-N` link, exact window, 2-3 highest-priority alignment topics, and coverage gaps.
 
-Before sending, read `~/Library/Logs/trae-one-on-one-prep/notification-state.json`. Suppress a normal same-week repeat only when the state contains the same title and independently verified Wiki node token. `ONE_ON_ONE_FORCE_NOTIFY=1` may override suppression. After a confirmed send, atomically update state with title, verified token, message ID, and timestamp.
+Before sending, read `~/Library/Logs/trae-one-on-one-prep/notification-state.json`. Suppress a normal same-week repeat only when the state contains the same title and independently verified Wiki node token. `ONE_ON_ONE_FORCE_NOTIFY=1` may override suppression.
+
+After the send returns a message ID, fetch that exact message with `lark-cli im +messages-mget --as bot --message-ids "<message-id>" --no-reactions --format json`. Verify that the delivered content contains the expected Week title, verified Wiki URL, and exact window, and that it is not a literal `@...` file reference or bare local filename. Treat a mismatch as notification failure. Only after this readback passes may the workflow atomically update state with the title, verified token, message ID, and timestamp.
 
 A failure notification is best effort and must state the failed stage, reason, and whether a document write occurred. If IM/bot auth itself failed, write the complete status only to the protected run log/stderr.
 
