@@ -1,0 +1,99 @@
+---
+name: lark-sediment
+description: 把当前会话里值得长期保留、跨会话/跨人有用的经验（bug 根因与决定性证据、决策与取舍理由、可复用的排查/验证方法、踩坑与环境结论）沉淀进飞书云文档知识库「字节vc」。当用户说「沉淀」「沉淀一下」「沉淀到飞书/云文档」「记录到飞书」「归档到知识库」「同步到 lark 文档」，或一段排查/决策收尾时触发。技能会自动在知识库中定位最合适的位置、先去重再决定追加或新建子文档，并在写入前与用户确认。不用于本地 memory / 仓库 docs（那是本地层），不用于纯代码提交。
+---
+
+# lark-sediment
+
+把一次会话里「代码 / commit / git 历史里看不出来，但下次或别人还会用到」的经验，沉淀进飞书知识库根「字节vc」。
+
+定位：**跨会话 / 跨人 / 跨机的共享层**。和本地 `~/.claude/.../memory/`（本机个人快速召回）、仓库 `docs/`（项目稳定知识）、`reflect`（技能自我改进）**互补，不重复**——同一条经验不要同时往多处灌。反向检索用 `lark-recall`。
+
+## 触发方式
+
+- 用户说：沉淀 / 沉淀一下 / 沉淀到飞书 / 记录到云文档 / 归档到知识库 / 同步到 lark
+- 一段较完整的 bug 排查、方案决策、真机/环境验证收尾后，可主动建议沉淀
+
+## 配置：知识库根
+
+- `ROOT_NODE_TOKEN` = `L0GCwiCS6iK3aWkJPRycmWWtnrd`（标题「字节vc」）
+- `ROOT_SPACE_ID` = `7658115519924686035`
+- 顶层分类（可按需新增，延续编号习惯）：`00-规范！` / `01-业务` / `02-需求`（内含 `02-1-测试、在线验证`）/ `公司平台能力` / `环境配置` / `名词` / `AI报销` / `editor 业务串讲`
+
+> 改根：编辑本节。`lark-recall` 有同一份配置，改根需两处同步。
+> lark-cli 的机械用法（鉴权、字段、风险级别）见 `lark-cli skills read lark-wiki` 和 `lark-cli skills read lark-doc`；本技能只管「沉淀什么 / 放哪 / 怎么去重」。
+
+## 第 1 步：筛出值得沉淀的（准入门槛）
+
+只沉淀同时满足「代码/commit 里看不出来」+「下次或别人还会用到」的：
+
+- **Bug 根因与决定性证据**——尤其现象与根因不一致、易被误判的
+- **决策与取舍理由**——为什么选 A 不选 B（写 WHY，不写 WHAT/HOW）
+- **可复用的排查/验证方法**——如真机 adb/CDP 探针、某接口的判别手法
+- **踩坑 / 前置条件 / 环境结论**
+
+排除：易逝的过程对话；纯代码实现（代码即真相）；本会话已沉淀过的；只对本机个人成立的（→ 走本地 memory）。
+
+**门槛（两问都要能答）**：① 没有它，下次会犯什么具体错？② 能省下一次完整排查（>10min）或避免多大的错？答不清 → 不沉淀。
+
+## 第 2 步：整理成一篇 / 一节
+
+结构：一句话结论 → 背景与目标 → 现象 → 证据 → 根因/结论 → 决策理由 → 待办与相关链接。
+
+- 写 WHY 与不变量，删实现复述和过程流水账。
+- 相对日期转绝对日期（如「今天」「上周」写成 YYYY-MM-DD）。
+- 先落到 scratchpad 的 `.md`，便于 `--content -` 管道写入与复核。
+
+## 第 3 步：定位（懒式自顶向下，不要全量遍历）
+
+1. 列根 `L0GC` 的直接子节点，判断内容属于哪个顶层分类；
+2. 顺该分支逐层下钻到最贴合的父节点（`has_child=false` 即叶子，可在其下建子文档）；
+3. 分类实在不匹配 → 在合适层级新建分类节点（延续 `NN-名称` 编号习惯）。
+
+```bash
+lark-cli wiki +node-list --space-id 7658115519924686035 \
+  --parent-node-token <parent_node_token> \
+  --jq '.data.nodes[] | "\(.node_token)  has_child=\(.has_child)  \(.title)"'
+# 根节点用 --parent-node-token L0GCwiCS6iK3aWkJPRycmWWtnrd
+```
+
+## 第 4 步：去重（先搜后写）
+
+```bash
+lark-cli docs +search --query "<主题关键词>"
+```
+
+- 命中同主题文档 → 优先**追加一节**到该文档，而不是新建；
+- 没有相近文档 → 在第 3 步选定的父节点下**新建子文档**。
+
+## 第 5 步：写入前确认（human-in-the-loop）
+
+把三件事给用户确认后再写：**目标位置**（父节点标题 / 目标文档标题）、**追加还是新建**、**内容预览**。写入飞书 = 对外分发，不得跳过确认。
+
+## 第 6 步：写入
+
+```bash
+# 新建子文档
+lark-cli wiki +node-create --space-id 7658115519924686035 \
+  --parent-node-token <parent_node_token> --obj-type docx --title "<标题>"
+# → 记下返回的 node_token / obj_token / url
+
+# 写入或追加内容（obj_token 或 node_token 均可作 --doc）
+cat <content>.md | lark-cli docs +update --doc <doc_token> \
+  --command append --doc-format markdown --content -
+
+# 校验
+lark-cli docs +fetch --doc <doc_token> --doc-format markdown --jq '.data.document.content' | head
+```
+
+## 第 7 步：回链
+
+- 给用户回文档 URL；
+- 在相关文档之间补「关联」链接（新文档指向旧的排查/需求文档，反之亦可）；
+- 可选：在本地 `~/.claude/projects/<proj>/memory/` 加一条指针（标题 + 一句 hook + 飞书 URL），让本地 memory 指向这条共享沉淀。
+
+## 备注
+
+- 一次只沉淀本会话**新增且真正过门槛**的内容，别把整段对话倒进去。
+- 不 impersonate 真实的人/组织，不建可能误导的记录。
+- 若一次涉及多主题，拆成多篇/多节分别定位，别硬塞进一处。
