@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.wangjinghong.trae-daily-report</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/bytedance/.local/bin/run-bytedance-daily-report</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/bytedance</string>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>0</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/bytedance/Library/Logs/trae-daily-report/launchd.stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/bytedance/Library/Logs/trae-daily-report/launchd.stderr.log</string>
+</dict>
+</plist>

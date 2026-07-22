@@ -1,0 +1,12 @@
+#!/bin/bash
+
+set -euo pipefail
+
+export HOME="/Users/bytedance"
+export USER="bytedance"
+export LOGNAME="bytedance"
+export TZ="Asia/Shanghai"
+export LANG="en_US.UTF-8"
+export PATH="/Users/bytedance/.local/bin:/Users/bytedance/.nvm/versions/node/v24.18.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+exec /usr/bin/python3 /Users/bytedance/.local/lib/trae-daily-report/runner.py "$@"
