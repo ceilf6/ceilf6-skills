@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# 假 codex：按 STUB_MODE 写 verdict 到 -o 指定路径，记录调用次数到 $STUB_STATE/calls。
+set -euo pipefail
+out=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) out="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+cat > /dev/null   # 消费 stdin（instructions.md）
+[ -n "$out" ] || { echo "stub: 未收到 -o" >&2; exit 9; }
+
+count_file="${STUB_STATE:?stub 需要 STUB_STATE 环境变量}/calls"
+prev=0
+[ -f "$count_file" ] && prev=$(cat "$count_file")
+calls=$((prev + 1))
+echo "$calls" > "$count_file"
+
+pass_json='{"pass":true,"summary":"clean","findings":[]}'
+fail_json='{"pass":false,"summary":"issues","findings":[{"severity":"major","file":"a.ts","line":3,"issue":"bug","suggestion":"fix"}]}'
+
+case "${STUB_MODE:?stub 需要 STUB_MODE 环境变量}" in
+  pass) printf '%s' "$pass_json" > "$out" ;;
+  fail) printf '%s' "$fail_json" > "$out" ;;
+  garbage_then_pass)
+    if [ "$calls" -eq 1 ]; then printf 'not json' > "$out"; else printf '%s' "$pass_json" > "$out"; fi ;;
+  always_garbage) printf 'not json' > "$out" ;;
+  exit1) exit 1 ;;
+  *) echo "stub: 未知 STUB_MODE" >&2; exit 9 ;;
+esac
