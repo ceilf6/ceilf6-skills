@@ -58,6 +58,11 @@ INSTR="$ROUND_DIR/instructions.md"
 {
   cat "$TEMPLATE"
   echo
+  echo "## 评审范围"
+  echo
+  # codex 0.124+ 的 exec review --base 与自定义指令互斥（openai/codex#22145），故用 plain exec、范围钉死在指令内
+  echo "本轮评审对象是当前分支相对 base 分支的全部已提交变更。先运行 \`git diff ${BASE}...HEAD\`（必要时配合 \`git log ${BASE}..HEAD --oneline\`）获取 diff 再开始评审；工作区未提交内容不在评审范围内。"
+  echo
   echo "## 验收基准（plan.md 全文）"
   echo
   cat "$CTX_DIR/plan.md"
@@ -94,8 +99,7 @@ jq '.status = "cr"' "$CTX_DIR/meta.json" > "$tmp" && mv "$tmp" "$CTX_DIR/meta.js
 # ---- 调 codex；失败或校验不过重试一次 ----
 VERDICT="$ROUND_DIR/verdict.json"
 run_codex() {
-  (cd "$REPO_ROOT" && "$CODEX_BIN" exec review \
-    --base "$BASE" \
+  (cd "$REPO_ROOT" && "$CODEX_BIN" exec \
     --output-schema "$SCHEMA" \
     -o "$VERDICT" \
     --dangerously-bypass-approvals-and-sandbox \

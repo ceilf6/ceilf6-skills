@@ -64,6 +64,7 @@ grep -q 'PLAN-MARKER' "$ctx/cr/round-1/instructions.md" && ok "含 plan 全文" 
 grep -q 'PROMPT-MARKER' "$ctx/cr/round-1/instructions.md" && ok "含提示词段" || bad "含提示词段"
 if grep -q 'OTHER-SECTION' "$ctx/cr/round-1/instructions.md"; then bad "提示词段截断"; else ok "提示词段截断"; fi
 grep -q '对抗式' "$ctx/cr/round-1/instructions.md" && ok "含静态模板" || bad "含静态模板"
+grep -q 'git diff master\.\.\.HEAD' "$ctx/cr/round-1/instructions.md" && ok "含评审范围钉定" || bad "含评审范围钉定"
 [ -f "$ctx/cr/round-1/verdict.json" ] && ok "verdict 捕获" || bad "verdict 捕获"
 grep -q 'pass' "$ctx/cr/round-1/review.md" && ok "review 渲染" || bad "review 渲染"
 [ "$(jq -r .status "$ctx/meta.json")" = awaiting_human ] && ok "pass 后 status=awaiting_human" || bad "status: $(jq -r .status "$ctx/meta.json")"

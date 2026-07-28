@@ -11,7 +11,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["severity", "file", "issue", "suggestion"],
+        "required": ["severity", "file", "line", "issue", "suggestion"],
         "properties": {
           "severity": { "enum": ["blocker", "major", "minor", "nit"] },
           "file": { "type": "string" },
