@@ -104,7 +104,7 @@ run_codex() {
 START=$(date +%s)
 attempt=1
 until run_codex && bash "$VALIDATE" "$VERDICT"; do
-  [ "$attempt" -ge 2 ] && die "第 $N 轮：codex 两次尝试均失败或 verdict 校验不过，停止（产物见 $ROUND_DIR）"
+  [ "$attempt" -ge 2 ] && die "第 $N 轮：codex 两次尝试均失败或 verdict 校验不过，停止（产物见 ${ROUND_DIR}）"   # ${} 必须：bash 3.2 对 $var 紧跟多字节字符会解析出错误变量名
   attempt=$((attempt + 1))
   echo "cr-round: 第 1 次尝试失败，重试中……" >&2
 done

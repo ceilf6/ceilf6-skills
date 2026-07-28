@@ -10,6 +10,17 @@ check_fail() {
   local d="$1"; shift
   if "$@" >/dev/null 2>&1; then bad "$d"; else ok "$d"; fi
 }
+# 终态失败必须是 die 的干净退出（exit 1 且 stderr 含指定诊断文案），shell 崩溃（词法错误吞掉 die）不算。
+# 只断言 exit 非 0 或 stderr 含 cr-round: 前缀都区分不出崩溃：崩溃也退 1，重试回显也带该前缀。
+check_die() {
+  local d="$1" want="$2"; shift 2
+  local err rc=0
+  err=$(mktemp)
+  "$@" >/dev/null 2>"$err" || rc=$?
+  [ "$rc" = 1 ] && ok "${d}：exit 1" || bad "${d}：exit $rc"
+  grep -q "$want" "$err" && ok "${d}：die 诊断" || bad "${d}：die 诊断"
+  rm -f "$err"
+}
 
 # 构造 fixture：git 仓 + 手工搭建的上下文目录（不依赖 ctx-dir.sh，契约即目录布局）
 # 直接调用（不经命令替换子 shell），设置全局变量 ctx（上下文目录）、R（仓库根）
@@ -82,11 +93,11 @@ STUB_STATE="$state" STUB_MODE=garbage_then_pass CODEX_BIN="$STUB" bash "$CR" --d
 cleanup_repo
 
 make_ctx
-check_fail "两次垃圾输出后终止" run_cr always_garbage "$ctx"
+check_die "两次垃圾输出后终止" '两次尝试均失败' run_cr always_garbage "$ctx"
 cleanup_repo
 
 make_ctx
-check_fail "codex 持续退出非 0 时终止" run_cr exit1 "$ctx"
+check_die "codex 持续退出非 0 时终止" '两次尝试均失败' run_cr exit1 "$ctx"
 cleanup_repo
 
 echo; echo "PASS=$PASS FAIL=$FAIL"
