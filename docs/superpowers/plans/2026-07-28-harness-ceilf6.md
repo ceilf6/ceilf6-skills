@@ -1051,6 +1051,12 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ---
 
+## 勘误（实施后补记，随 commit 5698975）
+
+1. Global Constraints 中「codex 调用参数逐字固定」的 `exec review --base` 形态在 codex 0.144.5 上不可用（review 子命令与自定义 PROMPT 互斥，上游 openai/codex#22145）；已改为普通 `codex exec`，评审范围由 cr-round.sh 注入指令的「评审范围」小节（`git diff <base>...HEAD`）钉定，真实冒烟验证通过。
+2. OpenAI strict structured-output 要求 `--output-schema` 的 `required` 列全所有属性：`verdict.schema.json` 的 `line` 已加入 `required`（类型仍 `["integer","null"]`，语义不变）。
+3. Task 3 审查修复将 test-cr-round 断言 19→21（终态断言钉死 die 语义 + 突变验证）；本勘误随附的范围注入断言使其 →22。Task 2/3 测试 fixture 增加 macOS `/var→/private/var` 归一化与 `.git/ai` 守护进程竞态清理。
+
 ## 计划外（实现后的人工验收，spec「验收方式」第 2 条）
 
 由用户在 byteview-web 的一个真实小需求上完整走一遍：init 导种子 → 计划门轻量路径 → 开发 → 至少两轮真实 CR（可人为留一个可发现的问题）→ 人工续入一次 → 组合沉淀一次。验收标准：全程无权限打断；除计划门确认与人工阶段外无手工搬运；断开会话重开后凭目录状态无损续跑。此环节燃烧真实 codex 额度且需真实需求，不纳入本计划的自动执行。

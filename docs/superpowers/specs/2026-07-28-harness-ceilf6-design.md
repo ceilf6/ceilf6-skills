@@ -105,7 +105,7 @@ plan.md 三重角色：开发执行依据、codex 每轮 CR 的验收锚点、�
 
 ### 每轮指令组装（脚本拼装）
 
-- 第 1 轮：对抗式评审角色 + 验收基准（plan.md 全文）+ 种子中的提示词段 + 要求参考 code-review、karpathy-guidelines 两个 SKILL.md + 输出契约。diff 不进 prompt，由 `review --base <meta.base_branch>` 自行计算。
+- 第 1 轮：对抗式评审角色 + 评审范围小节（指明 `git diff <base>...HEAD`，由 codex 持全权自行运行获取；已提交变更为界，工作区未提交内容不在范围）+ 验收基准（plan.md 全文）+ 种子中的提示词段 + 要求参考 code-review、karpathy-guidelines 两个 SKILL.md + 输出契约。diff 本身不进 prompt。
 - 第 N>1 轮：附上一轮 verdict.json + fixes.md，指令为「先逐条核验处置（修复是否真实生效、不采纳理由是否成立），再审新增 diff」。
 - 防发散条款：已被书面不采纳且理由成立的意见，无新证据不得重提；新 finding 必须锚定具体文件位置。
 
@@ -124,14 +124,15 @@ meta.max_rounds 为可选旋钮（默认 null 不限）；每轮结束回显「�
 ### codex 调用（固化在 cr-round 脚本内）
 
 ```bash
-# 脚本先把本轮指令拼装落盘为 round-N/instructions.md，再执行：
-codex exec review \
-  --base <meta.base_branch> \
+# 脚本先把本轮指令拼装落盘为 round-N/instructions.md（含「评审范围」小节），再执行：
+codex exec \
   --output-schema <技能目录绝对路径>/references/verdict.schema.json \
   -o .harness-ceilf6/<分支>/cr/round-N/verdict.json \
   --dangerously-bypass-approvals-and-sandbox \
   - < .harness-ceilf6/<分支>/cr/round-N/instructions.md
 ```
+
+实现期勘误（已验证，commit 5698975）：原设计用 `codex exec review --base`，但 codex ≥0.124 的 review 子命令与自定义 PROMPT（含 stdin `-`）互斥且无 flag 级出路；且送审时工作区必为干净（送审前 commit 规则），`exec review` 缺省范围行为未文档化、有静默评空 diff 的风险。故改为普通 `codex exec`，评审范围由指令文本钉定——我们的指令模板本就自带完整评审角色与输出契约，`review` 模式仅提供的 diff 计算由 codex 自行运行 git 命令替代，真实冒烟已验证其能正确锚定范围。另：OpenAI strict structured-output 要求 schema 的 `required` 列全所有属性，故 `line` 亦入 required、以 `null` 表达缺省（校验器与渲染器语义不变）。
 
 ## harness-context 接口
 
