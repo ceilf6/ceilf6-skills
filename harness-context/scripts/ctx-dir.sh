@@ -18,7 +18,7 @@ resolve_dir() {
   root=$(repo_root)
   branch=$(current_branch)
   case "$branch" in
-    master|main) die "当前在主分支 $branch：请先切到需求分支" ;;
+    master|main) die "当前在主分支 ${branch}：请先切到需求分支" ;;   # ${} 必须：bash 3.2 对 $var 紧跟多字节字符会解析出错误变量名
   esac
   echo "$root/.harness-ceilf6/${branch//\//__}"
 }

@@ -34,22 +34,45 @@ REPO_ROOT=$(git -C "$CTX_DIR" rev-parse --show-toplevel)
 BASE=$(jq -r .base_branch "$CTX_DIR/meta.json")
 { [ -n "$BASE" ] && [ "$BASE" != null ]; } || die "meta.base_branch 缺失"
 
-# 轮次 = 现有 round-* 最大编号 + 1
-N=1
+# ---- 轮次选择 ----
+# 最高已存在轮次 H（目录名须为合法数字；无则 H=0）
+H=0
 for d in "$CTX_DIR"/cr/round-*; do
   [ -d "$d" ] || continue
   n=${d##*round-}
   case "$n" in ''|*[!0-9]*) continue ;; esac
-  [ "$n" -ge "$N" ] && N=$((n + 1))
+  [ "$n" -gt "$H" ] && H=$n
 done
-ROUND_DIR="$CTX_DIR/cr/round-$N"
 
-# N>1 前置：上一轮必须已处置完（fixes.md 存在）
+# H=0 → 开 round-1；round-H 的 verdict 合法（该轮完整结束）→ 开 round-(H+1)；
+# 否则 round-H 是中止轮（codex 两次失败/verdict 非法）→ 原地重跑 round-H，上一轮回溯到 round-(H-1)。
+# 中止轮残留文件无需清理：instructions.md 用 > 重新生成、verdict.json 被 codex -o 覆盖、中止轮不会有 review.md。
 PREV=""
-if [ "$N" -gt 1 ]; then
-  PREV="$CTX_DIR/cr/round-$((N - 1))"
-  [ -f "$PREV/fixes.md" ] || die "round-$((N - 1))/fixes.md 不存在：上一轮未处置完，不允许送下一轮"
+if [ "$H" -eq 0 ]; then
+  N=1
+elif [ -f "$CTX_DIR/cr/round-$H/verdict.json" ] && bash "$VALIDATE" "$CTX_DIR/cr/round-$H/verdict.json" >/dev/null 2>&1; then
+  N=$((H + 1))
+  PREV="$CTX_DIR/cr/round-$H"
+else
+  N=$H
+  echo "cr-round: round-${H} 上次中止，原地重跑" >&2
+  [ "$H" -gt 1 ] && PREV="$CTX_DIR/cr/round-$((H - 1))"
 fi
+
+# 防御：PREV 的 verdict 缺失或非法 → 视同无上一轮（跳过门禁与注入），不 die 以免死锁
+if [ -n "$PREV" ] && ! { [ -f "$PREV/verdict.json" ] && bash "$VALIDATE" "$PREV/verdict.json" >/dev/null 2>&1; }; then
+  echo "cr-round: ${PREV##*/}/verdict.json 缺失或非法，跳过上一轮门禁与注入" >&2
+  PREV=""
+fi
+
+# 门禁（仅当有合法上一轮）：上一轮未通过（pass=false）才要求已处置完（fixes.md 存在）；通过轮天然无 fixes.md，不得卡死续入
+if [ -n "$PREV" ]; then
+  prev_pass=$(jq -r .pass "$PREV/verdict.json")
+  if [ "$prev_pass" = false ] && [ ! -f "$PREV/fixes.md" ]; then
+    die "${PREV##*/}/fixes.md 不存在：上一轮未处置完，不允许送下一轮"
+  fi
+fi
+ROUND_DIR="$CTX_DIR/cr/round-$N"
 
 mkdir -p "$ROUND_DIR"
 INSTR="$ROUND_DIR/instructions.md"
@@ -77,18 +100,23 @@ INSTR="$ROUND_DIR/instructions.md"
   fi
   if [ -n "$PREV" ]; then
     echo
-    echo "## 上一轮评审结论（round-$((N - 1))/verdict.json）"
+    echo "## 上一轮评审结论（${PREV##*/}/verdict.json）"
     echo
     echo '```json'
     cat "$PREV/verdict.json"
     echo
     echo '```'
-    echo
-    echo "## 上一轮处置记录（round-$((N - 1))/fixes.md）"
-    echo
-    cat "$PREV/fixes.md"
-    echo
-    echo "本轮请先逐条核验上述处置：修复是否真实生效、不采纳理由是否成立；再审新增 diff。"
+    if [ -f "$PREV/fixes.md" ]; then
+      echo
+      echo "## 上一轮处置记录（${PREV##*/}/fixes.md）"
+      echo
+      cat "$PREV/fixes.md"
+      echo
+      echo "本轮请先逐条核验上述处置：修复是否真实生效、不采纳理由是否成立；再审新增 diff。"
+    else
+      echo
+      echo "上一轮评审已通过；本轮评审对象包含此后新增的提交与验收增补，请全量复审新增 diff。"
+    fi
   fi
 } > "$INSTR"
 

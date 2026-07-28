@@ -2,6 +2,7 @@
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 CR="$HERE/../scripts/cr-round.sh"
+VAL="$HERE/../scripts/validate-verdict.sh"
 STUB="$HERE/stubs/codex"
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); echo "  ok: $1"; }
@@ -84,6 +85,33 @@ run_cr pass "$ctx" >/dev/null
 [ -d "$ctx/cr/round-2" ] && ok "轮次自增" || bad "轮次自增"
 grep -q 'FIXES-MARKER' "$ctx/cr/round-2/instructions.md" && ok "注入上轮 fixes" || bad "注入上轮 fixes"
 grep -q '"severity"' "$ctx/cr/round-2/instructions.md" && ok "注入上轮 verdict" || bad "注入上轮 verdict"
+cleanup_repo
+
+echo "== 续入：pass 轮之后无 fixes.md 也能开下一轮 =="
+make_ctx
+run_cr pass "$ctx" >/dev/null
+[ ! -f "$ctx/cr/round-1/fixes.md" ] && ok "pass 轮无 fixes.md（续入前提）" || bad "pass 轮不应有 fixes.md"
+if run_cr fail "$ctx" >/dev/null; then ok "pass 后续入 exit 0"; else bad "pass 后续入 exit 0"; fi
+[ -d "$ctx/cr/round-2" ] && ok "pass 后开出 round-2" || bad "pass 后开出 round-2"
+grep -q '"summary":"clean"' "$ctx/cr/round-2/instructions.md" && ok "注入上轮 pass verdict" || bad "注入上轮 pass verdict"
+grep -q '上一轮评审已通过' "$ctx/cr/round-2/instructions.md" && ok "注入通过续入指令行" || bad "注入通过续入指令行"
+if grep -q '逐条核验上述处置' "$ctx/cr/round-2/instructions.md"; then bad "不应含处置核验指令"; else ok "不含处置核验指令"; fi
+cleanup_repo
+
+echo "== 中止轮：原地重跑而非死锁 =="
+make_ctx
+check_die "中止轮先终止" '两次尝试均失败' run_cr always_garbage "$ctx"
+[ -f "$ctx/cr/round-1/verdict.json" ] && ok "中止轮 verdict 残留" || bad "中止轮 verdict 残留"
+if bash "$VAL" "$ctx/cr/round-1/verdict.json" >/dev/null 2>&1; then bad "中止轮 verdict 应非法"; else ok "中止轮 verdict 非法"; fi
+[ ! -d "$ctx/cr/round-2" ] && ok "中止后无 round-2" || bad "中止后无 round-2"
+state=$(mktemp -d); err=$(mktemp)
+if STUB_STATE="$state" STUB_MODE=pass CODEX_BIN="$STUB" bash "$CR" --dir "$ctx" >/dev/null 2>"$err"; then ok "重跑 exit 0"; else bad "重跑 exit 0"; fi
+grep -q '上次中止，原地重跑' "$err" && ok "stderr 提示原地重跑" || bad "stderr 提示原地重跑"
+rm -f "$err"
+bash "$VAL" "$ctx/cr/round-1/verdict.json" >/dev/null 2>&1 && ok "round-1 verdict 重跑后合法" || bad "round-1 verdict 重跑后合法"
+[ -f "$ctx/cr/round-1/review.md" ] && ok "round-1 review 生成" || bad "round-1 review 生成"
+[ "$(jq -r .status "$ctx/meta.json")" = awaiting_human ] && ok "重跑 pass 后 status=awaiting_human" || bad "status: $(jq -r .status "$ctx/meta.json")"
+[ ! -d "$ctx/cr/round-2" ] && ok "原地重跑未新开 round-2" || bad "原地重跑未新开 round-2"
 cleanup_repo
 
 echo "== 重试逻辑 =="

@@ -41,7 +41,7 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 3. 读 `$CTX/cr/round-N/verdict.json`：
    - `pass=true` → 循环结束（脚本已置 status=awaiting_human），输出收尾汇总（模板见下）。
    - `pass=false` → **逐条处置**每个 finding：修复，或书面不采纳。全部 blocker/major 处置完后写 `$CTX/cr/round-N/fixes.md`（格式见下），回到第 1 步。
-4. **僵局熔断**（会话判断）：同一条 finding，codex 连续两轮坚持、你连续两轮书面不采纳 → 停止循环，`jq '.status = "awaiting_human"' "$CTX/meta.json" > /tmp/m.json && mv /tmp/m.json "$CTX/meta.json"`，把分歧点整理给用户裁决。
+4. **僵局熔断**（会话判断）：同一条 finding，codex 连续两轮坚持、你连续两轮书面不采纳 → 停止循环，`bash ~/.claude/skills/harness-context/scripts/ctx-dir.sh set-status awaiting_human`，把分歧点整理给用户裁决。
 5. 脚本自身失败（两次尝试后）→ 停止并如实报告 stderr，不静默重试第三次。
 
 meta.max_rounds 非 null 时，达到该轮数也停下交用户（默认 null 不限）。每轮结束向用户回显脚本输出的「第 N 轮 / 耗时」信息。
