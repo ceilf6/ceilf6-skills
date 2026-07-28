@@ -1,0 +1,25 @@
+harness-ceilf6/references/verdict.schema.json
+  s_62af91ee61adf0::t_5a82b5f2bd61f7 1-25
+harness-ceilf6/scripts/validate-verdict.sh
+  s_62af91ee61adf0::t_ca9e6482680430 1-39
+harness-ceilf6/tests/test-validate-verdict.sh
+  s_62af91ee61adf0::t_25769150a53b9e 1-33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "660709543818fad6693d8e715bf209831a01e5ea",
+  "prompts": {},
+  "sessions": {
+    "s_62af91ee61adf0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_62af91ee61adf0",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
