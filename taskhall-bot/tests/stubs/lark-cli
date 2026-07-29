@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# 假 lark-cli：把完整 argv 记到 ${STUB_LOG}，按首个子命令输出录制响应。
+# STUB_FAIL_FIRST=1 时首次调用失败（测重试）。
+set -euo pipefail
+log="${STUB_LOG:?需要 STUB_LOG}"
+printf '%s\n' "$*" >> "$log"
+count_file="${log}.count"
+prev=0
+[ -f "$count_file" ] && prev=$(cat "$count_file")
+calls=$((prev + 1))
+echo "$calls" > "$count_file"
+if [ "${STUB_FAIL_FIRST:-0}" = "1" ] && [ "$calls" -eq 1 ]; then
+  echo '{"ok":false,"error":"stub 注入的首次失败"}' >&2
+  exit 1
+fi
+case "$1" in
+  api)
+    case "$*" in
+      *DELETE*) echo '{"ok":true,"data":{}}' ;;
+      *) echo '{"ok":true,"data":{"reaction_id":"rid_123"}}' ;;
+    esac ;;
+  im) echo '{"ok":true,"data":{"message_id":"om_reply1"}}' ;;
+  *) echo '{"ok":true,"data":{}}' ;;
+esac
