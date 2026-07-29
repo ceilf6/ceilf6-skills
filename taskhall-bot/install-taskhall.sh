@@ -5,8 +5,14 @@ set -euo pipefail
 # pwd -P：把 __ROOT__ 钉成物理路径，plist 里不留 symlink（listener 的 isMain 两种都认）。
 here=$(cd "$(dirname "$0")" && pwd -P)
 node_bin=$(command -v node) || { echo "缺少依赖：node" >&2; exit 1; }
-command -v lark-cli >/dev/null || { echo "缺少依赖：lark-cli" >&2; exit 1; }
-command -v claude >/dev/null || { echo "缺少依赖：claude" >&2; exit 1; }
+command -v lark-cli >/dev/null || { echo "缺少依赖：lark-cli（事件流与所有飞书回应）" >&2; exit 1; }
+command -v claude >/dev/null || { echo "缺少依赖：claude（无人值守执行任务）" >&2; exit 1; }
+command -v bytedcli >/dev/null || { echo "缺少依赖：bytedcli（harness 收尾建 MR）" >&2; exit 1; }
+command -v codex >/dev/null || { echo "缺少依赖：codex（harness 的对抗式 CR 循环）" >&2; exit 1; }
+command -v git >/dev/null || { echo "缺少依赖：git（runner 建 worktree）" >&2; exit 1; }
+# /usr/bin/git 是 Command Line Tools 的 shim：未装 CLT 时它照样在 PATH 里、command -v 照样过，
+# 只有真正执行才弹窗失败。runner 的第一个动作就是 git worktree add，这里必须用 --version 证伪。
+git --version >/dev/null 2>&1 || { echo "git 不可用（多半未装 Xcode Command Line Tools：xcode-select --install）" >&2; exit 1; }
 
 # Node 地板 20.11：低版本不会报错，只会在运行期以难懂的语法/行为差异挂掉常驻进程。
 node_major=$("$node_bin" -p 'process.versions.node.split(".")[0]')
@@ -28,12 +34,30 @@ case "$dm_open_id" in
   *) echo "config.json 的 dmOpenId 未填（当前：${dm_open_id}），取值见 runbook「本机绑定与配置」" >&2; exit 1 ;;
 esac
 
+# 交叉校验：拿本机 profile 实际授权的 open_id 与 config 比对，堵住上面前缀守卫堵不住的那一类错。
+profile=$("$node_bin" -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).profile||""))' "$config")
+actual_open_id=$(lark-cli auth status --json --profile "$profile" </dev/null 2>/dev/null \
+  | "$node_bin" -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).identities?.user?.openId ?? ""' 2>/dev/null) || actual_open_id=""
+if [ -z "$actual_open_id" ]; then
+  # 未授权/离线时不拦装载：装机不该被网络与授权时序卡死，此处退回 runbook 的取值命令兜底。
+  echo "警告：无法反查 profile ${profile} 的 open_id（未授权或离线），跳过 dmOpenId 交叉校验" >&2
+elif [ "$actual_open_id" != "$dm_open_id" ]; then
+  echo "dmOpenId 与 profile ${profile} 实际授权的 open_id 不一致，拒绝装载：" >&2
+  echo "  config.json：${dm_open_id}" >&2
+  echo "  lark-cli   ：${actual_open_id}" >&2
+  echo "多半是取值时漏了 --profile ${profile}，拿到了别的应用下的 open_id —— open_id 是 app 维度的，" >&2
+  echo "那个值同样是 ou_ 前缀、照样穿过格式守卫，装出来是 reaction 正常、私信全投空的半哑 bot。" >&2
+  exit 1
+fi
+
 mkdir -p "${here}/logs" "${here}/state"
 
 path_extra="$(dirname "$node_bin"):$(dirname "$(command -v lark-cli)"):$(dirname "$(command -v claude)")"
-# & 是 sed 替换里的「整个匹配」、& 与 < 又是 XML 元字符：含这些字符的路径会静默渲染出错误的 plist。
+path_extra="${path_extra}:$(dirname "$(command -v bytedcli)"):$(dirname "$(command -v codex)")"
+# & 是 sed 替换里的「整个匹配」、\ 是 sed 的转义引导符（探针实证会被静默吞掉）、& 与 < 又是 XML
+# 元字符：含这些字符的路径不会报错，只会静默渲染出一份错误的 plist。
 case "${here}${node_bin}${path_extra}" in
-  *"&"*|*"|"*|*"<"*|*">"*) echo "路径含 & | < > ，无法安全渲染 plist：${here}" >&2; exit 1 ;;
+  *"&"*|*"|"*|*"<"*|*">"*|*"\\"*) echo "路径含 & | < > \\ ，无法安全渲染 plist：${here}" >&2; exit 1 ;;
 esac
 
 plist="${HOME}/Library/LaunchAgents/com.ceilf6.taskhall-bot.plist"

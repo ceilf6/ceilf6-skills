@@ -2,9 +2,20 @@
 
 ## 依赖
 
-- **Node ≥ 20.11**（install 脚本会校验 `command -v node` 那一份；低于地板直接拒装，不留运行期怪异失败）。
-- `lark-cli`（已绑定 taskhall profile 且完成 user 授权，见「本机绑定与配置」）、`claude` CLI、`git`。三者必须在 PATH 里能 `command -v` 到 —— install 脚本把它们各自的目录写进 plist 的 `PATH`，launchd 启动的进程不读你的 shell profile（node 走 nvm 时尤其致命）。
-- macOS launchd（用户级 LaunchAgent，登录后常驻）。
+install 脚本会逐项机械检查，缺一项即拒装（不再靠人肉核对）：
+
+| 依赖 | 用途 | 检查方式 |
+|---|---|---|
+| **Node ≥ 20.11** | 跑 listener/runner | `command -v node` 那一份的版本号；低于地板直接拒装，不留运行期怪异失败 |
+| `lark-cli` | 事件流与全部飞书回应 | `command -v`（还需已绑定 taskhall profile 且完成 user 授权，见「本机绑定与配置」） |
+| `claude` | 无人值守执行任务 | `command -v` |
+| `bytedcli` | harness 收尾建 MR | `command -v` |
+| `codex` | harness 的对抗式 CR 循环 | `command -v` |
+| `git`（真装了 CLT 的） | runner 建 worktree | `command -v` **加** `git --version`——macOS 的 `/usr/bin/git` 只是 Command Line Tools 的 shim，没装 CLT 时它照样在 PATH 里、`command -v` 照样过，只有执行才报错。报「git 不可用」就跑 `xcode-select --install` |
+
+这些必须在 PATH 里能 `command -v` 到 —— install 脚本把它们各自的目录写进 plist 的 `PATH`，launchd 启动的进程不读你的 shell profile（node 走 nvm 时尤其致命）。
+
+另需 macOS launchd（用户级 LaunchAgent，登录后常驻）。
 
 ## 一次性：创建飞书应用（约 5 分钟，人工）
 
@@ -28,6 +39,7 @@
    profile 名须与 `config.json` 的 `profile` 字段一致（本手册与出厂配置都用 `taskhall`）；改名要同时改这两处。
 4. 编辑 `taskhall-bot/config.json`：填 `dmOpenId` = `lark-cli auth status --json --verify --profile taskhall` 的 `identities.user.openId`（形如 `ou_...`）；确认 repoPath / worktreesDir。
    **`--profile taskhall` 不可省**：open_id 是 **app 维度**的，不带它会拿到另一个应用下同样合法的 `ou_` 值——正好穿过 install 脚本的 `ou_` 前缀守卫，装出一个 reaction 正常、私信全投空的半哑 bot。
+   install 脚本会用 config 里的 profile 反查真值做交叉校验：**不一致直接拒装**；反查不到（未授权或离线）只告警放行，此时本步骤就是唯一防线。
    `config.json` 是 git 跟踪文件：填进去的是你的个人 open_id，**别提交**；日后升级拉取如报冲突，先 `git stash` 再拉，拉完 `git stash pop`。
 5. `bash taskhall-bot/install-taskhall.sh`。
 
@@ -91,5 +103,5 @@ worktree 存在、日志尾无 RESULT、消息还挂着 👀 —— 三者同时
 - token 消耗仅受墙钟超时（默认 2h）约束；CR 轮次无上限是用户裁定。
 - 回应（reaction/私信）尽力而为，失败不阻塞任务；产物真相在 worktree 与 MR。
 - 任务进行中重启 daemon 会永久滞留该任务（worktree/分支/👀 全部留存且不重试），处置见「重启恢复」。
-- 本机的 AI-IDE daemon 会往新建的 git 仓写 `.git/ai/`，偶尔会让 `git worktree remove` 撞上并发写而失败；runner 已带 3 次重试，仍失败则日志留「worktree 清理失败（留人工）」。属本机环境噪声，不是产品缺陷。
+- 本机的 AI-IDE daemon 会往新建的 git 仓写 `.git/ai/`，偶尔会让 `git worktree remove` 撞上并发写而失败；runner 的清理分「worktree 移除」与「分支删除」两步、各自 3 次重试且互不牵连，仍失败则日志留「worktree 清理失败（留人工）」或「分支删除失败（留人工）」。属本机环境噪声，不是产品缺陷。
 - 测试 stub（`tests/stubs/lark-cli`）在 `event consume` 分支之前就记账，所以 listener 类测试里 **consume 占掉第 1 次调用**；将来若给 listener 测试加 `STUB_FAIL_FIRST=1`，失败的会是事件流而不是第一次 reaction。

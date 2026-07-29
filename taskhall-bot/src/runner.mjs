@@ -78,18 +78,22 @@ function runClaude(config, cwd, prompt, logPath) {
   });
 }
 
-async function cleanupWorktree(config, worktree, branch) {
+async function retrying(label, fn) {
   for (let i = 0; i < 3; i++) {
-    try {
-      await git(config.repoPath, ['worktree', 'remove', '--force', worktree]);
-      await git(config.repoPath, ['branch', '-D', branch]);
-      return true;
-    } catch (e) {
-      if (i === 2) { console.error(`[runner] worktree 清理失败（留人工）：${e.message}`); return false; }
+    try { await fn(); return true; } catch (e) {
+      if (i === 2) { console.error(`[runner] ${label}（留人工）：${e.message}`); return false; }
       await new Promise((r) => setTimeout(r, 1000));
     }
   }
   return false;
+}
+
+// 两步各自重试而非整体重试：remove 成功、branch -D 失败时，整体重试会把 remove 重跑在
+// 已删路径上并必然再失败，于是分支永远删不掉。已成功的步骤不得重跑。
+async function cleanupWorktree(config, worktree, branch) {
+  const removed = await retrying('worktree 清理失败', () => git(config.repoPath, ['worktree', 'remove', '--force', worktree]));
+  const deleted = await retrying('分支删除失败', () => git(config.repoPath, ['branch', '-D', branch]));
+  return removed && deleted;
 }
 
 export async function runTask(task, config, lark) {
@@ -100,10 +104,20 @@ export async function runTask(task, config, lark) {
   let worktree = join(config.worktreesDir, branch.replaceAll('/', '__'));
   try {
     await git(config.repoPath, ['worktree', 'add', worktree, '-b', branch]);
-  } catch {
+  } catch (firstErr) {
     branch = `${base}-2`; // 同名冲突追加序号重试一次
     worktree = join(config.worktreesDir, branch.replaceAll('/', '__'));
-    await git(config.repoPath, ['worktree', 'add', worktree, '-b', branch]);
+    try {
+      await git(config.repoPath, ['worktree', 'add', worktree, '-b', branch]);
+    } catch {
+      // 这里抛出去等于静默丢单：listener 的 pump 只会 catch 成一行 stderr，而 message_id
+      // 在入队时就已 markProcessed，群里既无 ❌ 也无私信、且永不重试。走 fail 通道让它可见。
+      // 首次错误才是根因（第二次多半只是「路径已存在」的派生噪声）。
+      await lark.addReaction(task.messageId, config.reactions.failed);
+      await lark.sendDm(config.dmOpenId,
+        `❌ 任务未启动：worktree 创建失败（尚未运行，无任务日志）\nmessage_id：${task.messageId}\n仓库：${config.repoPath}\n首次错误：${firstErr.message}`);
+      return { verdict: 'fail', branch, worktree, logPath: '' };
+    }
   }
   const logPath = join(config.logsDir, `task-${task.messageId}.log`);
   const claimedRid = await lark.addReaction(task.messageId, config.reactions.claimed);

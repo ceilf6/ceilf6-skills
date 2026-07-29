@@ -38,6 +38,10 @@ test('replyInThread 与 sendDm 返回 true', async () => {
   const calls = readFileSync(log, 'utf8');
   assert.ok(calls.includes('messages-reply'));
   assert.ok(calls.includes('messages-send'));
+  // --content 必须是 JSON：裸文本会被 lark-cli 以 invalid_argument 拒掉，而 lark.mjs 吞错不抛，
+  // 表现是「回帖/私信静默不发」。钉住序列化形态，别让它被改回裸 text。
+  assert.ok(calls.includes('{"text":"回帖文本"}'));
+  assert.ok(calls.includes('{"text":"私信文本"}'));
   rmSync(dir, { recursive: true, force: true });
 });
 test('首次失败自动重试一次后成功', async () => {

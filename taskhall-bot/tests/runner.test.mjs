@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, existsSync, realpathSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, existsSync, realpathSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -48,6 +48,7 @@ test('pass：worktree 保留、✅、私信含 MR 链接、prompt 含任务原�
   assert.ok(readFileSync(process.env.STUB_PROMPT_OUT, 'utf8').includes('修一个真实任务 $&原样'));
   assert.ok(readFileSync(out.logPath, 'utf8').includes('RESULT'));
   assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'dm']); // claimed → done → 私信
+  assert.equal(calls[1][2], 'DONE'); // 钉住 done 键，防 done/failed 互换后仍然全绿
   assert.ok(calls[2][2].includes('https://mr/9'));
   rmFixture(root);
 });
@@ -90,6 +91,7 @@ test('无 RESULT 行按 fail：❌ + 私信简报含日志路径', async () => {
   assert.equal(out.verdict, 'fail');
   assert.ok(existsSync(out.worktree)); // 保留供排查
   assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'dm']);
+  assert.equal(calls[1][2], 'CROSS'); // 钉住 failed 键
   assert.ok(calls[2][2].includes(out.logPath));
   rmFixture(root);
 });
@@ -123,6 +125,23 @@ test('killActiveChildren：SIGTERM 达进程组，hang 任务立即收敛为 fai
   const elapsed = Date.now() - t0;
   assert.equal(out.verdict, 'fail');
   assert.ok(elapsed < 3000, `收割应远快于 60s 超时（实际 ${elapsed}ms）`);
+  rmFixture(root);
+});
+
+test('worktree 两次都建不出来：不静默丢单，走 fail 通道且进程存活', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-run-')));
+  const notARepo = join(root, 'not-a-repo');
+  mkdirSync(notARepo, { recursive: true });
+  const calls = [];
+  process.env.STUB_VERDICT = 'pass'; // 无论 stub 想说什么，claude 根本不该被启动
+  delete process.env.STUB_PROMPT_OUT;
+  const out = await runTask(TASK, makeConfig(root, notARepo), fakeLark(calls));
+  assert.equal(out.verdict, 'fail');
+  assert.equal(out.logPath, ''); // 没跑过任务，简报不得引用不存在的日志
+  assert.deepEqual(calls.map((c) => c[0]), ['add', 'dm']); // 无 claimed：失败在接单动作之前
+  assert.equal(calls[0][2], 'CROSS');
+  assert.ok(calls[1][2].includes(TASK.messageId)); // 简报能定位到是哪条消息
+  assert.ok(calls[1][2].includes('not a git repository')); // 首次错误原文入简报
   rmFixture(root);
 });
 

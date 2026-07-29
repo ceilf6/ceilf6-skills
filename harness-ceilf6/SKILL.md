@@ -55,7 +55,7 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 1. **送审前必须 commit**：将本轮改动落成迭代式小提交（合入前由用户人工 squash）。未提交改动不会被 review 覆盖。
 2. 送审：`bash ~/.claude/skills/harness-ceilf6/scripts/cr-round.sh --dir "$CTX"`。
 3. 读 `$CTX/cr/round-N/verdict.json`：
-   - `pass=true` → 循环结束（脚本已置 status=awaiting_human），进入 **MR 收尾**：push 当前需求分支到远端（此动作经用户 2026-07-29 裁定豁免 byteview-web「禁止自动 push」规则，仅限 harness 需求分支）；调用 bytedcli-bits-mr 技能创建 MR——标题从 plan.md 目标提炼，描述必含：任务来源（bot 场景带 chat/message id）、plan 四段摘要、CR 轮次表、遗留 minor/nit 清单。**续入场景不重复建 MR**：当前分支已存在由本流程创建的开放 MR 时，只 push 并在既有 MR 上追加一条评论（本轮变更摘要 + 新增 CR 轮次），MR 链接沿用。然后输出收尾汇总（模板见下，MR 链接置顶）。失败/熔断/超时**不 push、不建 MR**——半成品不进团队远端视野。
+   - `pass=true` → 循环结束（脚本已置 status=awaiting_human），进入 **MR 收尾**：push 当前需求分支到远端（此动作经用户 2026-07-29 裁定豁免 byteview-web「禁止自动 push」规则，仅限 harness 需求分支）；调用 bytedcli-bits-mr 技能创建 MR——标题从 plan.md 目标提炼，描述必含：任务来源（bot 场景带 chat/message id）、plan 四段摘要、CR 轮次表、遗留 minor/nit 清单。**续入场景不重复建 MR**：当前分支已存在开放 MR 时（无论谁创建），只 push 并在既有 MR 上追加一条评论（本轮变更摘要 + 新增 CR 轮次），MR 链接沿用。然后输出收尾汇总（模板见下，MR 链接置顶）。失败/熔断/超时**不 push、不建 MR**——半成品不进团队远端视野。
    - `pass=false` → **逐条处置**每个 finding：修复，或书面不采纳。全部 blocker/major 处置完后写 `$CTX/cr/round-N/fixes.md`（格式见下），回到第 1 步。
 4. **僵局熔断**（会话判断）：同一条 finding，codex 连续两轮坚持、你连续两轮书面不采纳 → 停止循环，`bash ~/.claude/skills/harness-context/scripts/ctx-dir.sh set-status awaiting_human`，把分歧点整理给用户裁决。
 5. 脚本自身失败（两次尝试后）→ 停止并如实报告 stderr，不静默重试第三次。
