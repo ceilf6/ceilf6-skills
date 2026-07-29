@@ -100,6 +100,13 @@ if (isMain) {
   // detached 的 claude 进程组不随本进程退出而终止，必须显式收割，否则关停即孤儿任务。
   process.on('SIGTERM', () => { stopping = true; killActiveChildren(); process.exit(0); });
   process.on('SIGINT', () => { stopping = true; killActiveChildren(); process.exit(0); });
+  // 崩溃路径的最后一道收割：默认行为直接退出，会把 detached 的 claude 会话组长留成孤儿，
+  // 而它已脱离本进程组，launchd 重启新实例时也够不到它——只能人工 kill。
+  process.on('uncaughtException', (e) => {
+    console.error('[listener] 未捕获异常：', e);
+    try { killActiveChildren(); } catch { /* 收割本身失败也要退出 */ }
+    process.exit(1);
+  });
   startConsumer();
   pump(); // 处理重启前遗留队列
 }
