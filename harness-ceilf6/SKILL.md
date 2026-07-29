@@ -15,7 +15,7 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 
 ### 前置：装载上下文
 
-1. `CTX=$(bash ~/.claude/skills/harness-context/scripts/ctx-dir.sh resolve)`。失败（未初始化/主分支/detached）→ 引导先完成 harness-context init。
+1. `CTX=$(bash ~/.claude/skills/harness-context/scripts/ctx-dir.sh resolve)`。resolve 在主分支/detached 上失败，或 `$CTX` 缺 meta.json（未初始化）→ 走 harness-context 的 init（其**主分支恢复流**会从需求源派生分支名、经用户确认后创建并切换，再初始化）；detached HEAD 由用户自行处理。
 2. 按 harness-context 的 get 约定读取 `$CTX` 全部内容装入会话。
 
 ### 阶段 0：计划门（开发不允许直接开始）

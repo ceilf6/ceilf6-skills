@@ -27,8 +27,9 @@ description: 按 git 分支管理当前需求的本地上下文仓（<仓库根>
 
 ### init（初始化 + 导入种子）
 
-1. 运行 `bash ~/.claude/skills/harness-context/scripts/ctx-dir.sh init --wiki-url '<需求 wiki 子文档链接>'`，得到上下文目录路径（下称 `$CTX`）。wiki 链接暂缺时可省略 `--wiki-url`，之后用 jq 补写 meta。脚本在主分支或 detached HEAD 上会拒绝：先切需求分支。
-2. 若给了 wiki 链接且 `$CTX/context/00-seed.md` 不存在：用 lark-cli 拉全文（先按 lark-doc 技能要求读取其前置 references）：
+1. 运行 `bash ~/.claude/skills/harness-context/scripts/ctx-dir.sh init --wiki-url '<需求 wiki 子文档链接>'`，得到上下文目录路径（下称 `$CTX`）。wiki 链接暂缺时可省略 `--wiki-url`，之后用 jq 补写 meta。
+2. **主分支恢复流**：脚本在 master/main 上会拒绝（守卫保留在脚本层，防止上下文挂错分支）。此时不要把「先切分支」抛回给用户了事——分支名应从需求派生：先读需求源（wiki 种子的标题与正文，或用户口述），参考仓库近期分支命名风格（`git branch --sort=-committerdate | head` 看前缀习惯，如 `fix/` `feat/` `chore/`）提议一个分支名，**向用户一句话确认**（分支名会进 MR 与提交历史，允许用户改名）。确认后 `git checkout -b <分支名>`（从当前 HEAD 切出，**不自动 pull**，主分支是否先同步由用户自行处理），再重跑 init。detached HEAD 仍硬拒绝——无从派生名字，请用户自行处理。
+3. 若给了 wiki 链接且 `$CTX/context/00-seed.md` 不存在：用 lark-cli 拉全文（先按 lark-doc 技能要求读取其前置 references）：
    `lark-cli docs +fetch --doc '<链接>' --doc-format markdown --jq '.data.document.content'`
    写入 `$CTX/context/00-seed.md`，头部加 provenance：
 
@@ -39,8 +40,8 @@ description: 按 git 分支管理当前需求的本地上下文仓（<仓库根>
    <正文>
    ```
 
-3. 已存在 00-seed.md 时不重拉；用户明确说「重拉种子」才覆盖。
-4. 回显：目录路径 + 种子标题级摘要（几个一级标题、是否含提示词段）。
+4. 已存在 00-seed.md 时不重拉；用户明确说「重拉种子」才覆盖。
+5. 回显：目录路径 + 种子标题级摘要（几个一级标题、是否含提示词段）。
 
 ### add（随时存入）
 

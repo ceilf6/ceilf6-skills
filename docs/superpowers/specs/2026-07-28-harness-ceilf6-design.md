@@ -183,7 +183,7 @@ codex exec \
 - ctx-dir.sh / cr-round.sh 均 `set -euo pipefail`；失败向会话输出可读原因，不静默。
 - verdict.json 先过 schema 校验再消费；校验失败按「codex 调用失败」出口处理。
 - add 抓取失败（无权限、链接失效）时如实报告并允许降级为自由文本手工粘贴。
-- 分支为 detached HEAD 或主分支时 init 拒绝执行并提示先切需求分支。
+- 主分支上脚本层拒绝 init（守卫不动）；SKILL.md 会话层提供**主分支恢复流**（2026-07-29 增补）：从需求源（wiki 种子/用户口述）派生分支名、参考仓库近期命名风格、经用户一句话确认后 `git checkout -b` 再重跑 init；不自动 pull。detached HEAD 仍硬拒绝，不自动处理。
 
 ## 验收方式
 
