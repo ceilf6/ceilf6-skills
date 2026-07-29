@@ -47,7 +47,7 @@ harness-context init          建目录 + 从 wiki 子文档导入种子
 harness-ceilf6
         │
   [阶段0 计划门]              三条路径，出口统一为 plan.md
-  [阶段1 开发]                当前会话按 plan.md 开发
+  [阶段1 开发]                当前会话按 plan.md 开发（TDD 红绿纪律，2026-07-29 增补）
   [阶段2 CR 循环]             codex exec review ↔ 会话修复，无轮次上限
   [阶段3 人工]                人工 CR / 测试；发现问题 → add → 续入
   [收尾]                      组合 /harness-context /lark-sediment 沉淀
@@ -75,6 +75,9 @@ plan.md 三重角色：开发执行依据、codex 每轮 CR 的验收锚点、�
     │   ├── 00-seed.md            ← wiki 子文档种子，头部记来源 URL 与导入时间
     │   └── ...                   ← im / doc / meego / mr / note 各类条目，头部记 provenance
     ├── plan.md                   ← 计划门产物（含验收增补、历史版本段落）
+    ├── tdd-evidence.md           ← 阶段 1 红绿证据与豁免记录（2026-07-29 增补：
+    │                                每个行为点的红灯命令+失败摘要、绿灯命令+通过摘要；
+    │                                不可测变更的豁免理由；CR 指令要求 codex 据此核验）
     ├── cr/
     │   └── round-N/
     │       ├── instructions.md   ← 本轮实际喂给 codex 的完整指令（审计用）
@@ -105,7 +108,7 @@ plan.md 三重角色：开发执行依据、codex 每轮 CR 的验收锚点、�
 
 ### 每轮指令组装（脚本拼装）
 
-- 第 1 轮：对抗式评审角色 + 评审范围小节（指明 `git diff <base>...HEAD`，由 codex 持全权自行运行获取；已提交变更为界，工作区未提交内容不在范围）+ 验收基准（plan.md 全文）+ 种子中的提示词段 + 要求参考 code-review、karpathy-guidelines 两个 SKILL.md + 输出契约。diff 本身不进 prompt。
+- 第 1 轮：对抗式评审角色 + 评审范围小节（指明 `git diff <base>...HEAD`，由 codex 持全权自行运行获取；已提交变更为界，工作区未提交内容不在范围）+ 验收基准（plan.md 全文）+ 种子中的提示词段 + 要求参考 code-review、karpathy-guidelines 两个 SKILL.md + 测试真实性核验条款（只执行不断言/断言恒真是 finding，可读 tdd-evidence.md 核验红灯史，2026-07-29 增补）+ 输出契约。diff 本身不进 prompt。
 - 第 N>1 轮：附上一轮 verdict.json + fixes.md，指令为「先逐条核验处置（修复是否真实生效、不采纳理由是否成立），再审新增 diff」。
 - 防发散条款：已被书面不采纳且理由成立的意见，无新证据不得重提；新 finding 必须锚定具体文件位置。
 

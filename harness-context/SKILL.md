@@ -17,6 +17,7 @@ description: 按 git 分支管理当前需求的本地上下文仓（<仓库根>
 ├── context/        # 上下文条目，只增不改，命名 <YYMMDD-HHmm>-<im|doc|meego|mr|note>-<slug>.md
 │   └── 00-seed.md  # wiki 子文档种子
 ├── plan.md         # 计划门产物（由 harness-ceilf6 写入）
+├── tdd-evidence.md # 阶段 1 红绿证据与豁免记录（由 harness-ceilf6 写入）
 ├── cr/round-N/     # CR 轮次产物（由 harness-ceilf6 写入）
 └── sediment.md     # 沉淀台账
 ```
