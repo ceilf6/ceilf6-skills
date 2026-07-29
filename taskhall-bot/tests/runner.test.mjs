@@ -103,3 +103,12 @@ test('超时强杀按 fail 且私信标注超时', async () => {
   assert.ok(calls.find((c) => c[0] === 'dm')[2].includes('超时'));
   rmFixture(root);
 });
+
+test('claudeBin 缺失：spawn 失败不崩进程、按 fail 分发', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  const out = await runTask(TASK, makeConfig(root, repo, { claudeBin: '/nonexistent-claude-bin' }), fakeLark(calls));
+  assert.equal(out.verdict, 'fail');
+  assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'dm']); // ❌ 路径；测试自然跑完即进程存活
+  rmFixture(root);
+});

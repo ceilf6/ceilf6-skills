@@ -27,6 +27,7 @@ function renderPrompt(task, branch, chatId) {
     .replaceAll('{{CHAT_ID}}', chatId ?? '')
     .replaceAll('{{MESSAGE_ID}}', task.messageId)
     // 函数形式：任务原文是任意用户文本，字符串形式会把其中的 $&/$'/$` 当替换模式吃掉。
+    // TASK_TEXT 必须最后替换——防任务文本中的 {{...}} 被二次展开。
     .replaceAll('{{TASK_TEXT}}', () => task.text);
 }
 
@@ -37,6 +38,8 @@ function runClaude(config, cwd, prompt, logPath) {
     const child = spawn(config.claudeBin, ['-p', prompt, '--dangerously-skip-permissions'], { cwd, detached: true });
     const killGroup = (sig) => { try { process.kill(-child.pid, sig); } catch { /* 进程组已消失 */ } };
     const log = createWriteStream(logPath, { flags: 'a' });
+    // 写流与 R2 同类：无监听时 ENOSPC 等写错误会以未处理 'error' 事件崩掉常驻进程。
+    log.on('error', (e) => console.error(`[runner] 日志写入失败：${e.message}`));
     let tail = '';
     let timedOut = false;
     const onData = (buf) => {
