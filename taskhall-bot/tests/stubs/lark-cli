@@ -13,6 +13,13 @@ if [ "${STUB_FAIL_FIRST:-0}" = "1" ] && [ "$calls" -eq 1 ]; then
   echo '{"ok":false,"error":"stub 注入的首次失败"}' >&2
   exit 1
 fi
+if [ "$1" = "event" ] && [ "${2:-}" = "consume" ]; then
+  echo "[event] ready event_key=im.message.receive_v1" >&2
+  [ -n "${STUB_EVENTS_FILE:-}" ] && cat "$STUB_EVENTS_FILE"
+  # 模拟长连接：stdin 不关则挂住（listener 用 stdin 保活）
+  cat > /dev/null
+  exit 0
+fi
 case "$1" in
   api)
     case "$*" in

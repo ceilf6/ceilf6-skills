@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, existsSync, realpathSync, rmSync } from 'nod
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { runTask } from '../src/runner.mjs';
+import { runTask, killActiveChildren } from '../src/runner.mjs';
 
 const CLAUDE_STUB = resolve(import.meta.dirname, 'stubs/claude');
 
@@ -101,6 +101,28 @@ test('超时强杀按 fail 且私信标注超时', async () => {
   const out = await runTask(TASK, makeConfig(root, repo, { taskTimeoutMs: 1000 }), fakeLark(calls));
   assert.equal(out.verdict, 'fail');
   assert.ok(calls.find((c) => c[0] === 'dm')[2].includes('超时'));
+  rmFixture(root);
+});
+
+test('killActiveChildren：SIGTERM 达进程组，hang 任务立即收敛为 fail', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  process.env.STUB_VERDICT = 'hang';
+  delete process.env.STUB_PROMPT_OUT;
+  const t0 = Date.now();
+  let settled = false;
+  // 超时给足 60s：任务收敛只能来自收割，不可能来自超时机制
+  const p = runTask(TASK, makeConfig(root, repo, { taskTimeoutMs: 60_000 }), fakeLark(calls))
+    .finally(() => { settled = true; });
+  // spawn 时点在 git worktree add 之后、外部不可观测：反复收割直到收敛（空集时是无害 no-op）
+  while (!settled && Date.now() - t0 < 5000) {
+    killActiveChildren();
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  const out = await p;
+  const elapsed = Date.now() - t0;
+  assert.equal(out.verdict, 'fail');
+  assert.ok(elapsed < 3000, `收割应远快于 60s 超时（实际 ${elapsed}ms）`);
   rmFixture(root);
 });
 

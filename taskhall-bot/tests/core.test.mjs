@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { normalize } from '../src/normalize.mjs';
@@ -56,6 +56,40 @@ test('Store 持久化：processed 与 queue 重启可恢复', () => {
   assert.equal(s2.dequeue(), null);
   const s3 = new Store(dir); // dequeue 也持久化
   assert.equal(s3.size(), 0);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('Store FIFO：先入先出，幸存任务跨重启保序', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'thb-'));
+  const s1 = new Store(dir);
+  s1.enqueue({ messageId: 'om_first' });
+  s1.enqueue({ messageId: 'om_second' });
+  assert.equal(s1.dequeue().messageId, 'om_first');
+  const s2 = new Store(dir); // 重启后幸存者仍在、顺序不变
+  assert.equal(s2.size(), 1);
+  assert.equal(s2.dequeue().messageId, 'om_second');
+  rmSync(dir, { recursive: true, force: true });
+});
+test('Store markProcessed 幂等：重复调用 processed.jsonl 只落一行', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'thb-'));
+  const s = new Store(dir);
+  s.markProcessed('om_dup');
+  s.markProcessed('om_dup');
+  const lines = readFileSync(join(dir, 'processed.jsonl'), 'utf8').trim().split('\n');
+  assert.equal(lines.length, 1);
+  rmSync(dir, { recursive: true, force: true });
+});
+test('Store 容错：两文件坏行只跳过不抛，好行照常加载', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'thb-'));
+  const s1 = new Store(dir);
+  s1.markProcessed('om_good');
+  s1.enqueue({ messageId: 'om_q1' });
+  appendFileSync(join(dir, 'processed.jsonl'), '{{{ 坏行\nnull\n');
+  appendFileSync(join(dir, 'queue.jsonl'), 'not-json\n');
+  const s2 = new Store(dir); // 不得 throw
+  assert.equal(s2.isProcessed('om_good'), true);
+  assert.equal(s2.size(), 1);
+  assert.equal(s2.dequeue().messageId, 'om_q1');
   rmSync(dir, { recursive: true, force: true });
 });
 

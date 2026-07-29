@@ -1,0 +1,16 @@
+{
+  "chatId": "oc_1916a3a15e1a11855ca621d56b3027ed",
+  "profile": "taskhall",
+  "repoPath": "/Users/bytedance/Desktop/workspace/byteview-web",
+  "worktreesDir": "/Users/bytedance/Desktop/workspace/taskhall-worktrees",
+  "stateDir": "/Users/bytedance/Desktop/ceilf/ceilf6-skills/taskhall-bot/state",
+  "logsDir": "/Users/bytedance/Desktop/ceilf/ceilf6-skills/taskhall-bot/logs",
+  "concurrency": 1,
+  "taskTimeoutMs": 7200000,
+  "killGraceMs": 10000,
+  "minTextLength": 10,
+  "dmOpenId": "填你的 open_id（lark-cli auth status --json 的 identities.user.openId）",
+  "claudeBin": "claude",
+  "larkBin": "lark-cli",
+  "reactions": { "claimed": "THUMBSUP", "done": "DONE", "failed": "CrossMark", "escalate": "OnIt" }
+}

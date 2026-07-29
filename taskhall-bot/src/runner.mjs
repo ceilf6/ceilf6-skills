@@ -8,6 +8,15 @@ import { parseResult } from './result.mjs';
 
 const TPL_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', 'bootstrap-prompt.md');
 
+// detached 子进程自成会话组长：launchd 与默认信号传播都够不到它，
+// bot 关停时必须显式对各活跃进程组补刀，否则会孤儿一个跑着的 claude。
+const activePids = new Set();
+export function killActiveChildren() {
+  for (const pid of activePids) {
+    try { process.kill(-pid, 'SIGTERM'); } catch { /* 进程组已消失 */ }
+  }
+}
+
 function git(repo, args) {
   return new Promise((res, rej) => {
     execFile('git', ['-C', repo, ...args], (err, stdout, stderr) => (err ? rej(new Error(stderr || err.message)) : res(stdout)));
@@ -36,6 +45,7 @@ function runClaude(config, cwd, prompt, logPath) {
     // detached：claude 自成进程组，超时对整组发信号。只杀直接子进程时，其残留孙进程
     // 会握住 stdout 管道使 'close' 无限推迟，超时机制形同虚设（实测 30s vs 1s）。
     const child = spawn(config.claudeBin, ['-p', prompt, '--dangerously-skip-permissions'], { cwd, detached: true });
+    if (child.pid) activePids.add(child.pid); // spawn 失败时 pid 为 undefined，不登记
     const killGroup = (sig) => { try { process.kill(-child.pid, sig); } catch { /* 进程组已消失 */ } };
     const log = createWriteStream(logPath, { flags: 'a' });
     // 写流与 R2 同类：无监听时 ENOSPC 等写错误会以未处理 'error' 事件崩掉常驻进程。
@@ -59,6 +69,7 @@ function runClaude(config, cwd, prompt, logPath) {
     // 挂上后 'close' 仍会触发（实测），走 tail 为空 → 无 RESULT → fail 的正常分发。
     child.on('error', (e) => log.write(`[runner] spawn 失败：${e.message}\n`));
     child.on('close', () => {
+      activePids.delete(child.pid);
       clearTimeout(killer);
       clearTimeout(sigkill);
       log.end();
