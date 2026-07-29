@@ -20,6 +20,7 @@ config="${here}/config.json"
 [ -f "$config" ] || { echo "缺少配置：${config}" >&2; exit 1; }
 # dmOpenId 仍是占位符时装载会得到一个「跑得起来但所有私信投空」的 bot：
 # 群里只剩 reaction，pass/fail 详情与 escalate 恢复命令全部静默丢失，所以在装载前拦住。
+# 但本守卫只认前缀：open_id 是 app 维度的，填成别的应用下的 open_id 同样是 ou_ 且照样投空——只能靠 runbook 的取值命令带 --profile 防。
 dm_open_id=$("$node_bin" -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).dmOpenId||""))' "$config") \
   || { echo "配置解析失败：${config}" >&2; exit 1; }
 case "$dm_open_id" in

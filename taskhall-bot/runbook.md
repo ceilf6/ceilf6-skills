@@ -3,7 +3,7 @@
 ## 依赖
 
 - **Node ≥ 20.11**（install 脚本会校验 `command -v node` 那一份；低于地板直接拒装，不留运行期怪异失败）。
-- `lark-cli`（已绑定 taskhall profile）、`claude` CLI、`git`。三者必须在 PATH 里能 `command -v` 到 —— install 脚本把它们各自的目录写进 plist 的 `PATH`，launchd 启动的进程不读你的 shell profile（node 走 nvm 时尤其致命）。
+- `lark-cli`（已绑定 taskhall profile 且完成 user 授权，见「本机绑定与配置」）、`claude` CLI、`git`。三者必须在 PATH 里能 `command -v` 到 —— install 脚本把它们各自的目录写进 plist 的 `PATH`，launchd 启动的进程不读你的 shell profile（node 走 nvm 时尤其致命）。
 - macOS launchd（用户级 LaunchAgent，登录后常驻）。
 
 ## 一次性：创建飞书应用（约 5 分钟，人工）
@@ -19,22 +19,30 @@
 
 ## 一次性：本机绑定与配置
 
-1. `lark-cli config init --new --profile taskhall`（绑定新应用的 appId/secret）。
-2. 编辑 `taskhall-bot/config.json`：填 `dmOpenId`（`lark-cli auth status --json --verify` 的 `identities.user.openId`，形如 `ou_...`）；确认 repoPath / worktreesDir。
-3. `bash taskhall-bot/install-taskhall.sh`。
+1. 建 profile 并绑定新应用的 appId/secret：`lark-cli config init --new --profile taskhall`。
+   若报 `profile not found`，改用 `lark-cli config init --new --name taskhall` —— `--name` 是**创建**语义（新建/更新一个命名 profile），`--profile` 是**选择**语义（用已存在的那个）。
+2. 用户身份授权：`lark-cli auth login --profile taskhall`（Device Flow）。bot 身份靠 appId/secret 自动拿到，**user 身份必须做这一步**，而 `dmOpenId` 正是 user 身份的产物。
+3. **闸门，不满足不要往下走**：`lark-cli auth status --profile taskhall --json` 必须返回 `ok:true` 且带 `identities.user.openId`。缺 `ok:true` 回第 1 步（凭据没绑对），缺 `identities.user.openId` 回第 2 步（没做用户授权）。
+4. 编辑 `taskhall-bot/config.json`：填 `dmOpenId` = `lark-cli auth status --json --verify --profile taskhall` 的 `identities.user.openId`（形如 `ou_...`）；确认 repoPath / worktreesDir。
+   **`--profile taskhall` 不可省**：open_id 是 **app 维度**的，不带它会拿到另一个应用下同样合法的 `ou_` 值——正好穿过 install 脚本的 `ou_` 前缀守卫，装出一个 reaction 正常、私信全投空的半哑 bot。
+   `config.json` 是 git 跟踪文件：填进去的是你的个人 open_id，**别提交**；日后升级拉取如报冲突，先 `git stash` 再拉，拉完 `git stash pop`。
+5. `bash taskhall-bot/install-taskhall.sh`。
 
 ## 验收演练（对应 spec 验收方式）
 
 1. 群里发一条真实小任务 → 任务消息出现 👀 → 完成后 ✅ + 私信收到 MR 链接。
-2. 发一条闲聊 → 👀 短暂闪现后撤销，群里零消息。
+2. 发一条闲聊 → 👀 短暂闪现后撤销，群里零消息。闲聊也得 **≥10 字**（`minTextLength` 预滤）：更短的消息连 👀 都不会闪——那是预滤，不是 bot 没起来，日志里能看到 `忽略 <message_id>（too-short）`。
 3. 发一条模糊任务 → ⚠️ + thread 回帖恢复命令 + 同文私信；按命令 `cd <worktree> && claude ...` 能无损接管。
 4. reaction emoji 键若报错：按 API 错误提示改 config.json 的 `reactions` 键值，无需改码。
+
+> 本文里的 👀/✅/❌/⚠️ 是**语义**（接单/完成/失败/需人工），实际显示的表情由 config.json 的 `reactions` 键决定：当前 `claimed=THUMBSUP`，所以「接单」在群里显示为 👍 而不是 👀。验收时按第 4 条按需改键。
 
 ## 日常运维
 
 - 状态：`launchctl list | grep taskhall`；事件流日志 `tail -f taskhall-bot/logs/launchd.err.log`。
 - 单任务日志：`taskhall-bot/logs/task-<message_id>.log`（headless claude 全量输出，排查「它为什么这么干」的唯一依据）。
-- 停止：`launchctl unload ~/Library/LaunchAgents/com.ceilf6.taskhall-bot.plist`。
+- 停止：`launchctl unload ~/Library/LaunchAgents/com.ceilf6.taskhall-bot.plist`；重新启用：重跑 `bash taskhall-bot/install-taskhall.sh`（幂等，即重装重启）。
+- **有 PID 却毫无反应**（`launchctl list` 看得到进程，群里发消息没任何表情）：先核对 `config.json` 的 `chatId` 与目标群是否一致。chat 不匹配的消息是被**刻意静音**忽略的（否则机器人在的每个群都会刷屏日志），所以日志里连一行线索都不会有。群 id 见 `lark-cli` 的群列表或事件流日志里的 `chat_id`。
 - 重置某条消息重新处理：从 `state/processed.jsonl` 删除该行后重启。**注意**：这只在事件流会再次投递同一 `message_id` 时才有效（平台重投）；日常想重跑一条任务，最可靠的做法是在群里重新发一条消息——那是新的 `message_id`，根本不必动 `processed.jsonl`。
 - 升级：仓库拉最新后重跑 `install-taskhall.sh`；升级前在仓库根跑一遍测试：
 
