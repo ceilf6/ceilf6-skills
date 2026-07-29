@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, realpathSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -68,11 +68,28 @@ test('nextBackoff 指数退避封顶 60s', async () => {
   assert.equal(nextBackoff(10), 60000);
 });
 
+test('symlink 启动：isMain 仍判真，坏 config 路径响亮退出 1', async () => {
+  // Node 对 ESM 主入口做 realpath 解析而 argv[1] 保留 symlink 字面路径；
+  // isMain 若不 realpath 会静默 exit 0（TB6 install 脚本天然经 symlink 启动）。
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-sym-')));
+  const link = join(root, 'listener-link.mjs');
+  symlinkSync(SRC, link);
+  const out = await new Promise((res) => {
+    const child = spawn(process.execPath, [link, join(root, 'no-such-config.json')], { env: { ...process.env } });
+    let err = '';
+    child.stderr.on('data', (b) => { err += b.toString(); });
+    child.on('close', (code) => res({ code, err }));
+  });
+  assert.equal(out.code, 1, 'symlink 下主体应照常执行并响亮失败，而非静默退 0');
+  assert.ok(out.err.length > 0, 'stderr 应非空');
+  rmFixture(root);
+});
+
 test('启动校验：缺键/坏键一次性全列并退出 1，不 spawn 任何子进程', async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-bad-')));
   const cfgPath = join(root, 'config.json');
-  // 三类坏法各占一：空串（chatId）、类型错（concurrency）、整键缺（profile 等 / reactions 缺 3 键）
-  writeFileSync(cfgPath, JSON.stringify({ chatId: '', concurrency: '1', reactions: { claimed: 'THUMBSUP' } }));
+  // 四类坏法各占一：空串（chatId）、类型错（concurrency）、越下界（taskTimeoutMs=0）、整键缺（profile 等 / reactions 缺 3 键）
+  writeFileSync(cfgPath, JSON.stringify({ chatId: '', concurrency: '1', taskTimeoutMs: 0, reactions: { claimed: 'THUMBSUP' } }));
   const out = await new Promise((res) => {
     const child = spawn(process.execPath, [SRC, cfgPath], { env: { ...process.env } });
     let err = '';
