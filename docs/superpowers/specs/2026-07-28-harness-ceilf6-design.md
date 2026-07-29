@@ -26,6 +26,7 @@
 **v1 不做：**
 
 - 建 MR / Meego 流转 / SCM 打包（已有 bytedcli-bits-mr、workflow-bugfix、scm 技能，手动调用）。
+  - 勘误（2026-07-29 用户裁定）：**建 MR 移入范围**——CR pass 后自动 push + bytedcli-bits-mr 建 MR（两种模式统一），并新增「无人值守模式」；**计划门轻量路径在交互模式同样自动过门**（只有实在不明确才人工协商）；完整定义见 `2026-07-29-taskhall-bot-design.md`。
 - 测试执行、总结自动撰写。
 - 逻辑梳理与提示词的自动生成（保持人工写在 wiki，作为种子导入——它们是人对需求的判断）。
 - 任何 headless claude 编排、独立 daemon、状态机监控（明确封死 mini-omh 方向）。

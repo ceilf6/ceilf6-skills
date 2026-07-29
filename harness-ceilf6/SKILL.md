@@ -11,6 +11,14 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 
 机械层脚本：`~/.claude/skills/harness-ceilf6/scripts/cr-round.sh`（依赖 git、jq、codex CLI）。
 
+## 模式
+
+默认**交互模式**。当调用方在会话开头明确声明「无人值守模式」（如任务大厅 bot 的 bootstrap prompt）时，仅以下三处分叉，其余（**含计划门自动过门**）两种模式一致：
+
+- 计划门·完整路径：交互模式转 superpowers brainstorming 与用户协商；无人值守模式**不可用**，按调用方约定输出 escalate 结果后结束。
+- 僵局熔断：交互模式停下交用户裁决；无人值守模式不等人，按调用方约定输出 fused 结果后结束。
+- 结果输出：无人值守模式结束时按调用方约定输出结果行（如 RESULT 契约）；交互模式面向用户汇总。
+
 ## 流程
 
 ### 前置：装载上下文
@@ -23,8 +31,8 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 出口统一为 `$CTX/plan.md`（目标 / 范围 / 改法 / 验收标准 四段）。三条路径：
 
 1. **续入路径**：`$CTX/plan.md` 已存在 → 跳过门。本轮新增问题以「## 验收增补（<日期>）」小节追加进 plan.md。用户明确说「重新规划」才走重规划：旧内容整体降级为「## 历史版本（<日期>归档）」小节保留于文件尾部，新四段写在文件头。
-2. **轻量路径（默认）**：上下文含手写逻辑梳理/提示词 → 把你的理解复述为四段，向用户展示，用户确认或口头修正后写入 plan.md。一次确认即过门。
-3. **完整路径**：需求大、模糊、或用户点名「走 brainstorming」→ 调用 superpowers 的 brainstorming（其终点是 writing-plans）；结束后把最终 plan 的内容归一写入 `$CTX/plan.md`（原 spec/plan 文档位置不动，plan.md 为唯一验收锚点）。
+2. **轻量路径（默认，自动过门）**：能从上下文复述出可信的目标/范围/改法/验收四段 → 写入 plan.md 并向用户播报（交互场景你在场，随时可打断修正），**不等待确认直接过门**——用户 2026-07-29 裁定：只有实在不明确的需求才需要人工协商。plan.md 头部加一行「> 计划门自动通过（<日期>）」。
+3. **完整路径（实在不明确才走）**：复述不出可信四段（缺关键信息或解读分歧大），或用户点名「走 brainstorming」→ 交互模式转 superpowers 的 brainstorming → writing-plans 全流程与用户协商，结束后把最终 plan 内容归一写入 plan.md；无人值守模式按「模式」节输出 escalate。
 
 过门后：`bash ~/.claude/skills/harness-context/scripts/ctx-dir.sh set-status developing`。
 
@@ -47,7 +55,7 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 1. **送审前必须 commit**：将本轮改动落成迭代式小提交（合入前由用户人工 squash）。未提交改动不会被 review 覆盖。
 2. 送审：`bash ~/.claude/skills/harness-ceilf6/scripts/cr-round.sh --dir "$CTX"`。
 3. 读 `$CTX/cr/round-N/verdict.json`：
-   - `pass=true` → 循环结束（脚本已置 status=awaiting_human），输出收尾汇总（模板见下）。
+   - `pass=true` → 循环结束（脚本已置 status=awaiting_human），进入 **MR 收尾**：push 当前需求分支到远端（此动作经用户 2026-07-29 裁定豁免 byteview-web「禁止自动 push」规则，仅限 harness 需求分支）；调用 bytedcli-bits-mr 技能创建 MR——标题从 plan.md 目标提炼，描述必含：任务来源（bot 场景带 chat/message id）、plan 四段摘要、CR 轮次表、遗留 minor/nit 清单。然后输出收尾汇总（模板见下，MR 链接置顶）。失败/熔断/超时**不 push、不建 MR**——半成品不进团队远端视野。
    - `pass=false` → **逐条处置**每个 finding：修复，或书面不采纳。全部 blocker/major 处置完后写 `$CTX/cr/round-N/fixes.md`（格式见下），回到第 1 步。
 4. **僵局熔断**（会话判断）：同一条 finding，codex 连续两轮坚持、你连续两轮书面不采纳 → 停止循环，`bash ~/.claude/skills/harness-context/scripts/ctx-dir.sh set-status awaiting_human`，把分歧点整理给用户裁决。
 5. 脚本自身失败（两次尝试后）→ 停止并如实报告 stderr，不静默重试第三次。
@@ -68,6 +76,7 @@ meta.max_rounds 非 null 时，达到该轮数也停下交用户（默认 null �
 
 ```markdown
 ## CR 循环收尾
+- MR：<链接>（失败/熔断时写「未创建」）
 - 结果：通过（第 N 轮）｜ 熔断待裁决
 - 改动概览：<一段话>
 - 轮次记录：cr/round-1..N（verdict / fixes 齐全）
@@ -81,6 +90,6 @@ meta.max_rounds 非 null 时，达到该轮数也停下交用户（默认 null �
 
 ## 约束
 
-- 不建 MR、不动 Meego、不打 SCM 包（用 bytedcli-bits-mr / workflow-bugfix / scm 技能另行处理）。
+- 收尾自动 push + 建 MR 是本技能职责（用户 2026-07-29 裁定，经 bytedcli-bits-mr 技能执行）；不动 Meego、不打 SCM 包（workflow-bugfix / scm 技能另行处理）。
 - 不修改 cr/round-*/ 下的历史产物；每轮产物只写本轮目录。
 - 对 verdict 的每条 blocker/major 必须显式处置（修复或书面不采纳），禁止静默忽略。
