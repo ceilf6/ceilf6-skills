@@ -1,0 +1,105 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, existsSync, realpathSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { runTask } from '../src/runner.mjs';
+
+const CLAUDE_STUB = resolve(import.meta.dirname, 'stubs/claude');
+
+function makeFixture() {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-run-')));
+  const repo = join(root, 'repo');
+  execFileSync('git', ['init', '-q', '-b', 'master', repo]);
+  execFileSync('git', ['-C', repo, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'init']);
+  return { root, repo };
+}
+function makeConfig(root, repo, over = {}) {
+  return {
+    repoPath: repo, worktreesDir: join(root, 'wt'), logsDir: join(root, 'logs'),
+    taskTimeoutMs: 60_000, killGraceMs: 500, claudeBin: CLAUDE_STUB, dmOpenId: 'ou_me',
+    reactions: { claimed: 'THUMBSUP', done: 'DONE', failed: 'CROSS', escalate: 'WARN' }, ...over,
+  };
+}
+function fakeLark(calls) {
+  return {
+    async addReaction(mid, key) { calls.push(['add', mid, key]); return 'rid_1'; },
+    async deleteReaction(mid, rid) { calls.push(['del', mid, rid]); return true; },
+    async replyInThread(mid, text) { calls.push(['reply', mid, text]); return true; },
+    async sendDm(openId, text) { calls.push(['dm', openId, text]); return true; },
+  };
+}
+// 文本带 `$&`：锁定 renderPrompt 不吃 String.replaceAll 的 `$` 替换模式（真实任务文本常含代码/正则）。
+const TASK = { messageId: 'om_x_654321', senderOpenId: 'ou_a', text: '修一个真实任务 $&原样', receivedAt: '2026-07-29T10:00:00Z' };
+// 本机 AI-IDE 守护进程会异步往新 git 仓库写 .git/ai/，清理撞上时 rmSync 抛 ENOTEMPTY；退避重试（机器怪癖，非缺陷）。
+const rmFixture = (root) => rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+
+test('pass：worktree 保留、✅、私信含 MR 链接、prompt 含任务原文', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  process.env.STUB_VERDICT = 'pass';
+  process.env.STUB_PROMPT_OUT = join(root, 'prompt.txt');
+  const out = await runTask(TASK, makeConfig(root, repo), fakeLark(calls));
+  assert.equal(out.verdict, 'pass');
+  assert.ok(existsSync(out.worktree));
+  assert.ok(out.branch.startsWith('bot/'));
+  assert.ok(out.branch.endsWith('654321'));
+  assert.ok(readFileSync(process.env.STUB_PROMPT_OUT, 'utf8').includes('修一个真实任务 $&原样'));
+  assert.ok(readFileSync(out.logPath, 'utf8').includes('RESULT'));
+  assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'dm']); // claimed → done → 私信
+  assert.ok(calls[2][2].includes('https://mr/9'));
+  rmFixture(root);
+});
+
+test('skip：worktree 与分支删除、claimed reaction 撤销、零消息', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  process.env.STUB_VERDICT = 'skip';
+  delete process.env.STUB_PROMPT_OUT;
+  const out = await runTask(TASK, makeConfig(root, repo), fakeLark(calls));
+  assert.equal(out.verdict, 'skip');
+  assert.equal(existsSync(out.worktree), false);
+  const branches = execFileSync('git', ['-C', repo, 'branch', '--list', out.branch]).toString().trim();
+  assert.equal(branches, '');
+  assert.deepEqual(calls.map((c) => c[0]), ['add', 'del']);
+  rmFixture(root);
+});
+
+test('escalate：现场保留、⚠️、回帖+私信同文含恢复命令', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  process.env.STUB_VERDICT = 'escalate';
+  const out = await runTask(TASK, makeConfig(root, repo), fakeLark(calls));
+  assert.equal(out.verdict, 'escalate');
+  assert.ok(existsSync(out.worktree));
+  const kinds = calls.map((c) => c[0]);
+  assert.deepEqual(kinds, ['add', 'add', 'reply', 'dm']); // claimed → ⚠️ → 回帖 → 私信
+  const reply = calls[2][2];
+  assert.ok(reply.includes('该任务需要人工规划'));
+  assert.ok(reply.includes(`cd ${out.worktree} && claude`));
+  assert.equal(reply, calls[3][2]); // 双通道同文
+  rmFixture(root);
+});
+
+test('无 RESULT 行按 fail：❌ + 私信简报含日志路径', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  process.env.STUB_VERDICT = 'garbage';
+  const out = await runTask(TASK, makeConfig(root, repo), fakeLark(calls));
+  assert.equal(out.verdict, 'fail');
+  assert.ok(existsSync(out.worktree)); // 保留供排查
+  assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'dm']);
+  assert.ok(calls[2][2].includes(out.logPath));
+  rmFixture(root);
+});
+
+test('超时强杀按 fail 且私信标注超时', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  process.env.STUB_VERDICT = 'hang';
+  const out = await runTask(TASK, makeConfig(root, repo, { taskTimeoutMs: 1000 }), fakeLark(calls));
+  assert.equal(out.verdict, 'fail');
+  assert.ok(calls.find((c) => c[0] === 'dm')[2].includes('超时'));
+  rmFixture(root);
+});
