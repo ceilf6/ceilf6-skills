@@ -1,15 +1,15 @@
 ---
 name: harness-ceilf6
-description: 个人需求交付 harness：装载 harness-context 的需求上下文，过计划门（轻量复述自动过门 / 实在不明确才转 superpowers 完整规划 / 续入跳过），当前会话直接开发（TDD 红绿纪律），自动驱动 codex 对抗式 CR 循环（送审→结构化判定→修复→再送审）直至通过或熔断，通过后自动 push 并经 bytedcli-bits-mr 建 MR；支持无人值守模式（bot 场景由调用方声明）。人工 CR / 测试发现问题后可带全部历史续跑。当用户在装载上下文后要求「开始开发」「跑 harness」「继续 CR 循环」「续跑」时使用。前置：需求分支 + harness-context 已 init。
+description: 个人需求交付 harness：装载 harness-context 的需求上下文（harness-context 各动作完成后默认自动接续进入本技能），过计划门（轻量复述自动过门 / 实在不明确才转 superpowers 完整规划 / 续入跳过），过门后确保需求 wiki 子文档并把会话改名为需求短题，当前会话直接开发（TDD 红绿纪律），自动驱动评审员（traex gpt-5.6-sol）对抗式 CR 循环（送审→结构化判定→修复→再送审）直至通过或熔断，通过后全量 squash 成单个实质性 commit、force-with-lease 推送、经 bytedcli-bits-mr 建 MR、沉淀到需求子文档；支持无人值守模式（bot 场景由调用方声明）。人工 CR / 测试发现问题后可带全部历史续跑。当用户在装载上下文后要求「开始开发」「跑 harness」「继续 CR 循环」「续跑」时使用。前置：需求分支 + harness-context 已 init。
 ---
 
 # harness-ceilf6：开发 + 对抗式 CR 循环
 
-**权限前提**：循环全程不允许权限打断。codex 侧已在脚本内固化 `--dangerously-bypass-approvals-and-sandbox`；claude 侧即当前会话——建议以 bypass permissions 模式启动会话跑循环。
+**权限前提**：循环全程不允许权限打断。评审员（traex）侧已在脚本内固化 `--dangerously-bypass-approvals-and-sandbox`；claude 侧即当前会话——建议以 bypass permissions 模式启动会话跑循环。
 
 **开发者是当前会话本身**（不 shell 出 claude 子进程）；只有评审员是外部进程。用户全程在场、随时可插话纠偏。
 
-机械层脚本：`~/.claude/skills/harness-ceilf6/scripts/cr-round.sh`（依赖 git、jq、codex CLI）。
+机械层脚本（均在 `~/.claude/skills/harness-ceilf6/scripts/`，依赖 git、jq、traex CLI）：`cr-round.sh`（CR 轮次）、`squash-branch.sh`（收尾压单提交）、`rename-session.sh`（会话改名）。评审员默认 `traex -m gpt-5.6-sol`，env `CODEX_BIN` / `CR_MODEL` 可覆盖。
 
 ## 模式
 
@@ -34,7 +34,12 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 2. **轻量路径（默认，自动过门）**：能从上下文复述出可信的目标/范围/改法/验收四段 → 写入 plan.md 并向用户播报（交互场景你在场，随时可打断修正），**不等待确认直接过门**——用户 2026-07-29 裁定：只有实在不明确的需求才需要人工协商。plan.md 头部加一行「> 计划门自动通过（<日期>）」。
 3. **完整路径（实在不明确才走）**：复述不出可信四段（缺关键信息或解读分歧大），或用户点名「走 brainstorming」→ 交互模式转 superpowers 的 brainstorming → writing-plans 全流程与用户协商，结束后把最终 plan 内容归一写入 plan.md；无人值守模式按「模式」节输出 escalate。
 
-过门后：`bash ~/.claude/skills/harness-context/scripts/ctx-dir.sh set-status developing`。
+过门后依次执行（交互与无人值守一致）：
+
+1. `bash ~/.claude/skills/harness-context/scripts/ctx-dir.sh set-status developing`；
+2. **需求短题**：从 plan.md 目标提炼 ≤20 字短题；会话名 / wiki 子文档标题 / MR 标题三处同源用它；
+3. **会话改名**：`bash ~/.claude/skills/harness-ceilf6/scripts/rename-session.sh --title '<短题>'`（同名自动跳过；非会话环境自动跳过，不阻塞）。bot 无人值守场景 runner 已用 `--name` 给初始名，这里过门后覆盖为短题；
+4. **需求 wiki 子文档**：meta.wiki_url 已指向「02-需求」（`JhrcwNjUdiUXPMkIUnWcIiOdntc`）下的文档（用 lark-cli 的 wiki 节点查询确认其父节点，机械用法见 `lark-cli skills read lark-wiki`）→ 复用不重建；否则在「02-需求」下新建子文档（space_id `7658115519924686035`，`--obj-type docx`，标题 = 短题），初始内容 = plan 四段 + 来源（bot 场景带 chat/message id），并回写 meta.wiki_url（`jq '.wiki_url="<url>"' meta.json > tmp && mv tmp meta.json`）。wiki 操作失败如实报告后继续——文档可收尾时补建，不阻塞开发。
 
 ### 阶段 1：开发（TDD 红绿纪律）
 
@@ -52,12 +57,19 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 
 循环体，直到出口条件：
 
-1. **送审前必须 commit**：将本轮改动落成迭代式小提交（合入前由用户人工 squash）。未提交改动不会被 review 覆盖。
+1. **送审前必须 commit**：将本轮改动落成迭代式小提交（收尾统一 squash 成单提交）。未提交改动不会被 review 覆盖。
 2. 送审：`bash ~/.claude/skills/harness-ceilf6/scripts/cr-round.sh --dir "$CTX"`。
 3. 读 `$CTX/cr/round-N/verdict.json`：
-   - `pass=true` → 循环结束（脚本已置 status=awaiting_human），进入 **MR 收尾**：push 当前需求分支到远端（此动作经用户 2026-07-29 裁定豁免 byteview-web「禁止自动 push」规则，仅限 harness 需求分支）；调用 bytedcli-bits-mr 技能创建 MR——标题从 plan.md 目标提炼，描述必含：任务来源（bot 场景带 chat/message id）、plan 四段摘要、CR 轮次表、遗留 minor/nit 清单。**续入场景不重复建 MR**：当前分支已存在开放 MR 时（无论谁创建），只 push 并在既有 MR 上追加一条评论（本轮变更摘要 + 新增 CR 轮次），MR 链接沿用。然后输出收尾汇总（模板见下，MR 链接置顶）。失败/熔断/超时**不 push、不建 MR**——半成品不进团队远端视野。
+   - `pass=true` → 循环结束（脚本已置 status=awaiting_human），进入**收尾**，顺序固定：
+     1. **squash**：把 commit message 写入临时文件后 `bash ~/.claude/skills/harness-ceilf6/scripts/squash-branch.sh --dir "$CTX" --message-file <文件>`。message 实质性规则：描述改了什么行为、为什么，从 plan.md 目标 + 实际改动提炼；禁止「处理CR意见」「修复评审问题」「harness 自动开发」这类过程叙事；续入时重写为覆盖全部范围的最终表述。旧状态在 `harness-backup/<分支>` 引用可回退。
+     2. **push**：`git push --force-with-lease origin <分支>`。force-with-lease 仅限 harness 需求分支——2026-07-30 用户裁定方案 A（MR 恒单 commit），是既有自动 push 豁免（2026-07-29）的延伸。
+     3. **MR**：调用 bytedcli-bits-mr 建 MR——标题 = 需求短题，描述必含：任务来源（bot 场景带 chat/message id）、plan 四段摘要、CR 轮次表、遗留 minor/nit 清单。**续入不重复建 MR**：当前分支已存在开放 MR 时只在既有 MR 追加一条评论（本轮变更摘要 + 新增 CR 轮次 + 注明历史已重写），MR 链接沿用。
+     4. **沉淀**：harness-context 供料 + lark-sediment 流程——需求结论、CR 往返要点、踩坑追加到 meta.wiki_url 需求子文档（wiki_url 为空则先按阶段 0 第 4 步补建）；跨需求通用经验按 lark-sediment 正常去重、分类落位，不塞进需求文档；写 `$CTX/sediment.md` 台账。沉淀失败如实报告后继续汇总（MR 已建，不因沉淀失败回滚）。无人值守模式沉淀全程不需人工。
+     5. 输出收尾汇总（模板见下，MR 链接置顶）。
+
+     失败/熔断/超时**不 squash、不 push、不建 MR、不沉淀**——半成品不进团队远端视野、不上 wiki。
    - `pass=false` → **逐条处置**每个 finding：修复，或书面不采纳。全部 blocker/major 处置完后写 `$CTX/cr/round-N/fixes.md`（格式见下），回到第 1 步。
-4. **僵局熔断**（会话判断）：同一条 finding，codex 连续两轮坚持、你连续两轮书面不采纳 → 停止循环，`bash ~/.claude/skills/harness-context/scripts/ctx-dir.sh set-status awaiting_human`，把分歧点整理给用户裁决。
+4. **僵局熔断**（会话判断）：同一条 finding，评审员连续两轮坚持、你连续两轮书面不采纳 → 停止循环，`bash ~/.claude/skills/harness-context/scripts/ctx-dir.sh set-status awaiting_human`，把分歧点整理给用户裁决。
 5. 脚本自身失败（两次尝试后）→ 停止并如实报告 stderr，不静默重试第三次。
 
 meta.max_rounds 非 null 时，达到该轮数也停下交用户（默认 null 不限）。每轮结束向用户回显脚本输出的「第 N 轮 / 耗时」信息。
@@ -77,6 +89,7 @@ meta.max_rounds 非 null 时，达到该轮数也停下交用户（默认 null �
 ```markdown
 ## CR 循环收尾
 - MR：<链接>（失败/熔断时写「未创建」）
+- wiki 沉淀：<需求子文档链接>（失败/熔断时写「未沉淀」）
 - 结果：通过（第 N 轮）｜ 熔断待裁决
 - 改动概览：<一段话>
 - 轮次记录：cr/round-1..N（verdict / fixes 齐全）
@@ -90,6 +103,6 @@ meta.max_rounds 非 null 时，达到该轮数也停下交用户（默认 null �
 
 ## 约束
 
-- 收尾自动 push + 建 MR 是本技能职责（用户 2026-07-29 裁定，经 bytedcli-bits-mr 技能执行）；不动 Meego、不打 SCM 包（workflow-bugfix / scm 技能另行处理）。
+- 收尾自动 squash + force-with-lease push + 建 MR + 沉淀是本技能职责（squash/force-with-lease：用户 2026-07-30 裁定方案 A；自动 push：2026-07-29 裁定；均仅限 harness 需求分支）；不动 Meego、不打 SCM 包（workflow-bugfix / scm 技能另行处理）。
 - 不修改 cr/round-*/ 下的历史产物；每轮产物只写本轮目录。
 - 对 verdict 的每条 blocker/major 必须显式处置（修复或书面不采纳），禁止静默忽略。
