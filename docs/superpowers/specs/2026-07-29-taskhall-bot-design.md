@@ -28,7 +28,22 @@
 - 消息属于**未知话题**（如 bot 启动前就存在的话题）→ 仍按 v1 当作新任务候选。
 - 已在跑的任务不会中途重读上下文（会话启动时已装载），故语义是「存给下一次续入用」，回执文案与 runbook 须如实说明，不得暗示实时生效。
 
-**待实测确定的唯一一点**：关联键取 `thread_id` 还是 `root_id`，以及话题首帖与话题内回复在这两个字段上的实际取值差异——需要一条**真实的话题群事件 payload** 才能定，不凭猜实现。因此实施顺序是：授权放行事件 → 抓一条真实 payload → 定关联键 → spec/plan/实现/测试。
+### 实测 payload（2026-07-30 抓自话题模式群，非推测）
+
+| 字段 | 话题首帖 | 话题内回复 |
+|---|---|---|
+| `message_type` | **`post`** | `text` |
+| `thread_id` | `omt_…`（话题标识） | 同一个 `omt_…`（跨话题内所有消息稳定） |
+| `root_id` | **不存在** | 首帖的 `message_id` |
+| `content` | lark-cli 已渲染为纯文本 | 同 |
+
+由此定档：
+
+1. **v1 致命 bug（须先修）**：过滤链只放行 `message_type === 'text'`，而话题群里**真正的任务就是首帖 = `post`**，全部被当非文本丢弃——bot 只会响应讨论回复，行为完全反了。修法：放行 `text` 与 `post` 两类（`content` 两者都已是渲染后的可读文本）。
+2. **关联键 = `thread_id`**；**首帖 vs 回复 = `root_id` 有无**。
+3. 路由：无 `root_id` → 新任务候选；有 `root_id` 且 `thread_id` 已登记 → 追加进该任务的 `context/`（`im` 类型条目）并打**区别于接单的回执 reaction**；有 `root_id` 但 `thread_id` 未登记（bot 启动前的老话题）→ 退化为新任务候选。
+4. 线程登记表落 `state/threads.jsonl`（`thread_id → {branch, worktree, messageId}`），由 runner 在 worktree 建好后经回调登记；任务判定为 skip（worktree 已删）时须**注销该登记**，否则后续回复会往已删目录写。
+5. 上下文写入路径：`<worktree>/.harness-ceilf6/<分支名，/ 换 __>/context/<YYMMDD-HHmm>-im-<msgid 后 6 位>.md`，头部带 provenance（来源 chat/message id、发送者、抓取时间），与 harness-context 的条目约定一致。
 
 ## 总体架构
 
