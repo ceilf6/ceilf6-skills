@@ -113,6 +113,7 @@ worktree 存在、日志尾无 RESULT、消息还挂着 👀 —— 三者同时
 - 回应（reaction/私信）尽力而为，失败不阻塞任务；产物真相在 worktree 与 MR。
 - 任务进行中重启 daemon 会永久滞留该任务（worktree/分支/👀 全部留存且不重试），处置见「重启恢复」。
 - 话题回复只在**归属任务已登记**时才并入上下文；未登记的话题（bot 启动前就存在的老话题，或首帖入队后 worktree 尚未建好那一小段窗口）里的回复会**退化为新任务候选**——按 v1 语义各起一次任务判定，多半以 skip 收场（👀 闪一下就撤）。
-- 登记只在判定 skip 时注销（此时 worktree 已删）。pass/fail/escalate 的登记长期留存，所以任务结束后在原话题继续回复仍会往那个 worktree 写条目；若该 worktree 已被人工删掉，写入会重建一个只含 `context/` 的空目录（无害，但清理时留意）。
+- 登记归属**首帖任务**：一个话题只认第一个把 worktree 建起来的任务，上面那种退化出来的任务既抢不走登记、也注销不了它；注销只发生在**所有者自己**判 skip 时（此时 worktree 已删）。
+- pass/fail/escalate 的登记长期留存，所以任务结束后在原话题继续回复仍会往那个 worktree 写条目。若该 worktree 已被人工删掉，回复**不写也不回 📝**，只在 `logs/launchd.err.log` 留一行「上下文写入失败 …worktree 不存在（登记已失效）」——想接着提就在群里另发一条新任务。
 - 本机的 AI-IDE daemon 会往新建的 git 仓写 `.git/ai/`，偶尔会让 `git worktree remove` 撞上并发写而失败；runner 的清理分「worktree 移除」与「分支删除」两步、各自 3 次重试且互不牵连，仍失败则日志留「worktree 清理失败（留人工）」或「分支删除失败（留人工）」。属本机环境噪声，不是产品缺陷。
 - 测试 stub（`tests/stubs/lark-cli`）在 `event consume` 分支之前就记账，所以 listener 类测试里 **consume 占掉第 1 次调用**；将来若给 listener 测试加 `STUB_FAIL_FIRST=1`，失败的会是事件流而不是第一次 reaction。

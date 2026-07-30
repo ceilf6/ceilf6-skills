@@ -1,7 +1,7 @@
 // 主循环：consume 子进程管理 + 过滤入队 + 串行 worker。
 // 用法：node listener.mjs <config.json 路径>
 import { spawn } from 'node:child_process';
-import { readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
 import { normalize } from './normalize.mjs';
@@ -13,6 +13,25 @@ import { runTask, killActiveChildren } from './runner.mjs';
 
 export function nextBackoff(attempt) {
   return Math.min(1000 * 2 ** attempt, 60_000);
+}
+
+// 一个话题只认第一个把现场建起来的任务。首帖 worktree 就绪前到达的讨论回复会退化成第二个任务，
+// 若让它覆盖登记，此后 📝 全写进那个讨论派生的 worktree，而人按 escalate 私信去的是首帖 worktree，
+// 永远看不到 bot 声称已存下的补充。worktree 已不在（人工删掉）的登记是坏地址，允许被接管。
+export function registerThread(store, info) {
+  if (!info.threadId) return false; // 非话题群消息无从关联
+  const cur = store.findThread(info.threadId);
+  if (cur?.worktree && existsSync(cur.worktree)) return false;
+  store.recordThread(info.threadId, info);
+  return true;
+}
+
+// 只有登记的所有者才能注销：退化出来的第二个任务判 skip 时抹掉首帖那条仍然有效的登记，
+// 会让该话题的下一条回复再起一个全权 claude。
+export function unregisterThread(store, task) {
+  if (!task.threadId) return false;
+  if (store.findThread(task.threadId)?.messageId !== task.messageId) return false;
+  return store.dropThread(task.threadId);
 }
 
 // 启动即全量校验：lark.mjs/runner 假定 config 合法，缺键会退化成
@@ -56,12 +75,10 @@ if (isMain) {
     while (!stopping && running < config.concurrency && store.size() > 0) {
       const task = store.dequeue();
       running++;
-      runTask(task, config, lark, {
-        onWorktreeReady: (info) => { if (info.threadId) store.recordThread(info.threadId, info); },
-      })
+      runTask(task, config, lark, { onWorktreeReady: (info) => registerThread(store, info) })
         .then((out) => {
           // skip 会把 worktree 与分支删掉，登记不注销的话后续回复会往已删目录写出无人读的文件。
-          if (out?.verdict === 'skip' && task.threadId) store.dropThread(task.threadId);
+          if (out?.verdict === 'skip') unregisterThread(store, task);
         })
         .catch((e) => console.error(`[listener] runTask 异常：${e.message}`))
         .finally(() => { running--; pump(); });

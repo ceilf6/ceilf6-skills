@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync, existsSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -139,6 +139,43 @@ test('端到端（stub）：skip 判定注销线程登记，后续回复不会�
   assert.ok(ok, 'skip 后 threads.jsonl 应被清空（登记过又注销）');
   assert.equal(new Store(join(root, 'state')).findThread('omt_topic2'), null);
   assert.deepEqual(readdirSync(join(root, 'wt')), []); // skip 已删现场，登记留着就是坏地址
+  rmFixture(root);
+});
+
+// 单元级：这两条覆盖「首帖 worktree 就绪前回复就到」的 in-flight 形态——该形态下回复必然退化成
+// 第二个任务，而端到端用例（分两程投递）按设计跳过了它，只能在此钉住。
+test('线程登记归属：退化任务抢不走登记，也注销不了别人的登记', async () => {
+  const { registerThread, unregisterThread } = await import('../src/listener.mjs');
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-own-')));
+  const store = new Store(join(root, 'state'));
+  const headWt = join(root, 'wt', 'bot__head');
+  const replyWt = join(root, 'wt', 'bot__reply');
+  mkdirSync(headWt, { recursive: true });
+  mkdirSync(replyWt, { recursive: true });
+  store.recordThread('omt_x', { threadId: 'omt_x', messageId: 'om_head', branch: 'bot/head', worktree: headWt });
+  // 抢登记 = 此后 📝 全写进讨论派生的 worktree，而人按 escalate 私信去的是首帖 worktree，永远看不到
+  assert.equal(registerThread(store, { threadId: 'omt_x', messageId: 'om_reply', branch: 'bot/reply', worktree: replyWt }), false);
+  assert.equal(store.findThread('omt_x').messageId, 'om_head');
+  // 退化任务判 skip：注销别人的登记会让下一条回复又起一个全权 claude
+  assert.equal(unregisterThread(store, { threadId: 'omt_x', messageId: 'om_reply' }), false);
+  assert.equal(store.findThread('omt_x').messageId, 'om_head');
+  // 登记所有者自己 skip 才注销
+  assert.equal(unregisterThread(store, { threadId: 'omt_x', messageId: 'om_head' }), true);
+  assert.equal(store.findThread('omt_x'), null);
+  rmFixture(root);
+});
+
+test('线程登记：worktree 已不在的失效登记可被新任务接管', async () => {
+  const { registerThread } = await import('../src/listener.mjs');
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-own-')));
+  const store = new Store(join(root, 'state'));
+  const liveWt = join(root, 'wt', 'bot__new');
+  mkdirSync(liveWt, { recursive: true });
+  store.recordThread('omt_y', { threadId: 'omt_y', messageId: 'om_gone', branch: 'bot/gone', worktree: join(root, 'wt', 'bot__gone') });
+  assert.equal(registerThread(store, { threadId: 'omt_y', messageId: 'om_new', branch: 'bot/new', worktree: liveWt }), true);
+  assert.equal(store.findThread('omt_y').messageId, 'om_new');
+  // 非话题群消息（无 threadId）不进登记表
+  assert.equal(registerThread(store, { threadId: '', messageId: 'om_plain', branch: 'bot/p', worktree: liveWt }), false);
   rmFixture(root);
 });
 
