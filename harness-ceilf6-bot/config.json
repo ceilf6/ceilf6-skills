@@ -3,8 +3,8 @@
   "profile": "taskhall",
   "repoPath": "/Users/bytedance/Desktop/workspace/byteview-web",
   "worktreesDir": "/Users/bytedance/Desktop/workspace/taskhall-worktrees",
-  "stateDir": "/Users/bytedance/Desktop/ceilf/ceilf6-skills/taskhall-bot/state",
-  "logsDir": "/Users/bytedance/Desktop/ceilf/ceilf6-skills/taskhall-bot/logs",
+  "stateDir": "/Users/bytedance/Desktop/ceilf/ceilf6-skills/harness-ceilf6-bot/state",
+  "logsDir": "/Users/bytedance/Desktop/ceilf/ceilf6-skills/harness-ceilf6-bot/logs",
   "concurrency": 1,
   "taskTimeoutMs": 7200000,
   "killGraceMs": 10000,
@@ -17,6 +17,7 @@
     "done": "DONE",
     "failed": "CrossMark",
     "escalate": "OnIt",
+    "skipped": "Get",
     "context": "Pin"
   }
 }

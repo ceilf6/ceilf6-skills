@@ -1,7 +1,7 @@
 // 单任务生命周期：worktree → claude 无人值守 → RESULT → 回应分发。
 // 判断在 claude 会话里；这里只有机械动作与回应。
 import { spawn, execFile } from 'node:child_process';
-import { mkdirSync, readFileSync, createWriteStream } from 'node:fs';
+import { mkdirSync, readFileSync, createWriteStream, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseResult } from './result.mjs';
@@ -88,12 +88,26 @@ async function retrying(label, fn) {
   return false;
 }
 
-// 两步各自重试而非整体重试：remove 成功、branch -D 失败时，整体重试会把 remove 重跑在
-// 已删路径上并必然再失败，于是分支永远删不掉。已成功的步骤不得重跑。
+// 不用 `git worktree remove --force`：它要遍历校验整棵工作树，在 byteview-web 这类巨型 monorepo 上
+// 实测耗时数分钟，而 skip 是最常见路径——串行队列被它占死、终态表情迟迟不落地。`--force` 本已放弃
+// 那些保护，语义上无损失，于是拆成「删目录 + prune 注册表 + 删分支」三步，各自秒级。
+// prune 必须在 branch -D 之前：注册表还挂着该 worktree 时 git 认为分支仍被检出，拒绝删除。
+// 三步各自有界重试而非整体重试：已成功的步骤重跑必然再失败（rm 落在已删路径、branch -D 落在已删分支），
+// 整体重试会让后一步永远做不成。
 async function cleanupWorktree(config, worktree, branch) {
-  const removed = await retrying('worktree 清理失败', () => git(config.repoPath, ['worktree', 'remove', '--force', worktree]));
+  // maxRetries 必需：本机 AI-IDE daemon 会异步往新仓写 .git/ai/，撞上时 rmSync 抛 ENOTEMPTY。
+  const removed = await retrying('worktree 目录删除失败', async () => rmSync(worktree, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }));
+  const pruned = await retrying('worktree 注册表 prune 失败', () => git(config.repoPath, ['worktree', 'prune']));
   const deleted = await retrying('分支删除失败', () => git(config.repoPath, ['branch', '-D', branch]));
-  return removed && deleted;
+  return removed && pruned && deleted;
+}
+
+// 状态表情不变量（2026-07-30 用户裁定）：一条被处理的消息上，本 bot 的状态表情恒为恰好一个。
+// 故顺序是「先打终态、再撤接单」——反过来会出现零表情窗口，而群里「没表情」等于「bot 没看见」，
+// 是比短暂两个表情更坏的误读。claimedRid 为 null（接单调用失败）时只打终态，不当错误处理。
+async function settleReaction(lark, messageId, terminalKey, claimedRid) {
+  await lark.addReaction(messageId, terminalKey);
+  if (claimedRid) await lark.deleteReaction(messageId, claimedRid);
 }
 
 export async function runTask(task, config, lark, hooks = {}) {
@@ -136,18 +150,18 @@ export async function runTask(task, config, lark, hooks = {}) {
 
   if (verdict === 'skip') {
     await cleanupWorktree(config, worktree, branch);
-    if (claimedRid) await lark.deleteReaction(task.messageId, claimedRid);
+    await settleReaction(lark, task.messageId, config.reactions.skipped, claimedRid);
   } else if (verdict === 'escalate') {
-    await lark.addReaction(task.messageId, config.reactions.escalate);
+    await settleReaction(lark, task.messageId, config.reactions.escalate, claimedRid);
     const text = `该任务需要人工规划，请用命令 \`cd ${worktree} && claude "载入 /harness-context 上下文，走计划门完整路径"\` 进行 spec。`;
     await lark.replyInThread(task.messageId, text);
     await lark.sendDm(config.dmOpenId, text);
   } else if (verdict === 'pass') {
-    await lark.addReaction(task.messageId, config.reactions.done);
+    await settleReaction(lark, task.messageId, config.reactions.done, claimedRid);
     await lark.sendDm(config.dmOpenId,
       `✅ 任务完成\nMR：${result?.mr_url || '（RESULT 未带链接）'}\n分支：${branch}\n摘要：${result?.summary || ''}`);
   } else {
-    await lark.addReaction(task.messageId, config.reactions.failed);
+    await settleReaction(lark, task.messageId, config.reactions.failed, claimedRid);
     const why = timedOut ? '超时强杀' : (result ? `verdict=${verdict}` : '无有效 RESULT 行');
     await lark.sendDm(config.dmOpenId,
       `❌ 任务未完成（${why}）\nworktree：${worktree}\n日志：${logPath}\nreason：${result?.reason || ''}`);

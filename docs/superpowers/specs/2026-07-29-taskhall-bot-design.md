@@ -1,4 +1,6 @@
-# taskhall-bot 设计文档：任务大厅群 → harness 全自动执行
+# harness-ceilf6-bot 设计文档：任务大厅群 → harness 全自动执行
+
+> 组件目录 2026-07-30 由 `taskhall-bot` 改名为 `harness-ceilf6-bot`（与飞书应用同名；本文内路径与标识已按新名，历史 commit 与本文件名仍是旧名——文件名保留以不破坏既有链接与台账）。
 
 日期：2026-07-29
 状态：已与用户逐节确认（触发姿态、无人值守语义、交互形态均经用户裁定）
@@ -51,7 +53,7 @@
 飞书任务大厅群
    │ im.message.receive_v1（lark-cli event consume 长连接，--profile taskhall --as bot，免公网）
    ▼
-taskhall-bot/listener.mjs（单文件 node，launchd 常驻，ceilf6-skills 仓 taskhall-bot/ 目录）
+harness-ceilf6-bot/listener.mjs（单文件 node，launchd 常驻，ceilf6-skills 仓 harness-ceilf6-bot/ 目录）
    │ 过滤链：chat_id 匹配 → sender_type==user（排除一切 bot，防环）
    │        → message_type ∈ {text, post}（post 是话题首帖，2026-07-30 实测；
    │           只放行 text 会把话题群里的真任务全丢掉——勿"清理"掉 post）
@@ -61,7 +63,7 @@ taskhall-bot/listener.mjs（单文件 node，launchd 常驻，ceilf6-skills 仓 
    ▼
 每任务执行流：worktree add → claude -p 无人值守 → RESULT 契约 → 回应
    ▼
-飞书回应：reaction（👀接单 / ✅完成 / ❌失败 / ⚠️需人工）+ 私信详情 + escalate 回帖
+飞书回应：reaction（👀接单 / ✅完成 / ❌失败 / ⚠️需人工 / 🈁非任务，恒为一个）+ 私信详情 + escalate 回帖
 ```
 
 组件边界：listener 只做过滤、排队、进程管理、飞书回应；一切业务判断（是否任务、是否明确、怎么开发）在 worktree 内的 claude 会话中。状态全部文件化（processed / queue / 每任务日志），崩溃重启不丢不重——事件总线可能重放消息，message_id 去重是正确性底线。
@@ -81,11 +83,13 @@ taskhall-bot/listener.mjs（单文件 node，launchd 常驻，ceilf6-skills 仓 
 
 | verdict | worktree | reaction | 群消息 | 私信 |
 |---|---|---|---|---|
-| skip | 删除（连同分支） | **删除已打的 👀**（群里仅短暂闪现） | 无 | 无 |
-| escalate | **保留**（含已灌上下文） | ⚠️ | thread 回帖恢复命令（模板见下） | 同内容私信 |
-| pass | 保留 | ✅ | 无 | MR 链接 + plan 摘要 + CR 轮次 + 遗留项 |
-| fail / fused | 保留（供排查） | ❌ | 无 | 简报 + worktree 路径 + 日志路径 |
-| 超时强杀 | 保留 | ❌ | 无 | 简报（标注超时） |
+| skip | 删除（连同分支） | 打 skipped 终态表情（默认 `Get`）并撤回接单表情 | 无 | 无 |
+| escalate | **保留**（含已灌上下文） | ⚠️ 并撤回接单表情 | thread 回帖恢复命令（模板见下） | 同内容私信 |
+| pass | 保留 | ✅ 并撤回接单表情 | 无 | MR 链接 + plan 摘要 + CR 轮次 + 遗留项 |
+| fail / fused | 保留（供排查） | ❌ 并撤回接单表情 | 无 | 简报 + worktree 路径 + 日志路径 |
+| 超时强杀 | 保留 | ❌ 并撤回接单表情 | 无 | 简报（标注超时） |
+
+**状态表情不变量**（2026-07-30 用户裁定：任何状态都必须有对应表情，且不得堆积成多个致含义混乱）：一条被处理的消息上，本 bot 的**状态表情恒为恰好一个**——进行中 = 接单（👀），到达终态后 = 该终态专属表情。故每个终态分支的顺序固定为「先打终态表情、再撤回接单表情」：反序会出现零表情窗口，而群里「没有表情」等于「bot 没看见」，比短暂两个表情更坏。`skip` 因此也有专属表情（`reactions.skipped`），不再是撤掉接单后的零表情。打在**话题回复**消息上表示「已存入上下文」的 📝（`reactions.context`）不属于状态机，不参与本不变量。
 
 **escalate 回帖模板**（群 thread 与私信同文，恢复命令是硬要求——没有它线程就丢了）：
 
@@ -116,7 +120,7 @@ taskhall-bot/listener.mjs（单文件 node，launchd 常驻，ceilf6-skills 仓 
 
 1. **飞书应用**（用户手动，一次性约 5 分钟）：开发者后台新建应用 → 开机器人能力 → 申请权限：接收群消息事件（im.message.receive_v1 订阅）、发送消息（群回帖与私信）、消息表情回复（reaction 创建）；具体 scope 名以 lark-cli 报错提示与开发者后台为准。发布后拉进任务大厅群。
 2. **profile 绑定**：`lark-cli config init --new --profile taskhall`，此后事件消费与消息发送全部 `--profile taskhall --as bot`——与既有应用、jieli/acp 框架零共享。
-3. **常驻**：`install-taskhall.sh`（沿用 install-harness.sh 先例）安装 launchd plist `com.ceilf6.taskhall-bot`：KeepAlive、WorkingDirectory=仓库 taskhall-bot/、stdout/err 落 logs/。listener 对 event consume 子进程按「ready 标记 + stdin 保活」契约管理。
+3. **常驻**：`install.sh`（沿用 install-harness.sh 先例）安装 launchd plist `com.ceilf6.harness-ceilf6-bot`：KeepAlive、WorkingDirectory=仓库 harness-ceilf6-bot/、stdout/err 落 logs/。listener 对 event consume 子进程按「ready 标记 + stdin 保活」契约管理。
 4. **config.json 全部旋钮**：chat_id、目标仓库路径（byteview-web）、worktrees 目录、并发上限（默认 1）、墙钟超时（默认 2h）、预滤最小文本长度（默认 10 字）、私信目标 open_id、reaction emoji 键映射。
 5. **日志**：listener 事件日志 + 每任务完整 claude stdout（`logs/task-<msgid>.log`）——排查「它为什么这么干」的唯一依据。
 

@@ -45,7 +45,7 @@ function validateConfig(config) {
     // 下界 > 0：concurrency=0 会收单记 processed 却永不执行，taskTimeoutMs<=0 秒杀所有任务——都是静默失败形态。
     if (typeof config[k] !== 'number' || Number.isNaN(config[k]) || config[k] <= 0) errs.push(`${k}（需正数）`);
   }
-  for (const k of ['claimed', 'done', 'failed', 'escalate', 'context']) {
+  for (const k of ['claimed', 'done', 'failed', 'escalate', 'skipped', 'context']) {
     if (typeof config.reactions?.[k] !== 'string' || config.reactions[k] === '') errs.push(`reactions.${k}（需非空字符串）`);
   }
   return errs;

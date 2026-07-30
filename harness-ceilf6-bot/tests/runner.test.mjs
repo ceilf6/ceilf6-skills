@@ -19,12 +19,14 @@ function makeConfig(root, repo, over = {}) {
   return {
     repoPath: repo, worktreesDir: join(root, 'wt'), logsDir: join(root, 'logs'),
     taskTimeoutMs: 60_000, killGraceMs: 500, claudeBin: CLAUDE_STUB, dmOpenId: 'ou_me',
-    reactions: { claimed: 'THUMBSUP', done: 'DONE', failed: 'CROSS', escalate: 'WARN' }, ...over,
+    reactions: { claimed: 'THUMBSUP', done: 'DONE', failed: 'CROSS', escalate: 'WARN', skipped: 'GET' }, ...over,
   };
 }
 function fakeLark(calls) {
+  let n = 0;
   return {
-    async addReaction(mid, key) { calls.push(['add', mid, key]); return 'rid_1'; },
+    // 每次 add 回不同 rid：撤销的必须是接单那一枚，若都回同一个 rid，「撤错表情」的回归无从暴露。
+    async addReaction(mid, key) { calls.push(['add', mid, key]); return `rid_${++n}`; },
     async deleteReaction(mid, rid) { calls.push(['del', mid, rid]); return true; },
     async replyInThread(mid, text) { calls.push(['reply', mid, text]); return true; },
     async sendDm(openId, text) { calls.push(['dm', openId, text]); return true; },
@@ -47,13 +49,15 @@ test('pass：worktree 保留、✅、私信含 MR 链接、prompt 含任务原�
   assert.ok(out.branch.endsWith('654321'));
   assert.ok(readFileSync(process.env.STUB_PROMPT_OUT, 'utf8').includes('修一个真实任务 $&原样'));
   assert.ok(readFileSync(out.logPath, 'utf8').includes('RESULT'));
-  assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'dm']); // claimed → done → 私信
+  assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'del', 'dm']); // claimed → done → 撤 claimed → 私信
+  assert.equal(calls[0][2], 'THUMBSUP');
   assert.equal(calls[1][2], 'DONE'); // 钉住 done 键，防 done/failed 互换后仍然全绿
-  assert.ok(calls[2][2].includes('https://mr/9'));
+  assert.equal(calls[2][2], 'rid_1'); // 撤的是接单那一枚，不是刚打上的终态
+  assert.ok(calls[3][2].includes('https://mr/9'));
   rmFixture(root);
 });
 
-test('skip：worktree 与分支删除、claimed reaction 撤销、零消息', async () => {
+test('skip：worktree 与分支删除（注册表已 prune）、留下 skipped 终态表情、零消息', async () => {
   const { root, repo } = makeFixture();
   const calls = [];
   process.env.STUB_VERDICT = 'skip';
@@ -61,9 +65,14 @@ test('skip：worktree 与分支删除、claimed reaction 撤销、零消息', as
   const out = await runTask(TASK, makeConfig(root, repo), fakeLark(calls));
   assert.equal(out.verdict, 'skip');
   assert.equal(existsSync(out.worktree), false);
+  const wtList = execFileSync('git', ['-C', repo, 'worktree', 'list']).toString();
+  assert.ok(!wtList.includes(out.worktree), `注册表应已 prune 掉该 worktree，实际：${wtList}`);
   const branches = execFileSync('git', ['-C', repo, 'branch', '--list', out.branch]).toString().trim();
   assert.equal(branches, '');
-  assert.deepEqual(calls.map((c) => c[0]), ['add', 'del']);
+  // 状态表情恒为一个：skip 也要留终态表情（旧行为撤掉 claimed 后是零表情 = 群里看不出 bot 处理过）
+  assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'del']);
+  assert.equal(calls[1][2], 'GET');
+  assert.equal(calls[2][2], 'rid_1');
   rmFixture(root);
 });
 
@@ -75,11 +84,13 @@ test('escalate：现场保留、⚠️、回帖+私信同文含恢复命令', as
   assert.equal(out.verdict, 'escalate');
   assert.ok(existsSync(out.worktree));
   const kinds = calls.map((c) => c[0]);
-  assert.deepEqual(kinds, ['add', 'add', 'reply', 'dm']); // claimed → ⚠️ → 回帖 → 私信
-  const reply = calls[2][2];
+  assert.deepEqual(kinds, ['add', 'add', 'del', 'reply', 'dm']); // claimed → ⚠️ → 撤 claimed → 回帖 → 私信
+  assert.equal(calls[1][2], 'WARN');
+  assert.equal(calls[2][2], 'rid_1');
+  const reply = calls[3][2];
   assert.ok(reply.includes('该任务需要人工规划'));
   assert.ok(reply.includes(`cd ${out.worktree} && claude`));
-  assert.equal(reply, calls[3][2]); // 双通道同文
+  assert.equal(reply, calls[4][2]); // 双通道同文
   rmFixture(root);
 });
 
@@ -90,9 +101,10 @@ test('无 RESULT 行按 fail：❌ + 私信简报含日志路径', async () => {
   const out = await runTask(TASK, makeConfig(root, repo), fakeLark(calls));
   assert.equal(out.verdict, 'fail');
   assert.ok(existsSync(out.worktree)); // 保留供排查
-  assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'dm']);
+  assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'del', 'dm']);
   assert.equal(calls[1][2], 'CROSS'); // 钉住 failed 键
-  assert.ok(calls[2][2].includes(out.logPath));
+  assert.equal(calls[2][2], 'rid_1');
+  assert.ok(calls[3][2].includes(out.logPath));
   rmFixture(root);
 });
 
@@ -102,6 +114,9 @@ test('超时强杀按 fail 且私信标注超时', async () => {
   process.env.STUB_VERDICT = 'hang';
   const out = await runTask(TASK, makeConfig(root, repo, { taskTimeoutMs: 1000 }), fakeLark(calls));
   assert.equal(out.verdict, 'fail');
+  assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'del', 'dm']);
+  assert.equal(calls[1][2], 'CROSS');
+  assert.equal(calls[2][2], 'rid_1');
   assert.ok(calls.find((c) => c[0] === 'dm')[2].includes('超时'));
   rmFixture(root);
 });
@@ -174,7 +189,7 @@ test('onWorktreeReady 抛错不中断任务：verdict 照常 pass', async () => 
     onWorktreeReady: () => { throw new Error('登记炸了'); },
   });
   assert.equal(out.verdict, 'pass');
-  assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'dm']);
+  assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'del', 'dm']);
   rmFixture(root);
 });
 
@@ -198,6 +213,6 @@ test('claudeBin 缺失：spawn 失败不崩进程、按 fail 分发', async () =
   const calls = [];
   const out = await runTask(TASK, makeConfig(root, repo, { claudeBin: '/nonexistent-claude-bin' }), fakeLark(calls));
   assert.equal(out.verdict, 'fail');
-  assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'dm']); // ❌ 路径；测试自然跑完即进程存活
+  assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'del', 'dm']); // ❌ 路径；测试自然跑完即进程存活
   rmFixture(root);
 });

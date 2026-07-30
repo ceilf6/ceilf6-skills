@@ -1,4 +1,4 @@
-# taskhall-bot 运维手册
+# harness-ceilf6-bot 运维手册
 
 ## 依赖
 
@@ -19,7 +19,7 @@ install 脚本会逐项机械检查，缺一项即拒装（不再靠人肉核对
 
 ## 一次性：创建飞书应用（约 5 分钟，人工）
 
-1. 开发者后台（open.larkoffice.com）新建自建应用，命名如 `taskhall-bot`。
+1. 开发者后台（open.larkoffice.com）新建自建应用，命名如 `harness-ceilf6-bot`。
 2. 开启**机器人**能力。
 3. 权限管理开通（以平台实际 scope 名为准，缺权限时 lark-cli 报错会给出确切 scope）：
    - 接收群消息（订阅 `im.message.receive_v1` 所需的 im 消息读取权限）
@@ -44,37 +44,48 @@ install 脚本会逐项机械检查，缺一项即拒装（不再靠人肉核对
    注意成功响应**没有 `ok` 字段**（顶层是 `appId/brand/defaultAs/identities/identity`）；`ok` 只出现在错误信封 `{"ok":false,"error":{...}}` 里，别拿 `ok:true` 当判据。
    若输出是错误信封：`profile not found` → 回第 1 步（用 `--name taskhall` 创建）；有 profile 但输出里没有 `identities.user.openId` → 回第 2 步（`auth login`）。
    profile 名须与 `config.json` 的 `profile` 字段一致（本手册与出厂配置都用 `taskhall`）；改名要同时改这两处。
-4. 编辑 `taskhall-bot/config.json`：填 `dmOpenId` = 上一步取到的 `ou_...`（bot 路径的 `member_id`，或 user 路径 `lark-cli auth status --json --verify --profile taskhall` 的 `identities.user.openId`）；确认 repoPath / worktreesDir。
+4. 编辑 `harness-ceilf6-bot/config.json`：填 `dmOpenId` = 上一步取到的 `ou_...`（bot 路径的 `member_id`，或 user 路径 `lark-cli auth status --json --verify --profile taskhall` 的 `identities.user.openId`）；确认 repoPath / worktreesDir。
    **两条路径都必须带 `--profile taskhall`**：open_id 是 **app 维度**的，不带它会拿到另一个应用下同样合法的 `ou_` 值——正好穿过 install 脚本的 `ou_` 前缀守卫，装出一个 reaction 正常、私信全投空的半哑 bot。2026-07-30 首次部署实测：同一个人在默认 app 下是 `ou_c50103…`、在 taskhall app 下是 `ou_19c19d…`，毫无相似性可供肉眼识别。
    install 脚本会用 config 里的 profile 反查真值做交叉校验：**不一致直接拒装**；反查不到（未授权或离线）只告警放行，此时本步骤就是唯一防线。
    `config.json` 是 git 跟踪文件：填进去的是你的个人 open_id，**别提交**；日后升级拉取如报冲突，先 `git stash` 再拉，拉完 `git stash pop`。
-5. `bash taskhall-bot/install-taskhall.sh`。
+5. `bash harness-ceilf6-bot/install.sh`。
 
 ## 验收演练（对应 spec 验收方式）
 
 1. 群里发一条真实小任务 → 任务消息出现 👀 → 完成后 ✅ + 私信收到 MR 链接。
-2. 发一条闲聊 → 👀 短暂闪现后撤销，群里零消息。闲聊也得 **≥10 字**（`minTextLength` 预滤）：更短的消息连 👀 都不会闪——那是预滤，不是 bot 没起来，日志里能看到 `忽略 <message_id>（too-short）`。
+2. 发一条闲聊 → 👀 换成 🈁（`skipped`，默认 `Get`）并**最终留在消息上**，表示 bot 看过并判定非任务；群里零消息。闲聊也得 **≥10 字**（`minTextLength` 预滤）：更短的消息连 👀 都不会出现——那是预滤，不是 bot 没起来，日志里能看到 `忽略 <message_id>（too-short）`。
 3. 发一条模糊任务 → ⚠️ + thread 回帖恢复命令 + 同文私信；按命令 `cd <worktree> && claude ...` 能无损接管。
 4. **话题群**：在第 1 条那个任务的话题里回一句 → 该回复出现 📝，**不再另起任务**；`<worktree>/.harness-ceilf6/<分支名>/context/` 下多出一个 `<YYMMDD-HHmm>-im-<消息id后6位>.md`。📝 只表示「已存进上下文」，**正在跑的会话不会读到它**（上下文在会话启动时一次性装载），它对**下一次续入**才生效。
 5. reaction emoji 键若报错：按 API 错误提示改 config.json 的 `reactions` 键值，无需改码。
 
-> 本文里的 👀/✅/❌/⚠️/📝 是**语义**（接单/完成/失败/需人工/已存上下文），实际显示的表情由 config.json 的 `reactions` 键决定：当前 `claimed=THUMBSUP`，所以「接单」在群里显示为 👍 而不是 👀。验收时按第 5 条按需改键。
+> 本文里的表情是**语义**，实际显示的由 config.json 的 `reactions` 键决定（当前 `claimed=THUMBSUP`，所以「接单」在群里显示为 👍 而不是 👀）。验收时按第 5 条按需改键。
+>
+> | 语义 | 本文写作 | `reactions` 键 | 出厂键值 |
+> |---|---|---|---|
+> | 接单（进行中） | 👀 | `claimed` | `THUMBSUP` |
+> | 完成 | ✅ | `done` | `DONE` |
+> | 失败 / 超时 | ❌ | `failed` | `CrossMark` |
+> | 需人工规划 | ⚠️ | `escalate` | `OnIt` |
+> | 收到但非任务 | 🈁 | `skipped` | `Get` |
+> | 已存入上下文 | 📝 | `context` | `Pin` |
+>
+> **状态表情恒为一个**（用户裁定）：进行中挂接单表情，到终态则换成该终态的专属表情——先打终态、再撤接单，中途不会出现「没有表情」。所以 skip 也留一个 🈁，而不是撤成零表情。`context` 打在话题回复上、不属于状态机，不参与这条不变量。
 
 ## 日常运维
 
-- 状态：`launchctl list | grep taskhall`；事件流日志 `tail -f taskhall-bot/logs/launchd.err.log`。
-- 单任务日志：`taskhall-bot/logs/task-<message_id>.log`（headless claude 全量输出，排查「它为什么这么干」的唯一依据）。
-- 停止：`launchctl unload ~/Library/LaunchAgents/com.ceilf6.taskhall-bot.plist`；重新启用：重跑 `bash taskhall-bot/install-taskhall.sh`（幂等，即重装重启）。
+- 状态：`launchctl list | grep harness-ceilf6-bot`；事件流日志 `tail -f harness-ceilf6-bot/logs/launchd.err.log`。
+- 单任务日志：`harness-ceilf6-bot/logs/task-<message_id>.log`（headless claude 全量输出，排查「它为什么这么干」的唯一依据）。
+- 停止：`launchctl unload ~/Library/LaunchAgents/com.ceilf6.harness-ceilf6-bot.plist`；重新启用：重跑 `bash harness-ceilf6-bot/install.sh`（幂等，即重装重启）。
 - **有 PID 却毫无反应**（`launchctl list` 看得到进程，群里发消息没任何表情）：先核对 `config.json` 的 `chatId` 与目标群是否一致。chat 不匹配的消息是被**刻意静音**忽略的（否则机器人在的每个群都会刷屏日志），所以日志里连一行线索都不会有。群 id 用 `lark-cli` 的群列表查（`im +chat-list` / `im +chat-search`）。
 - 重置某条消息重新处理：从 `state/processed.jsonl` 删除该行后重启。**注意**：这只在事件流会再次投递同一 `message_id` 时才有效（平台重投）；日常想重跑一条任务，最可靠的做法是在群里重新发一条消息——那是新的 `message_id`，根本不必动 `processed.jsonl`。
 - 话题登记表 `state/threads.jsonl`（`thread_id → {branch, worktree, messageId}`）：话题内回复靠它找到归属任务。想让某话题的后续回复重新按新任务处理：删掉对应那一行后**重启** bot（该文件只在启动时读进内存）。
-- 升级：仓库拉最新后重跑 `install-taskhall.sh`；升级前在仓库根跑一遍测试：
+- 升级：仓库拉最新后重跑 `install.sh`；升级前在仓库根跑一遍测试：
 
   ```bash
-  node --test 'taskhall-bot/tests/**/*.test.mjs'
+  node --test 'harness-ceilf6-bot/tests/**/*.test.mjs'
   ```
 
-  glob **必须带引号**（让 Node 自己展开）。不要写 `node --test taskhall-bot/tests/`：Node ≥24 不再递归目录，该写法会以「测试失败」的面目退出非零，而不是跑测试（本机 v24.18.0 实测）。
+  glob **必须带引号**（让 Node 自己展开）。不要写 `node --test harness-ceilf6-bot/tests/`：Node ≥24 不再递归目录，该写法会以「测试失败」的面目退出非零，而不是跑测试（本机 v24.18.0 实测）。
 
 ## 重启恢复（daemon 在任务进行中被重启）
 
@@ -86,8 +97,8 @@ install 脚本会逐项机械检查，缺一项即拒装（不再靠人肉核对
 
 ```bash
 git -C <repoPath> worktree list                 # bot/<YYMMDD-HHmm>-<消息id后6位> 即机器人建的
-tail -5 taskhall-bot/state/processed.jsonl      # 最后收下的几条消息 id 与时间
-ls -lt taskhall-bot/logs/task-*.log             # 对应任务日志；日志尾部无 RESULT 行 = 被硬切断
+tail -5 harness-ceilf6-bot/state/processed.jsonl      # 最后收下的几条消息 id 与时间
+ls -lt harness-ceilf6-bot/logs/task-*.log             # 对应任务日志；日志尾部无 RESULT 行 = 被硬切断
 ```
 
 worktree 存在、日志尾无 RESULT、消息还挂着 👀 —— 三者同时成立即为滞留任务。
@@ -112,8 +123,8 @@ worktree 存在、日志尾无 RESULT、消息还挂着 👀 —— 三者同时
 - token 消耗仅受墙钟超时（默认 2h）约束；CR 轮次无上限是用户裁定。
 - 回应（reaction/私信）尽力而为，失败不阻塞任务；产物真相在 worktree 与 MR。
 - 任务进行中重启 daemon 会永久滞留该任务（worktree/分支/👀 全部留存且不重试），处置见「重启恢复」。
-- 话题回复只在**归属任务已登记**时才并入上下文；未登记的话题（bot 启动前就存在的老话题，或首帖入队后 worktree 尚未建好那一小段窗口）里的回复会**退化为新任务候选**——按 v1 语义各起一次任务判定，多半以 skip 收场（👀 闪一下就撤）。
+- 话题回复只在**归属任务已登记**时才并入上下文；未登记的话题（bot 启动前就存在的老话题，或首帖入队后 worktree 尚未建好那一小段窗口）里的回复会**退化为新任务候选**——按 v1 语义各起一次任务判定，多半以 skip 收场（那条回复上最终留一个 🈁）。
 - 登记归属**首帖任务**：一个话题只认第一个把 worktree 建起来的任务，上面那种退化出来的任务既抢不走登记、也注销不了它；注销只发生在**所有者自己**判 skip 时（此时 worktree 已删）。
 - pass/fail/escalate 的登记长期留存，所以任务结束后在原话题继续回复仍会往那个 worktree 写条目。若该 worktree 已被人工删掉，回复**不写也不回 📝**，只在 `logs/launchd.err.log` 留一行「上下文写入失败 …worktree 不存在（登记已失效）」——想接着提就在群里另发一条新任务。
-- 本机的 AI-IDE daemon 会往新建的 git 仓写 `.git/ai/`，偶尔会让 `git worktree remove` 撞上并发写而失败；runner 的清理分「worktree 移除」与「分支删除」两步、各自 3 次重试且互不牵连，仍失败则日志留「worktree 清理失败（留人工）」或「分支删除失败（留人工）」。属本机环境噪声，不是产品缺陷。
+- runner 的 skip 清理不走 `git worktree remove --force`（它要遍历校验整棵工作树，在 byteview-web 上实测数分钟、把串行队列占死），而是「删目录 → `worktree prune` → `branch -D`」三步，各自 3 次重试且互不牵连，仍失败则日志留对应的「…失败（留人工）」一行。本机 AI-IDE daemon 往新仓写 `.git/ai/` 造成的并发写竞态由删目录那步的退避重试兜住。属本机环境噪声，不是产品缺陷。
 - 测试 stub（`tests/stubs/lark-cli`）在 `event consume` 分支之前就记账，所以 listener 类测试里 **consume 占掉第 1 次调用**；将来若给 listener 测试加 `STUB_FAIL_FIRST=1`，失败的会是事件流而不是第一次 reaction。

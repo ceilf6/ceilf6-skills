@@ -1,10 +1,12 @@
-# taskhall-bot Implementation Plan
+# harness-ceilf6-bot Implementation Plan
+
+> 组件目录 2026-07-30 由 `taskhall-bot` 改名为 `harness-ceilf6-bot`（与飞书应用同名；本文内路径、脚本名与 commit scope 已按新名，历史 commit 与本文件名仍是旧名——文件名保留以不破坏既有链接与台账）。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 交付任务大厅群机器人：新消息全自动触发「worktree + harness-context 灌入 + harness-ceilf6 无人值守跑到底 + 自动 MR」，群内交互零消息纯 reaction；同时给 harness-ceilf6 增加无人值守模式与 MR 收尾。
 
-**Architecture:** 单文件职责拆分的 node 无依赖监听编排器（`taskhall-bot/src/`）：`lark-cli event consume` 长连接产 NDJSON → normalize/filter/去重 → 文件持久化串行队列 → runner 管理 worktree 与 headless claude 生命周期 → RESULT 契约 → reaction/私信/escalate 回帖。业务判断全部在 worktree 内的 claude 会话中；listener 只做过滤、排队、进程管理、飞书回应。设计依据：`docs/superpowers/specs/2026-07-29-taskhall-bot-design.md`。
+**Architecture:** 单文件职责拆分的 node 无依赖监听编排器（`harness-ceilf6-bot/src/`）：`lark-cli event consume` 长连接产 NDJSON → normalize/filter/去重 → 文件持久化串行队列 → runner 管理 worktree 与 headless claude 生命周期 → RESULT 契约 → reaction/私信/escalate 回帖。业务判断全部在 worktree 内的 claude 会话中；listener 只做过滤、排队、进程管理、飞书回应。设计依据：`docs/superpowers/specs/2026-07-29-taskhall-bot-design.md`。
 
 **Tech Stack:** Node.js ≥18（ESM、零 npm 依赖、node:test）、bash（macOS 3.2 兼容）、lark-cli（event/im/api）、claude CLI（`-p --dangerously-skip-permissions`）、launchd。
 
@@ -24,7 +26,7 @@
 ```
 harness-ceilf6/SKILL.md                  # Task 1 修改：模式节 + MR 收尾统一
 docs/superpowers/specs/2026-07-28-harness-ceilf6-design.md   # Task 1 追加勘误一条
-taskhall-bot/
+harness-ceilf6-bot/
 ├── config.json                          # Task 5：全部旋钮
 ├── bootstrap-prompt.md                  # Task 4：headless 会话模板
 ├── src/
@@ -43,8 +45,8 @@ taskhall-bot/
 │   └── stubs/
 │       └── lark-cli                     # Task 3 建、Task 5 扩展（consume 模式）
 │       └── claude                       # Task 4
-├── com.ceilf6.taskhall-bot.plist.tpl    # Task 6
-├── install-taskhall.sh                  # Task 6
+├── com.ceilf6.harness-ceilf6-bot.plist.tpl    # Task 6
+├── install.sh                  # Task 6
 └── runbook.md                           # Task 6：应用创建/部署/运维手册
 ```
 
@@ -141,8 +143,8 @@ git push
 ### Task 2: 纯逻辑层（normalize / filter / state / result）
 
 **Files:**
-- Create: `taskhall-bot/src/normalize.mjs`、`taskhall-bot/src/filter.mjs`、`taskhall-bot/src/state.mjs`、`taskhall-bot/src/result.mjs`
-- Test: `taskhall-bot/tests/core.test.mjs`
+- Create: `harness-ceilf6-bot/src/normalize.mjs`、`harness-ceilf6-bot/src/filter.mjs`、`harness-ceilf6-bot/src/state.mjs`、`harness-ceilf6-bot/src/result.mjs`
+- Test: `harness-ceilf6-bot/tests/core.test.mjs`
 
 **Interfaces:**
 - Consumes: 无（首个代码任务）。
@@ -159,7 +161,7 @@ Run: `lark-cli event schema im.message.receive_v1 --json | jq '.resolved_output_
 
 - [ ] **Step 1: 写失败测试**
 
-创建 `taskhall-bot/tests/core.test.mjs`：
+创建 `harness-ceilf6-bot/tests/core.test.mjs`：
 
 ```js
 import { test } from 'node:test';
@@ -242,12 +244,12 @@ test('parseResult 异常输入返回 null', () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `cd /Users/bytedance/Desktop/ceilf/ceilf6-skills && node --test taskhall-bot/tests/core.test.mjs`
+Run: `cd /Users/bytedance/Desktop/ceilf/ceilf6-skills && node --test harness-ceilf6-bot/tests/core.test.mjs`
 Expected: 全部失败（模块不存在，ERR_MODULE_NOT_FOUND），exit 非 0。
 
 - [ ] **Step 3: 实现四个模块**
 
-`taskhall-bot/src/normalize.mjs`：
+`harness-ceilf6-bot/src/normalize.mjs`：
 
 ```js
 // 原始事件 → 规整对象。事件字段路径的唯一集中地：
@@ -267,7 +269,7 @@ export function normalize(raw) {
 }
 ```
 
-`taskhall-bot/src/filter.mjs`：
+`harness-ceilf6-bot/src/filter.mjs`：
 
 ```js
 // 过滤链：全部命中才入队。顺序即优先级，reason 供日志。
@@ -282,7 +284,7 @@ export function decide(ev, config, isProcessed) {
 }
 ```
 
-`taskhall-bot/src/state.mjs`：
+`harness-ceilf6-bot/src/state.mjs`：
 
 ```js
 // 文件持久化状态：processed.jsonl 只增；queue.jsonl 全量重写。
@@ -321,7 +323,7 @@ export class Store {
 }
 ```
 
-`taskhall-bot/src/result.mjs`：
+`harness-ceilf6-bot/src/result.mjs`：
 
 ```js
 // RESULT 契约解析：stdout 中最后一个 `RESULT ` 前缀行；坏 JSON / 非法 verdict → null（按 fail 处理）。
@@ -345,15 +347,15 @@ export function parseResult(stdout) {
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `node --test taskhall-bot/tests/core.test.mjs`
+Run: `node --test harness-ceilf6-bot/tests/core.test.mjs`
 Expected: 9 项全部 pass，exit 0。
 
 - [ ] **Step 5: 提交并推送**
 
 ```bash
 cd /Users/bytedance/Desktop/ceilf/ceilf6-skills
-git add taskhall-bot/src/normalize.mjs taskhall-bot/src/filter.mjs taskhall-bot/src/state.mjs taskhall-bot/src/result.mjs taskhall-bot/tests/core.test.mjs
-git commit -m "feat(taskhall-bot): 纯逻辑层——normalize/filter/state/result
+git add harness-ceilf6-bot/src/normalize.mjs harness-ceilf6-bot/src/filter.mjs harness-ceilf6-bot/src/state.mjs harness-ceilf6-bot/src/result.mjs harness-ceilf6-bot/tests/core.test.mjs
+git commit -m "feat(harness-ceilf6-bot): 纯逻辑层——normalize/filter/state/result
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 git push
@@ -364,9 +366,9 @@ git push
 ### Task 3: lark 适配层（reaction / 回帖 / 私信）
 
 **Files:**
-- Create: `taskhall-bot/src/lark.mjs`
-- Create: `taskhall-bot/tests/stubs/lark-cli`（可执行 bash stub）
-- Test: `taskhall-bot/tests/lark.test.mjs`
+- Create: `harness-ceilf6-bot/src/lark.mjs`
+- Create: `harness-ceilf6-bot/tests/stubs/lark-cli`（可执行 bash stub）
+- Test: `harness-ceilf6-bot/tests/lark.test.mjs`
 
 **Interfaces:**
 - Consumes: config 字段 `larkBin`、`profile`。
@@ -374,7 +376,7 @@ git push
 
 - [ ] **Step 1: 写 stub**
 
-创建 `taskhall-bot/tests/stubs/lark-cli`（`chmod +x`）：
+创建 `harness-ceilf6-bot/tests/stubs/lark-cli`（`chmod +x`）：
 
 ```bash
 #!/usr/bin/env bash
@@ -405,7 +407,7 @@ esac
 
 - [ ] **Step 2: 写失败测试**
 
-创建 `taskhall-bot/tests/lark.test.mjs`：
+创建 `harness-ceilf6-bot/tests/lark.test.mjs`：
 
 ```js
 import { test } from 'node:test';
@@ -461,7 +463,7 @@ test('首次失败自动重试一次后成功', async () => {
 
 - [ ] **Step 3: 跑测试确认失败**
 
-Run: `node --test taskhall-bot/tests/lark.test.mjs`
+Run: `node --test harness-ceilf6-bot/tests/lark.test.mjs`
 Expected: 全部失败（lark.mjs 不存在），exit 非 0。
 
 - [ ] **Step 4: 实现 lark.mjs**
@@ -521,15 +523,15 @@ export function makeLark(config) {
 
 - [ ] **Step 5: 跑测试确认通过**
 
-Run: `node --test taskhall-bot/tests/lark.test.mjs`
+Run: `node --test harness-ceilf6-bot/tests/lark.test.mjs`
 Expected: 4 项全部 pass。
 
 - [ ] **Step 6: 提交并推送**
 
 ```bash
 cd /Users/bytedance/Desktop/ceilf/ceilf6-skills
-git add taskhall-bot/src/lark.mjs taskhall-bot/tests/stubs/lark-cli taskhall-bot/tests/lark.test.mjs
-git commit -m "feat(taskhall-bot): lark 回应适配层（reaction/回帖/私信，尽力而为）
+git add harness-ceilf6-bot/src/lark.mjs harness-ceilf6-bot/tests/stubs/lark-cli harness-ceilf6-bot/tests/lark.test.mjs
+git commit -m "feat(harness-ceilf6-bot): lark 回应适配层（reaction/回帖/私信，尽力而为）
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 git push
@@ -540,10 +542,10 @@ git push
 ### Task 4: runner（worktree + claude 生命周期 + 结果分发）与 bootstrap 模板
 
 **Files:**
-- Create: `taskhall-bot/src/runner.mjs`
-- Create: `taskhall-bot/bootstrap-prompt.md`
-- Create: `taskhall-bot/tests/stubs/claude`（可执行 bash stub）
-- Test: `taskhall-bot/tests/runner.test.mjs`
+- Create: `harness-ceilf6-bot/src/runner.mjs`
+- Create: `harness-ceilf6-bot/bootstrap-prompt.md`
+- Create: `harness-ceilf6-bot/tests/stubs/claude`（可执行 bash stub）
+- Test: `harness-ceilf6-bot/tests/runner.test.mjs`
 
 **Interfaces:**
 - Consumes: Task 2 `parseResult`；Task 3 `makeLark` 返回的对象（作为参数注入）。
@@ -551,7 +553,7 @@ git push
 
 - [ ] **Step 1: 写 bootstrap 模板**
 
-创建 `taskhall-bot/bootstrap-prompt.md`（`{{...}}` 为 runner 渲染占位）：
+创建 `harness-ceilf6-bot/bootstrap-prompt.md`（`{{...}}` 为 runner 渲染占位）：
 
 ```markdown
 你在**无人值守模式**下作为 harness 执行代理工作。当前目录是为本任务新建的 git worktree（分支 {{BRANCH}}）。
@@ -578,7 +580,7 @@ RESULT {"verdict":"skip|escalate|pass|fail|fused","branch":"{{BRANCH}}","mr_url"
 
 - [ ] **Step 2: 写 claude stub**
 
-创建 `taskhall-bot/tests/stubs/claude`（`chmod +x`）：
+创建 `harness-ceilf6-bot/tests/stubs/claude`（`chmod +x`）：
 
 ```bash
 #!/usr/bin/env bash
@@ -598,7 +600,7 @@ esac
 
 - [ ] **Step 3: 写失败测试**
 
-创建 `taskhall-bot/tests/runner.test.mjs`：
+创建 `harness-ceilf6-bot/tests/runner.test.mjs`：
 
 ```js
 import { test } from 'node:test';
@@ -707,7 +709,7 @@ test('超时强杀按 fail 且私信标注超时', async () => {
 
 - [ ] **Step 4: 跑测试确认失败**
 
-Run: `node --test taskhall-bot/tests/runner.test.mjs`
+Run: `node --test harness-ceilf6-bot/tests/runner.test.mjs`
 Expected: 全部失败（runner.mjs 不存在）。
 
 - [ ] **Step 5: 实现 runner.mjs**
@@ -827,15 +829,15 @@ export async function runTask(task, config, lark) {
 
 - [ ] **Step 6: 跑测试确认通过**
 
-Run: `node --test taskhall-bot/tests/runner.test.mjs`
-Expected: 5 项全部 pass（超时用例约 1.5s）。同时回归 `node --test taskhall-bot/tests/core.test.mjs taskhall-bot/tests/lark.test.mjs`。
+Run: `node --test harness-ceilf6-bot/tests/runner.test.mjs`
+Expected: 5 项全部 pass（超时用例约 1.5s）。同时回归 `node --test harness-ceilf6-bot/tests/core.test.mjs harness-ceilf6-bot/tests/lark.test.mjs`。
 
 - [ ] **Step 7: 提交并推送**
 
 ```bash
 cd /Users/bytedance/Desktop/ceilf/ceilf6-skills
-git add taskhall-bot/src/runner.mjs taskhall-bot/bootstrap-prompt.md taskhall-bot/tests/stubs/claude taskhall-bot/tests/runner.test.mjs
-git commit -m "feat(taskhall-bot): runner——worktree/claude 生命周期与结果分发 + bootstrap 模板
+git add harness-ceilf6-bot/src/runner.mjs harness-ceilf6-bot/bootstrap-prompt.md harness-ceilf6-bot/tests/stubs/claude harness-ceilf6-bot/tests/runner.test.mjs
+git commit -m "feat(harness-ceilf6-bot): runner——worktree/claude 生命周期与结果分发 + bootstrap 模板
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 git push
@@ -846,14 +848,14 @@ git push
 ### Task 5: listener 主循环与 config.json
 
 **Files:**
-- Create: `taskhall-bot/src/listener.mjs`
-- Create: `taskhall-bot/config.json`
-- Modify: `taskhall-bot/tests/stubs/lark-cli`（扩展 consume 模式）
-- Test: `taskhall-bot/tests/listener.test.mjs`
+- Create: `harness-ceilf6-bot/src/listener.mjs`
+- Create: `harness-ceilf6-bot/config.json`
+- Modify: `harness-ceilf6-bot/tests/stubs/lark-cli`（扩展 consume 模式）
+- Test: `harness-ceilf6-bot/tests/listener.test.mjs`
 
 **Interfaces:**
 - Consumes: Task 2 全部、Task 3 `makeLark`、Task 4 `runTask`。
-- Produces: `node taskhall-bot/src/listener.mjs <config路径>` 常驻进程：管理 `lark-cli event consume` 子进程（等 stderr ready 标记、stdin 保活不关闭、退出指数退避重启 1s→60s）、NDJSON 逐行 normalize+decide、enqueue 时 markProcessed、串行 worker 逐个 runTask、SIGTERM 优雅退出。
+- Produces: `node harness-ceilf6-bot/src/listener.mjs <config路径>` 常驻进程：管理 `lark-cli event consume` 子进程（等 stderr ready 标记、stdin 保活不关闭、退出指数退避重启 1s→60s）、NDJSON 逐行 normalize+decide、enqueue 时 markProcessed、串行 worker 逐个 runTask、SIGTERM 优雅退出。
 
 - [ ] **Step 1: 写 config.json**
 
@@ -863,8 +865,8 @@ git push
   "profile": "taskhall",
   "repoPath": "/Users/bytedance/Desktop/workspace/byteview-web",
   "worktreesDir": "/Users/bytedance/Desktop/workspace/taskhall-worktrees",
-  "stateDir": "/Users/bytedance/Desktop/ceilf/ceilf6-skills/taskhall-bot/state",
-  "logsDir": "/Users/bytedance/Desktop/ceilf/ceilf6-skills/taskhall-bot/logs",
+  "stateDir": "/Users/bytedance/Desktop/ceilf/ceilf6-skills/harness-ceilf6-bot/state",
+  "logsDir": "/Users/bytedance/Desktop/ceilf/ceilf6-skills/harness-ceilf6-bot/logs",
   "concurrency": 1,
   "taskTimeoutMs": 7200000,
   "killGraceMs": 10000,
@@ -880,7 +882,7 @@ git push
 
 - [ ] **Step 2: 扩展 lark-cli stub 支持 consume 模式**
 
-在 `taskhall-bot/tests/stubs/lark-cli` 的 `case "$1" in` 前插入：
+在 `harness-ceilf6-bot/tests/stubs/lark-cli` 的 `case "$1" in` 前插入：
 
 ```bash
 if [ "$1" = "event" ] && [ "$2" = "consume" ]; then
@@ -894,7 +896,7 @@ fi
 
 - [ ] **Step 3: 写失败测试**
 
-创建 `taskhall-bot/tests/listener.test.mjs`：
+创建 `harness-ceilf6-bot/tests/listener.test.mjs`：
 
 ```js
 import { test } from 'node:test';
@@ -967,7 +969,7 @@ test('nextBackoff 指数退避封顶 60s', async () => {
 
 - [ ] **Step 4: 跑测试确认失败**
 
-Run: `node --test taskhall-bot/tests/listener.test.mjs`
+Run: `node --test harness-ceilf6-bot/tests/listener.test.mjs`
 Expected: 失败（listener.mjs 不存在）。
 
 - [ ] **Step 5: 实现 listener.mjs**
@@ -1048,15 +1050,15 @@ if (isMain) {
 
 - [ ] **Step 6: 跑测试确认通过**
 
-Run: `node --test taskhall-bot/tests/listener.test.mjs`
-Expected: 2 项 pass（端到端用例数秒）。回归全部：`node --test taskhall-bot/tests/`。
+Run: `node --test harness-ceilf6-bot/tests/listener.test.mjs`
+Expected: 2 项 pass（端到端用例数秒）。回归全部：`node --test harness-ceilf6-bot/tests/`。
 
 - [ ] **Step 7: 提交并推送**
 
 ```bash
 cd /Users/bytedance/Desktop/ceilf/ceilf6-skills
-git add taskhall-bot/src/listener.mjs taskhall-bot/config.json taskhall-bot/tests/stubs/lark-cli taskhall-bot/tests/listener.test.mjs
-git commit -m "feat(taskhall-bot): listener 主循环 + config（consume 保活/退避/串行 worker）
+git add harness-ceilf6-bot/src/listener.mjs harness-ceilf6-bot/config.json harness-ceilf6-bot/tests/stubs/lark-cli harness-ceilf6-bot/tests/listener.test.mjs
+git commit -m "feat(harness-ceilf6-bot): listener 主循环 + config（consume 保活/退避/串行 worker）
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 git push
@@ -1067,13 +1069,13 @@ git push
 ### Task 6: 部署（launchd + install 脚本 + runbook）
 
 **Files:**
-- Create: `taskhall-bot/com.ceilf6.taskhall-bot.plist.tpl`
-- Create: `taskhall-bot/install-taskhall.sh`
-- Create: `taskhall-bot/runbook.md`
+- Create: `harness-ceilf6-bot/com.ceilf6.harness-ceilf6-bot.plist.tpl`
+- Create: `harness-ceilf6-bot/install.sh`
+- Create: `harness-ceilf6-bot/runbook.md`
 
 **Interfaces:**
 - Consumes: Task 5 的 `listener.mjs <config>` 入口。
-- Produces: `bash taskhall-bot/install-taskhall.sh` 渲染 plist 并 launchctl 装载；runbook 是用户创建应用与验收的唯一手册。
+- Produces: `bash harness-ceilf6-bot/install.sh` 渲染 plist 并 launchctl 装载；runbook 是用户创建应用与验收的唯一手册。
 
 - [ ] **Step 1: 写 plist 模板**（`__NODE__`/`__ROOT__` 由 install 脚本替换）
 
@@ -1081,7 +1083,7 @@ git push
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>Label</key><string>com.ceilf6.taskhall-bot</string>
+  <key>Label</key><string>com.ceilf6.harness-ceilf6-bot</string>
   <key>ProgramArguments</key><array>
     <string>__NODE__</string>
     <string>__ROOT__/src/listener.mjs</string>
@@ -1098,11 +1100,11 @@ git push
 </dict></plist>
 ```
 
-- [ ] **Step 2: 写 install-taskhall.sh**
+- [ ] **Step 2: 写 install.sh**
 
 ```bash
 #!/usr/bin/env bash
-# 安装/更新 taskhall-bot 的 launchd 常驻。幂等：重复执行即重装重启。
+# 安装/更新 harness-ceilf6-bot 的 launchd 常驻。幂等：重复执行即重装重启。
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -1112,9 +1114,9 @@ command -v claude >/dev/null || { echo "缺少依赖：claude" >&2; exit 1; }
 mkdir -p "${here}/logs" "${here}/state"
 
 path_extra=$(dirname "$node_bin"):$(dirname "$(command -v lark-cli)"):$(dirname "$(command -v claude)")
-plist="${HOME}/Library/LaunchAgents/com.ceilf6.taskhall-bot.plist"
+plist="${HOME}/Library/LaunchAgents/com.ceilf6.harness-ceilf6-bot.plist"
 sed -e "s|__NODE__|${node_bin}|g" -e "s|__ROOT__|${here}|g" -e "s|__PATH_EXTRA__|${path_extra}|g" \
-  "${here}/com.ceilf6.taskhall-bot.plist.tpl" > "$plist"
+  "${here}/com.ceilf6.harness-ceilf6-bot.plist.tpl" > "$plist"
 
 launchctl unload "$plist" 2>/dev/null || true
 launchctl load "$plist"
@@ -1122,16 +1124,16 @@ echo "已装载：${plist}"
 echo "查看日志：tail -f ${here}/logs/launchd.err.log"
 ```
 
-`chmod +x taskhall-bot/install-taskhall.sh`。
+`chmod +x harness-ceilf6-bot/install.sh`。
 
 - [ ] **Step 3: 写 runbook.md**（完整逐字）
 
 ```markdown
-# taskhall-bot 运维手册
+# harness-ceilf6-bot 运维手册
 
 ## 一次性：创建飞书应用（约 5 分钟，人工）
 
-1. 开发者后台（open.larkoffice.com）新建自建应用，命名如 `taskhall-bot`。
+1. 开发者后台（open.larkoffice.com）新建自建应用，命名如 `harness-ceilf6-bot`。
 2. 开启**机器人**能力。
 3. 权限管理开通（以平台实际 scope 名为准，缺权限时 lark-cli 报错会给出确切 scope）：
    - 接收群消息（订阅 `im.message.receive_v1` 所需的 im 消息读取权限）
@@ -1143,8 +1145,8 @@ echo "查看日志：tail -f ${here}/logs/launchd.err.log"
 ## 一次性：本机绑定与配置
 
 1. `lark-cli config init --new --profile taskhall`（绑定新应用的 appId/secret）。
-2. 编辑 `taskhall-bot/config.json`：填 `dmOpenId`（`lark-cli auth status --json --verify` 的 `identities.user.openId`）；确认 repoPath / worktreesDir。
-3. `bash taskhall-bot/install-taskhall.sh`。
+2. 编辑 `harness-ceilf6-bot/config.json`：填 `dmOpenId`（`lark-cli auth status --json --verify` 的 `identities.user.openId`）；确认 repoPath / worktreesDir。
+3. `bash harness-ceilf6-bot/install.sh`。
 
 ## 验收演练（对应 spec 验收方式）
 
@@ -1155,11 +1157,11 @@ echo "查看日志：tail -f ${here}/logs/launchd.err.log"
 
 ## 日常运维
 
-- 状态：`launchctl list | grep taskhall`；事件流日志 `tail -f taskhall-bot/logs/launchd.err.log`。
-- 单任务日志：`taskhall-bot/logs/task-<message_id>.log`（headless claude 全量输出，排查「它为什么这么干」的唯一依据）。
-- 停止：`launchctl unload ~/Library/LaunchAgents/com.ceilf6.taskhall-bot.plist`。
+- 状态：`launchctl list | grep harness-ceilf6-bot`；事件流日志 `tail -f harness-ceilf6-bot/logs/launchd.err.log`。
+- 单任务日志：`harness-ceilf6-bot/logs/task-<message_id>.log`（headless claude 全量输出，排查「它为什么这么干」的唯一依据）。
+- 停止：`launchctl unload ~/Library/LaunchAgents/com.ceilf6.harness-ceilf6-bot.plist`。
 - 重置某条消息重新处理：从 `state/processed.jsonl` 删除该行后重启。
-- 升级：仓库拉最新后重跑 `install-taskhall.sh`。
+- 升级：仓库拉最新后重跑 `install.sh`。
 
 ## 已知边界（spec 风险声明摘要）
 
@@ -1172,9 +1174,9 @@ echo "查看日志：tail -f ${here}/logs/launchd.err.log"
 
 ```bash
 cd /Users/bytedance/Desktop/ceilf/ceilf6-skills
-shellcheck taskhall-bot/install-taskhall.sh taskhall-bot/tests/stubs/lark-cli taskhall-bot/tests/stubs/claude
-plutil -lint <(sed -e 's|__NODE__|/usr/local/bin/node|g' -e "s|__ROOT__|/tmp/x|g" -e 's|__PATH_EXTRA__||g' taskhall-bot/com.ceilf6.taskhall-bot.plist.tpl)
-node --test taskhall-bot/tests/
+shellcheck harness-ceilf6-bot/install.sh harness-ceilf6-bot/tests/stubs/lark-cli harness-ceilf6-bot/tests/stubs/claude
+plutil -lint <(sed -e 's|__NODE__|/usr/local/bin/node|g' -e "s|__ROOT__|/tmp/x|g" -e 's|__PATH_EXTRA__||g' harness-ceilf6-bot/com.ceilf6.harness-ceilf6-bot.plist.tpl)
+node --test harness-ceilf6-bot/tests/
 ```
 
 Expected: shellcheck 无 error；plutil OK；全部测试 pass。
@@ -1182,8 +1184,8 @@ Expected: shellcheck 无 error；plutil OK；全部测试 pass。
 - [ ] **Step 5: 提交并推送**
 
 ```bash
-git add taskhall-bot/com.ceilf6.taskhall-bot.plist.tpl taskhall-bot/install-taskhall.sh taskhall-bot/runbook.md
-git commit -m "feat(taskhall-bot): launchd 部署（install 脚本 + plist 模板 + runbook）
+git add harness-ceilf6-bot/com.ceilf6.harness-ceilf6-bot.plist.tpl harness-ceilf6-bot/install.sh harness-ceilf6-bot/runbook.md
+git commit -m "feat(harness-ceilf6-bot): launchd 部署（install 脚本 + plist 模板 + runbook）
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 git push

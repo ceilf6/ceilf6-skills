@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 安装/更新 taskhall-bot 的 launchd 常驻。幂等：重复执行即重装重启。
+# 安装/更新 harness-ceilf6-bot 的 launchd 常驻。幂等：重复执行即重装重启。
 set -euo pipefail
 
 # pwd -P：把 __ROOT__ 钉成物理路径，plist 里不留 symlink（listener 的 isMain 两种都认）。
@@ -60,10 +60,20 @@ case "${here}${node_bin}${path_extra}" in
   *"&"*|*"|"*|*"<"*|*">"*|*"\\"*) echo "路径含 & | < > \\ ，无法安全渲染 plist：${here}" >&2; exit 1 ;;
 esac
 
-plist="${HOME}/Library/LaunchAgents/com.ceilf6.taskhall-bot.plist"
+plist="${HOME}/Library/LaunchAgents/com.ceilf6.harness-ceilf6-bot.plist"
 mkdir -p "$(dirname "$plist")" # 新机器上 ~/Library/LaunchAgents 可能不存在
+
+# 2026-07-30 改名遗留：旧 Label 的 plist 换了名就不再被本脚本 unload，但它还躺在 LaunchAgents 里，
+# 带 RunAtLoad+KeepAlive、ProgramArguments 指向已不存在的 taskhall-bot/ ——下次登录即 launchd 重新加载它，
+# 变成一个无声刷日志的 crash-loop。装载新常驻前先把它拆掉。
+legacy_plist="${HOME}/Library/LaunchAgents/com.ceilf6.taskhall-bot.plist"
+if [ -f "$legacy_plist" ]; then
+  launchctl unload "$legacy_plist" 2>/dev/null || true
+  rm -f "$legacy_plist"
+  echo "已清理改名前的旧常驻：${legacy_plist}"
+fi
 sed -e "s|__NODE__|${node_bin}|g" -e "s|__ROOT__|${here}|g" -e "s|__PATH_EXTRA__|${path_extra}|g" \
-  "${here}/com.ceilf6.taskhall-bot.plist.tpl" > "$plist"
+  "${here}/com.ceilf6.harness-ceilf6-bot.plist.tpl" > "$plist"
 
 launchctl unload "$plist" 2>/dev/null || true
 launchctl load "$plist"

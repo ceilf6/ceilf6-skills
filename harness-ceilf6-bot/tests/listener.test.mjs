@@ -39,7 +39,7 @@ function writeConfig(root, repo, over = {}) {
     worktreesDir: join(root, 'wt'), stateDir: join(root, 'state'), logsDir: join(root, 'logs'),
     concurrency: 1, taskTimeoutMs: 30000, killGraceMs: 500, minTextLength: 10,
     dmOpenId: 'ou_me', claudeBin: CLAUDE_STUB, larkBin: LARK_STUB,
-    reactions: { claimed: 'THUMBSUP', done: 'DONE', failed: 'CrossMark', escalate: 'OnIt', context: 'CTXKEY' },
+    reactions: { claimed: 'THUMBSUP', done: 'DONE', failed: 'CrossMark', escalate: 'OnIt', skipped: 'Get', context: 'CTXKEY' },
     ...over,
   }));
   return cfgPath;
@@ -206,7 +206,7 @@ test('symlink 启动：isMain 仍判真，坏 config 路径响亮退出 1', asyn
 test('启动校验：缺键/坏键一次性全列并退出 1，不 spawn 任何子进程', async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-bad-')));
   const cfgPath = join(root, 'config.json');
-  // 四类坏法各占一：空串（chatId）、类型错（concurrency）、越下界（taskTimeoutMs=0）、整键缺（profile 等 / reactions 缺 3 键）
+  // 四类坏法各占一：空串（chatId）、类型错（concurrency）、越下界（taskTimeoutMs=0）、整键缺（profile 等 / reactions 缺 4 键）
   writeFileSync(cfgPath, JSON.stringify({ chatId: '', concurrency: '1', taskTimeoutMs: 0, reactions: { claimed: 'THUMBSUP' } }));
   const out = await new Promise((res) => {
     const child = spawn(process.execPath, [SRC, cfgPath], { env: { ...process.env } });
@@ -215,7 +215,7 @@ test('启动校验：缺键/坏键一次性全列并退出 1，不 spawn 任何�
     child.on('close', (code) => res({ code, err }));
   });
   assert.equal(out.code, 1);
-  for (const key of ['chatId', 'profile', 'larkBin', 'concurrency', 'taskTimeoutMs', 'reactions.done', 'reactions.context']) {
+  for (const key of ['chatId', 'profile', 'larkBin', 'concurrency', 'taskTimeoutMs', 'reactions.done', 'reactions.skipped', 'reactions.context']) {
     assert.ok(out.err.includes(key), `stderr 应列出 ${key}，实际：${out.err}`);
   }
   rmFixture(root);

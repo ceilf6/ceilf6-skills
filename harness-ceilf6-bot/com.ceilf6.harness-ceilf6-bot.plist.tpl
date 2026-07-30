@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>Label</key><string>com.ceilf6.taskhall-bot</string>
+  <key>Label</key><string>com.ceilf6.harness-ceilf6-bot</string>
   <key>ProgramArguments</key><array>
     <string>__NODE__</string>
     <string>__ROOT__/src/listener.mjs</string>
