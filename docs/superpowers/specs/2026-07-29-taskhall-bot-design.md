@@ -53,7 +53,9 @@
    ▼
 taskhall-bot/listener.mjs（单文件 node，launchd 常驻，ceilf6-skills 仓 taskhall-bot/ 目录）
    │ 过滤链：chat_id 匹配 → sender_type==user（排除一切 bot，防环）
-   │        → message_type==text → message_id 未处理（state/processed.jsonl 去重）
+   │        → message_type ∈ {text, post}（post 是话题首帖，2026-07-30 实测；
+   │           只放行 text 会把话题群里的真任务全丢掉——勿"清理"掉 post）
+   │        → message_id 未处理（state/processed.jsonl 去重）
    ▼
 串行任务队列（state/queue.jsonl 持久化；并发上限可配，默认 1）
    ▼
