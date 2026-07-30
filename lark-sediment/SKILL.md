@@ -88,6 +88,8 @@ cat <content>.md | lark-cli docs +update --doc <doc_token> \
 lark-cli docs +fetch --doc <doc_token> --doc-format markdown --jq '.data.document.content' | head
 ```
 
+**禁止删除既有内容**：任何情况下不得让文档已有文字消失（`overwrite`、`block_delete`、以及会吞掉原文的 `str_replace` 都不行）。结论过时了就两条路：① 就地打删除线——用 `str_replace` 把原句替换为 `<del>原句</del>（指向更正的一句话）`，原文必须完整保留在删除线内；② 文末 `append` 更正块。沉淀文档要保留决策演进痕迹，被推翻的结论划掉但可考。
+
 ## 第 7 步：回链与汇报
 
 - 给用户汇报：写到了哪（父节点 → 文档标题）、新建还是追加、为何选这里（一句话）、文档 URL——这是事后纠偏的入口，不可省略；
