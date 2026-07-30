@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# 假 codex：按 STUB_MODE 写 verdict 到 -o 指定路径，记录调用次数到 $STUB_STATE/calls。
+# 假评审员（traex/codex 同构）：按 STUB_MODE 写 verdict 到 -o 路径，记录调用次数与 argv 到 $STUB_STATE。
 set -euo pipefail
+printf '%s\n' "$@" > "${STUB_STATE:?stub 需要 STUB_STATE 环境变量}/args"
 out=""
 while [ $# -gt 0 ]; do
   case "$1" in

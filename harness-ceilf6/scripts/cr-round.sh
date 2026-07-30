@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-ceilf6 CR 循环机械层：拼指令 → 调 codex review → 校验 → 渲染 → 回显。
+# harness-ceilf6 CR 循环机械层：拼指令 → 调评审员（默认 traex） → 校验 → 渲染 → 回显。
 # 判断类工作（怎么修、是否采纳、何时停）归调用方会话。
 set -euo pipefail
 
@@ -10,7 +10,8 @@ SKILL_DIR=$(cd "$(dirname "$0")/.." && pwd)
 SCHEMA="$SKILL_DIR/references/verdict.schema.json"
 TEMPLATE="$SKILL_DIR/references/cr-instructions.md"
 VALIDATE="$SKILL_DIR/scripts/validate-verdict.sh"
-CODEX_BIN="${CODEX_BIN:-codex}"
+CODEX_BIN="${CODEX_BIN:-traex}"
+CR_MODEL="${CR_MODEL:-gpt-5.6-sol}"
 
 need jq; need git; need "$CODEX_BIN"
 [ -f "$SCHEMA" ] || die "缺少 $SCHEMA"
@@ -45,8 +46,8 @@ for d in "$CTX_DIR"/cr/round-*; do
 done
 
 # H=0 → 开 round-1；round-H 的 verdict 合法（该轮完整结束）→ 开 round-(H+1)；
-# 否则 round-H 是中止轮（codex 两次失败/verdict 非法）→ 原地重跑 round-H，上一轮回溯到 round-(H-1)。
-# 中止轮残留文件无需清理：instructions.md 用 > 重新生成、verdict.json 被 codex -o 覆盖、中止轮不会有 review.md。
+# 否则 round-H 是中止轮（评审员两次失败/verdict 非法）→ 原地重跑 round-H，上一轮回溯到 round-(H-1)。
+# 中止轮残留文件无需清理：instructions.md 用 > 重新生成、verdict.json 被评审员 -o 覆盖、中止轮不会有 review.md。
 PREV=""
 if [ "$H" -eq 0 ]; then
   N=1
@@ -83,7 +84,7 @@ INSTR="$ROUND_DIR/instructions.md"
   echo
   echo "## 评审范围"
   echo
-  # codex 0.124+ 的 exec review --base 与自定义指令互斥（openai/codex#22145），故用 plain exec、范围钉死在指令内
+  # traex 为 codex fork，同约束：codex 0.124+ 的 exec review --base 与自定义指令互斥（openai/codex#22145），故用 plain exec、范围钉死在指令内
   echo "本轮评审对象是当前分支相对 base 分支的全部已提交变更。先运行 \`git diff ${BASE}...HEAD\`（必要时配合 \`git log ${BASE}..HEAD --oneline\`）获取 diff 再开始评审；工作区未提交内容不在评审范围内。"
   echo
   echo "## 验收基准（plan.md 全文）"
@@ -124,19 +125,20 @@ INSTR="$ROUND_DIR/instructions.md"
 tmp=$(mktemp)
 jq '.status = "cr"' "$CTX_DIR/meta.json" > "$tmp" && mv "$tmp" "$CTX_DIR/meta.json"
 
-# ---- 调 codex；失败或校验不过重试一次 ----
+# ---- 调评审员；失败或校验不过重试一次 ----
 VERDICT="$ROUND_DIR/verdict.json"
 run_codex() {
   (cd "$REPO_ROOT" && "$CODEX_BIN" exec \
     --output-schema "$SCHEMA" \
     -o "$VERDICT" \
+    -m "$CR_MODEL" \
     --dangerously-bypass-approvals-and-sandbox \
     - < "$INSTR")
 }
 START=$(date +%s)
 attempt=1
 until run_codex && bash "$VALIDATE" "$VERDICT"; do
-  [ "$attempt" -ge 2 ] && die "第 $N 轮：codex 两次尝试均失败或 verdict 校验不过，停止（产物见 ${ROUND_DIR}）"   # ${} 必须：bash 3.2 对 $var 紧跟多字节字符会解析出错误变量名
+  [ "$attempt" -ge 2 ] && die "第 $N 轮：评审员两次尝试均失败或 verdict 校验不过，停止（产物见 ${ROUND_DIR}）"   # ${} 必须：bash 3.2 对 $var 紧跟多字节字符会解析出错误变量名
   attempt=$((attempt + 1))
   echo "cr-round: 第 1 次尝试失败，重试中……" >&2
 done

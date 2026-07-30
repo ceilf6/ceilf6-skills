@@ -3,7 +3,7 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 CR="$HERE/../scripts/cr-round.sh"
 VAL="$HERE/../scripts/validate-verdict.sh"
-STUB="$HERE/stubs/codex"
+STUB="$HERE/stubs/traex"
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); echo "  ok: $1"; }
 bad() { FAIL=$((FAIL+1)); echo "  FAIL: $1"; }
@@ -126,7 +126,21 @@ check_die "两次垃圾输出后终止" '两次尝试均失败' run_cr always_ga
 cleanup_repo
 
 make_ctx
-check_die "codex 持续退出非 0 时终止" '两次尝试均失败' run_cr exit1 "$ctx"
+check_die "评审员持续退出非 0 时终止" '两次尝试均失败' run_cr exit1 "$ctx"
+cleanup_repo
+
+echo "== 评审员模型参数 =="
+make_ctx
+state=$(mktemp -d)
+STUB_STATE="$state" STUB_MODE=pass CODEX_BIN="$STUB" bash "$CR" --dir "$ctx" >/dev/null
+grep -qx -- '-m' "$state/args" && ok "传递 -m 参数" || bad "传递 -m 参数"
+grep -qx -- 'gpt-5.6-sol' "$state/args" && ok "默认模型 gpt-5.6-sol" || bad "默认模型 gpt-5.6-sol"
+cleanup_repo
+
+make_ctx
+state=$(mktemp -d)
+STUB_STATE="$state" STUB_MODE=pass CODEX_BIN="$STUB" CR_MODEL=other-model bash "$CR" --dir "$ctx" >/dev/null
+grep -qx -- 'other-model' "$state/args" && ok "CR_MODEL 可覆盖" || bad "CR_MODEL 可覆盖"
 cleanup_repo
 
 echo; echo "PASS=$PASS FAIL=$FAIL"
