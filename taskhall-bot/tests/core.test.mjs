@@ -16,6 +16,10 @@ const RAW = {
   content: 'fallback 打包需要走 CI 构建并以 git tag 留痕',
 };
 
+// 话题群实测形态（2026-07-30 抓自真实事件）：首帖是 post 且无 root_id，回复是 text 且带 root_id，两者 thread_id 相同。
+const RAW_HEAD = { ...RAW, message_id: 'om_head_111111', message_type: 'post', thread_id: 'omt_topic1' };
+const RAW_REPLY = { ...RAW, message_id: 'om_reply_222222', thread_id: 'omt_topic1', root_id: 'om_head_111111' };
+
 test('normalize 提取规整字段', () => {
   const ev = normalize(RAW);
   assert.equal(ev.chatId, CONFIG.chatId);
@@ -27,6 +31,15 @@ test('normalize 提取规整字段', () => {
 test('normalize 容错：非对象与缺 message_id 返回 null', () => {
   assert.equal(normalize(null), null);
   assert.equal(normalize({ chat_id: 'x' }), null);
+});
+test('normalize 提取话题字段：thread_id/root_id，缺省为空串', () => {
+  assert.equal(normalize(RAW_HEAD).threadId, 'omt_topic1');
+  assert.equal(normalize(RAW_HEAD).rootId, ''); // 首帖无 root_id
+  assert.equal(normalize(RAW_REPLY).threadId, 'omt_topic1');
+  assert.equal(normalize(RAW_REPLY).rootId, 'om_head_111111');
+  const plain = normalize(RAW); // 普通群消息两者皆无
+  assert.equal(plain.threadId, '');
+  assert.equal(plain.rootId, '');
 });
 
 const notProcessed = () => false;
@@ -41,6 +54,21 @@ test('decide 拒绝：他群/bot 消息/非文本/过短/重复/null', () => {
   assert.equal(decide({ ...ev, text: '短' }, CONFIG, notProcessed).reason, 'too-short');
   assert.equal(decide(ev, CONFIG, () => true).reason, 'duplicate');
   assert.equal(decide(null, CONFIG, notProcessed).reason, 'unparseable');
+});
+test('decide 放行 post：话题首帖才是真任务，只认 text 会把它全丢掉', () => {
+  assert.equal(decide(normalize(RAW_HEAD), CONFIG, notProcessed).action, 'enqueue');
+});
+test('decide 话题内回复（有 root_id）判 reply，首帖（无 root_id）判 enqueue', () => {
+  assert.equal(decide(normalize(RAW_REPLY), CONFIG, notProcessed).action, 'reply');
+  assert.equal(decide(normalize(RAW_HEAD), CONFIG, notProcessed).action, 'enqueue');
+});
+test('decide 门禁对 reply 同样生效：他群/bot/过短/重复一律先被拦', () => {
+  const ev = normalize(RAW_REPLY);
+  assert.equal(decide({ ...ev, chatId: 'oc_other' }, CONFIG, notProcessed).reason, 'other-chat');
+  assert.equal(decide({ ...ev, senderType: 'bot' }, CONFIG, notProcessed).reason, 'non-human');
+  assert.equal(decide({ ...ev, messageType: 'image' }, CONFIG, notProcessed).reason, 'non-text');
+  assert.equal(decide({ ...ev, text: '短' }, CONFIG, notProcessed).reason, 'too-short');
+  assert.equal(decide(ev, CONFIG, () => true).reason, 'duplicate');
 });
 
 test('Store 持久化：processed 与 queue 重启可恢复', () => {
@@ -90,6 +118,33 @@ test('Store 容错：两文件坏行只跳过不抛，好行照常加载', () =>
   assert.equal(s2.isProcessed('om_good'), true);
   assert.equal(s2.size(), 1);
   assert.equal(s2.dequeue().messageId, 'om_q1');
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('Store 线程登记：record/find/drop，同 threadId 覆盖，跨重启仍在', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'thb-'));
+  const s1 = new Store(dir);
+  assert.equal(s1.findThread('omt_1'), null);
+  s1.recordThread('omt_1', { branch: 'bot/a', worktree: '/wt/bot__a', messageId: 'om_a' });
+  s1.recordThread('omt_1', { branch: 'bot/a-2', worktree: '/wt/bot__a-2', messageId: 'om_a' }); // 覆盖
+  s1.recordThread('omt_2', { branch: 'bot/b', worktree: '/wt/bot__b', messageId: 'om_b' });
+  assert.equal(s1.findThread('omt_1').branch, 'bot/a-2');
+  const s2 = new Store(dir); // 模拟重启
+  assert.equal(s2.findThread('omt_1').worktree, '/wt/bot__a-2');
+  assert.equal(s2.findThread('omt_2').branch, 'bot/b');
+  s2.dropThread('omt_1');
+  assert.equal(s2.findThread('omt_1'), null);
+  assert.equal(new Store(dir).findThread('omt_1'), null); // 注销也持久化
+  assert.equal(new Store(dir).findThread('omt_2').branch, 'bot/b'); // 只注销目标那条
+  rmSync(dir, { recursive: true, force: true });
+});
+test('Store 容错：threads.jsonl 坏行只跳过不抛，好行照常加载', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'thb-'));
+  const s1 = new Store(dir);
+  s1.recordThread('omt_good', { branch: 'bot/g', worktree: '/wt/g', messageId: 'om_g' });
+  appendFileSync(join(dir, 'threads.jsonl'), '{{{ 坏行\nnull\n{"info":{"branch":"无 threadId"}}\n');
+  const s2 = new Store(dir); // 不得 throw
+  assert.equal(s2.findThread('omt_good').branch, 'bot/g');
   rmSync(dir, { recursive: true, force: true });
 });
 

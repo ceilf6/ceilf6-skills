@@ -6,6 +6,7 @@ import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
 import { normalize } from './normalize.mjs';
 import { decide } from './filter.mjs';
+import { appendContextEntry } from './context.mjs';
 import { Store } from './state.mjs';
 import { makeLark } from './lark.mjs';
 import { runTask, killActiveChildren } from './runner.mjs';
@@ -25,7 +26,7 @@ function validateConfig(config) {
     // 下界 > 0：concurrency=0 会收单记 processed 却永不执行，taskTimeoutMs<=0 秒杀所有任务——都是静默失败形态。
     if (typeof config[k] !== 'number' || Number.isNaN(config[k]) || config[k] <= 0) errs.push(`${k}（需正数）`);
   }
-  for (const k of ['claimed', 'done', 'failed', 'escalate']) {
+  for (const k of ['claimed', 'done', 'failed', 'escalate', 'context']) {
     if (typeof config.reactions?.[k] !== 'string' || config.reactions[k] === '') errs.push(`reactions.${k}（需非空字符串）`);
   }
   return errs;
@@ -55,10 +56,42 @@ if (isMain) {
     while (!stopping && running < config.concurrency && store.size() > 0) {
       const task = store.dequeue();
       running++;
-      runTask(task, config, lark)
+      runTask(task, config, lark, {
+        onWorktreeReady: (info) => { if (info.threadId) store.recordThread(info.threadId, info); },
+      })
+        .then((out) => {
+          // skip 会把 worktree 与分支删掉，登记不注销的话后续回复会往已删目录写出无人读的文件。
+          if (out?.verdict === 'skip' && task.threadId) store.dropThread(task.threadId);
+        })
         .catch((e) => console.error(`[listener] runTask 异常：${e.message}`))
         .finally(() => { running--; pump(); });
     }
+  }
+
+  function admit(ev) {
+    store.markProcessed(ev.messageId); // 入队即记 processed：重放/重启不重跑
+    store.enqueue({
+      messageId: ev.messageId, senderOpenId: ev.senderOpenId, text: ev.text,
+      threadId: ev.threadId, receivedAt: new Date().toISOString(),
+    });
+    console.error(`[listener] 入队 ${ev.messageId}`);
+    pump();
+  }
+
+  // 话题内回复并进归属任务的 context/。已在跑的会话不会中途重读上下文，
+  // 语义是「存给下一次续入用」——回执文案与 runbook 不得暗示实时生效。
+  async function absorbReply(taskInfo, ev) {
+    let path;
+    try {
+      path = appendContextEntry(taskInfo, ev);
+    } catch (e) {
+      // 写盘失败只丢这条补充信息：退回新任务等于为一次 fs 故障凭空起一个无人值守 claude，代价更大。
+      console.error(`[listener] 上下文写入失败 ${ev.messageId}：${e.message}`);
+      return;
+    }
+    store.markProcessed(ev.messageId); // 先记后回执：addReaction 最坏要等两次 30s 超时，期间重放会重复写
+    console.error(`[listener] 话题回复并入上下文 ${ev.messageId} → ${path}`);
+    await lark.addReaction(ev.messageId, config.reactions.context);
   }
 
   let attempt = 0;
@@ -80,14 +113,20 @@ if (isMain) {
       try { raw = JSON.parse(line); } catch { return; }
       const ev = normalize(raw);
       const d = decide(ev, config, (id) => store.isProcessed(id));
-      if (d.action !== 'enqueue') {
+      if (d.action === 'ignore') {
         if (d.reason !== 'other-chat') console.error(`[listener] 忽略 ${ev?.messageId ?? '?'}（${d.reason}）`);
         return;
       }
-      store.markProcessed(ev.messageId); // 入队即记 processed：重放/重启不重跑
-      store.enqueue({ messageId: ev.messageId, senderOpenId: ev.senderOpenId, text: ev.text, receivedAt: new Date().toISOString() });
-      console.error(`[listener] 入队 ${ev.messageId}`);
-      pump();
+      // 归属任务已登记 → 并进它的上下文；未登记（bot 启动前的老话题）→ 退化为新任务候选。
+      if (d.action === 'reply') {
+        const taskInfo = store.findThread(ev.threadId);
+        if (taskInfo) {
+          // 本回调是同步的，未捕获的 rejection 会按默认策略掀掉常驻进程。
+          absorbReply(taskInfo, ev).catch((e) => console.error(`[listener] 回复处理异常：${e.message}`));
+          return;
+        }
+      }
+      admit(ev);
     });
     child.on('close', (code) => {
       if (stopping) return;

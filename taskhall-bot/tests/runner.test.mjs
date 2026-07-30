@@ -145,6 +145,54 @@ test('worktree 两次都建不出来：不静默丢单，走 fail 通道且进�
   rmFixture(root);
 });
 
+test('onWorktreeReady：worktree 就绪即回调，带 threadId/branch/worktree，且早于 claimed reaction', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  process.env.STUB_VERDICT = 'pass';
+  delete process.env.STUB_PROMPT_OUT;
+  const seen = [];
+  const out = await runTask({ ...TASK, threadId: 'omt_topic1' }, makeConfig(root, repo), fakeLark(calls), {
+    onWorktreeReady: (info) => { seen.push({ ...info, larkCallsSoFar: calls.length }); },
+  });
+  assert.equal(out.verdict, 'pass');
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].threadId, 'omt_topic1');
+  assert.equal(seen[0].branch, out.branch);
+  assert.equal(seen[0].worktree, out.worktree);
+  assert.equal(seen[0].messageId, TASK.messageId);
+  // 登记必须早于任何飞书动作：接单 reaction 之后才登记的话，中间到达的回复会找不到归属而另起任务。
+  assert.equal(seen[0].larkCallsSoFar, 0);
+  rmFixture(root);
+});
+
+test('onWorktreeReady 抛错不中断任务：verdict 照常 pass', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  process.env.STUB_VERDICT = 'pass';
+  delete process.env.STUB_PROMPT_OUT;
+  const out = await runTask(TASK, makeConfig(root, repo), fakeLark(calls), {
+    onWorktreeReady: () => { throw new Error('登记炸了'); },
+  });
+  assert.equal(out.verdict, 'pass');
+  assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'dm']);
+  rmFixture(root);
+});
+
+test('worktree 建不出来时不回调 onWorktreeReady：没有现场可登记', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-run-')));
+  const notARepo = join(root, 'not-a-repo');
+  mkdirSync(notARepo, { recursive: true });
+  const calls = [];
+  process.env.STUB_VERDICT = 'pass';
+  let called = 0;
+  const out = await runTask({ ...TASK, threadId: 'omt_topic1' }, makeConfig(root, notARepo), fakeLark(calls), {
+    onWorktreeReady: () => { called++; },
+  });
+  assert.equal(out.verdict, 'fail');
+  assert.equal(called, 0);
+  rmFixture(root);
+});
+
 test('claudeBin 缺失：spawn 失败不崩进程、按 fail 分发', async () => {
   const { root, repo } = makeFixture();
   const calls = [];

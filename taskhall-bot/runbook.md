@@ -55,9 +55,10 @@ install 脚本会逐项机械检查，缺一项即拒装（不再靠人肉核对
 1. 群里发一条真实小任务 → 任务消息出现 👀 → 完成后 ✅ + 私信收到 MR 链接。
 2. 发一条闲聊 → 👀 短暂闪现后撤销，群里零消息。闲聊也得 **≥10 字**（`minTextLength` 预滤）：更短的消息连 👀 都不会闪——那是预滤，不是 bot 没起来，日志里能看到 `忽略 <message_id>（too-short）`。
 3. 发一条模糊任务 → ⚠️ + thread 回帖恢复命令 + 同文私信；按命令 `cd <worktree> && claude ...` 能无损接管。
-4. reaction emoji 键若报错：按 API 错误提示改 config.json 的 `reactions` 键值，无需改码。
+4. **话题群**：在第 1 条那个任务的话题里回一句 → 该回复出现 📝，**不再另起任务**；`<worktree>/.harness-ceilf6/<分支名>/context/` 下多出一个 `<YYMMDD-HHmm>-im-<消息id后6位>.md`。📝 只表示「已存进上下文」，**正在跑的会话不会读到它**（上下文在会话启动时一次性装载），它对**下一次续入**才生效。
+5. reaction emoji 键若报错：按 API 错误提示改 config.json 的 `reactions` 键值，无需改码。
 
-> 本文里的 👀/✅/❌/⚠️ 是**语义**（接单/完成/失败/需人工），实际显示的表情由 config.json 的 `reactions` 键决定：当前 `claimed=THUMBSUP`，所以「接单」在群里显示为 👍 而不是 👀。验收时按第 4 条按需改键。
+> 本文里的 👀/✅/❌/⚠️/📝 是**语义**（接单/完成/失败/需人工/已存上下文），实际显示的表情由 config.json 的 `reactions` 键决定：当前 `claimed=THUMBSUP`，所以「接单」在群里显示为 👍 而不是 👀。验收时按第 5 条按需改键。
 
 ## 日常运维
 
@@ -66,6 +67,7 @@ install 脚本会逐项机械检查，缺一项即拒装（不再靠人肉核对
 - 停止：`launchctl unload ~/Library/LaunchAgents/com.ceilf6.taskhall-bot.plist`；重新启用：重跑 `bash taskhall-bot/install-taskhall.sh`（幂等，即重装重启）。
 - **有 PID 却毫无反应**（`launchctl list` 看得到进程，群里发消息没任何表情）：先核对 `config.json` 的 `chatId` 与目标群是否一致。chat 不匹配的消息是被**刻意静音**忽略的（否则机器人在的每个群都会刷屏日志），所以日志里连一行线索都不会有。群 id 用 `lark-cli` 的群列表查（`im +chat-list` / `im +chat-search`）。
 - 重置某条消息重新处理：从 `state/processed.jsonl` 删除该行后重启。**注意**：这只在事件流会再次投递同一 `message_id` 时才有效（平台重投）；日常想重跑一条任务，最可靠的做法是在群里重新发一条消息——那是新的 `message_id`，根本不必动 `processed.jsonl`。
+- 话题登记表 `state/threads.jsonl`（`thread_id → {branch, worktree, messageId}`）：话题内回复靠它找到归属任务。想让某话题的后续回复重新按新任务处理：删掉对应那一行后**重启** bot（该文件只在启动时读进内存）。
 - 升级：仓库拉最新后重跑 `install-taskhall.sh`；升级前在仓库根跑一遍测试：
 
   ```bash
@@ -110,5 +112,7 @@ worktree 存在、日志尾无 RESULT、消息还挂着 👀 —— 三者同时
 - token 消耗仅受墙钟超时（默认 2h）约束；CR 轮次无上限是用户裁定。
 - 回应（reaction/私信）尽力而为，失败不阻塞任务；产物真相在 worktree 与 MR。
 - 任务进行中重启 daemon 会永久滞留该任务（worktree/分支/👀 全部留存且不重试），处置见「重启恢复」。
+- 话题回复只在**归属任务已登记**时才并入上下文；未登记的话题（bot 启动前就存在的老话题，或首帖入队后 worktree 尚未建好那一小段窗口）里的回复会**退化为新任务候选**——按 v1 语义各起一次任务判定，多半以 skip 收场（👀 闪一下就撤）。
+- 登记只在判定 skip 时注销（此时 worktree 已删）。pass/fail/escalate 的登记长期留存，所以任务结束后在原话题继续回复仍会往那个 worktree 写条目；若该 worktree 已被人工删掉，写入会重建一个只含 `context/` 的空目录（无害，但清理时留意）。
 - 本机的 AI-IDE daemon 会往新建的 git 仓写 `.git/ai/`，偶尔会让 `git worktree remove` 撞上并发写而失败；runner 的清理分「worktree 移除」与「分支删除」两步、各自 3 次重试且互不牵连，仍失败则日志留「worktree 清理失败（留人工）」或「分支删除失败（留人工）」。属本机环境噪声，不是产品缺陷。
 - 测试 stub（`tests/stubs/lark-cli`）在 `event consume` 分支之前就记账，所以 listener 类测试里 **consume 占掉第 1 次调用**；将来若给 listener 测试加 `STUB_FAIL_FIRST=1`，失败的会是事件流而不是第一次 reaction。

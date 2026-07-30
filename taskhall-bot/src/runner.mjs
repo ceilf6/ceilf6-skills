@@ -96,7 +96,7 @@ async function cleanupWorktree(config, worktree, branch) {
   return removed && deleted;
 }
 
-export async function runTask(task, config, lark) {
+export async function runTask(task, config, lark, hooks = {}) {
   mkdirSync(config.worktreesDir, { recursive: true });
   mkdirSync(config.logsDir, { recursive: true });
   const base = `bot/${stamp(new Date(task.receivedAt || Date.now()))}-${task.messageId.slice(-6)}`;
@@ -118,6 +118,14 @@ export async function runTask(task, config, lark) {
         `❌ 任务未启动：worktree 创建失败（尚未运行，无任务日志）\nmessage_id：${task.messageId}\n仓库：${config.repoPath}\n首次错误：${firstErr.message}`);
       return { verdict: 'fail', branch, worktree, logPath: '' };
     }
+  }
+  // 现场一就绪就通告，早于任何飞书往返：话题内回复要能立刻找到归属任务的 worktree，
+  // 而 addReaction 最坏要等两次 30s 超时，这段窗口内到达的回复会被判成新任务。
+  try {
+    hooks.onWorktreeReady?.({ threadId: task.threadId ?? '', branch, worktree, messageId: task.messageId });
+  } catch (e) {
+    // 登记只决定「后续回复能否并入上下文」，不该连带丢掉已经建好现场的任务。
+    console.error(`[runner] onWorktreeReady 回调失败：${e.message}`);
   }
   const logPath = join(config.logsDir, `task-${task.messageId}.log`);
   const claimedRid = await lark.addReaction(task.messageId, config.reactions.claimed);

@@ -11,6 +11,9 @@ export function normalize(raw) {
     senderOpenId: raw.sender_id ?? raw.sender?.sender_id?.open_id ?? '',
     messageId,
     messageType: raw.message_type ?? raw.message?.message_type ?? '',
+    // 话题群：thread_id 是「同一任务」的关联键，root_id 仅回复才有——两者是首帖/回复的唯一判别依据。
+    threadId: raw.thread_id ?? raw.message?.thread_id ?? '',
+    rootId: raw.root_id ?? raw.message?.root_id ?? '',
     text: typeof raw.content === 'string' ? raw.content.trim() : '',
   };
 }

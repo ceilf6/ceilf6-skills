@@ -1,4 +1,4 @@
-// 文件持久化状态：processed.jsonl 只增；queue.jsonl 全量重写。
+// 文件持久化状态：processed.jsonl 只增；queue.jsonl 与 threads.jsonl 全量重写。
 // 事件总线可能重放消息，processed 去重是正确性底线。
 import { readFileSync, appendFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -8,8 +8,12 @@ export class Store {
     mkdirSync(stateDir, { recursive: true });
     this.processedPath = join(stateDir, 'processed.jsonl');
     this.queuePath = join(stateDir, 'queue.jsonl');
+    this.threadsPath = join(stateDir, 'threads.jsonl');
     this.processed = new Set(this.#readEntries(this.processedPath).map((e) => e.id));
     this.queue = this.#readEntries(this.queuePath);
+    this.threads = new Map(this.#readEntries(this.threadsPath)
+      .filter((e) => typeof e.threadId === 'string' && e.threadId && e.info)
+      .map((e) => [e.threadId, e.info]));
   }
   #readEntries(p) {
     if (!existsSync(p)) return [];
@@ -27,11 +31,15 @@ export class Store {
     }
     return out;
   }
-  #flushQueue() {
-    // 先写临时文件再 rename（同目录原子）：中途被杀不得截断在用队列。
-    const tmp = `${this.queuePath}.tmp`;
-    writeFileSync(tmp, this.queue.map((t) => JSON.stringify(t)).join('\n') + (this.queue.length ? '\n' : ''));
-    renameSync(tmp, this.queuePath);
+  #flushLines(path, entries) {
+    // 先写临时文件再 rename（同目录原子）：中途被杀不得截断在用状态。
+    const tmp = `${path}.tmp`;
+    writeFileSync(tmp, entries.map((e) => JSON.stringify(e)).join('\n') + (entries.length ? '\n' : ''));
+    renameSync(tmp, path);
+  }
+  #flushQueue() { this.#flushLines(this.queuePath, this.queue); }
+  #flushThreads() {
+    this.#flushLines(this.threadsPath, [...this.threads].map(([threadId, info]) => ({ threadId, info })));
   }
   isProcessed(id) { return this.processed.has(id); }
   markProcessed(id) {
@@ -46,4 +54,13 @@ export class Store {
     return t;
   }
   size() { return this.queue.length; }
+  // 线程登记表：thread_id → 任务现场，话题内回复靠它找到归属任务的 worktree。
+  // 同 threadId 覆盖：worktree 重建（同名冲突追加序号）后旧登记就是坏地址。
+  recordThread(threadId, info) { this.threads.set(threadId, info); this.#flushThreads(); }
+  findThread(threadId) { return this.threads.get(threadId) ?? null; }
+  dropThread(threadId) {
+    if (!this.threads.delete(threadId)) return false; // 无此登记就不空转写盘
+    this.#flushThreads();
+    return true;
+  }
 }
