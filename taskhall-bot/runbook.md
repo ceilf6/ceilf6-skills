@@ -26,19 +26,26 @@ install 脚本会逐项机械检查，缺一项即拒装（不再靠人肉核对
    - 发送消息（`im:message` 发送，群回帖与私信共用）
    - 消息表情回复（reaction 创建/删除）
 4. 事件订阅方式选择**长连接**（lark-cli event 使用）并订阅 `im.message.receive_v1`。
+   **免翻后台的做法**：直接跑 `lark-cli event consume im.message.receive_v1 --profile taskhall --as bot --max-events 1 --timeout 10s`，未订阅时它会在 `hint` 里给出一条 `open.feishu.cn/page/launcher?clientID=...&addons=...` 链接——打开（或用 `lark-cli auth qrcode '<链接>' --ascii` 转二维码扫码）即一键补齐所缺事件，比在后台菜单里找更快也不会漏。
 5. 发布版本 → 把机器人拉进「任务大厅」群。
+   **拉群可用命令代劳**（需另一个已完成 user 授权的 profile，且你本人在群里）：
+   `lark-cli im chat.members create --chat-id <群 chat_id> --member-id-type app_id --data '{"id_list":["<新应用的 cli_ App ID>"]}' --as user`
+   返回 `invalid_id_list` 为空即成功。
 
 ## 一次性：本机绑定与配置
 
 1. 建 profile 并绑定新应用的 appId/secret：`lark-cli config init --new --profile taskhall`。
    若报 `profile not found`，改用 `lark-cli config init --new --name taskhall` —— `--name` 是**创建**语义（新建/更新一个命名 profile），`--profile` 是**选择**语义（用已存在的那个）。
-2. 用户身份授权：`lark-cli auth login --profile taskhall`（Device Flow）。bot 身份靠 appId/secret 自动拿到，**user 身份必须做这一步**，而 `dmOpenId` 正是 user 身份的产物。
-3. **闸门，不满足不要往下走**：`lark-cli auth status --profile taskhall --json` 命令不报错，且输出含 `identities.user.openId`。
+2. 取 `dmOpenId`（下一步要填）。**推荐：免 user 授权的 bot 路径**——bot 已在群里时，用 bot 身份查群成员，从 `users[]` 里找到你自己那条的 `member_id`：
+   `lark-cli im +chat-members-list --chat-id <群 chat_id> --profile taskhall --as bot --member-types user`
+   这就是**该应用视角**下你的 open_id，与「一定要 user 授权」是两条独立的路——本项目只用 bot 身份发私信，不需要 user token。
+   若确实要 user 身份（例如想用 `auth status` 反查做交叉校验），再做 `lark-cli auth login --profile taskhall`（Device Flow）。
+3. **闸门（走了 user 授权才需要过）**：`lark-cli auth status --profile taskhall --json` 命令不报错，且输出含 `identities.user.openId`。走 bot 路径取值时跳过本步——此时 `auth status` 的 user 段是 `missing` 属正常，install 的交叉校验会告警放行。
    注意成功响应**没有 `ok` 字段**（顶层是 `appId/brand/defaultAs/identities/identity`）；`ok` 只出现在错误信封 `{"ok":false,"error":{...}}` 里，别拿 `ok:true` 当判据。
    若输出是错误信封：`profile not found` → 回第 1 步（用 `--name taskhall` 创建）；有 profile 但输出里没有 `identities.user.openId` → 回第 2 步（`auth login`）。
    profile 名须与 `config.json` 的 `profile` 字段一致（本手册与出厂配置都用 `taskhall`）；改名要同时改这两处。
-4. 编辑 `taskhall-bot/config.json`：填 `dmOpenId` = `lark-cli auth status --json --verify --profile taskhall` 的 `identities.user.openId`（形如 `ou_...`）；确认 repoPath / worktreesDir。
-   **`--profile taskhall` 不可省**：open_id 是 **app 维度**的，不带它会拿到另一个应用下同样合法的 `ou_` 值——正好穿过 install 脚本的 `ou_` 前缀守卫，装出一个 reaction 正常、私信全投空的半哑 bot。
+4. 编辑 `taskhall-bot/config.json`：填 `dmOpenId` = 上一步取到的 `ou_...`（bot 路径的 `member_id`，或 user 路径 `lark-cli auth status --json --verify --profile taskhall` 的 `identities.user.openId`）；确认 repoPath / worktreesDir。
+   **两条路径都必须带 `--profile taskhall`**：open_id 是 **app 维度**的，不带它会拿到另一个应用下同样合法的 `ou_` 值——正好穿过 install 脚本的 `ou_` 前缀守卫，装出一个 reaction 正常、私信全投空的半哑 bot。2026-07-30 首次部署实测：同一个人在默认 app 下是 `ou_c50103…`、在 taskhall app 下是 `ou_19c19d…`，毫无相似性可供肉眼识别。
    install 脚本会用 config 里的 profile 反查真值做交叉校验：**不一致直接拒装**；反查不到（未授权或离线）只告警放行，此时本步骤就是唯一防线。
    `config.json` 是 git 跟踪文件：填进去的是你的个人 open_id，**别提交**；日后升级拉取如报冲突，先 `git stash` 再拉，拉完 `git stash pop`。
 5. `bash taskhall-bot/install-taskhall.sh`。
