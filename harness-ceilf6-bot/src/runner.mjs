@@ -40,11 +40,17 @@ function renderPrompt(task, branch, chatId) {
     .replaceAll('{{TASK_TEXT}}', () => task.text);
 }
 
-function runClaude(config, cwd, prompt, logPath) {
+// 会话名 = 任务首行按 code point 截 20（slice 字节截断会撕裂 CJK/emoji）：
+// /resume 列表可辨识即可；子会话过计划门后会用 custom-title 覆盖成需求短题。
+function sessionName(text) {
+  return [...(text.split('\n')[0] ?? '')].slice(0, 20).join('') || 'harness 任务';
+}
+
+function runClaude(config, cwd, prompt, logPath, name) {
   return new Promise((resolveP) => {
     // detached：claude 自成进程组，超时对整组发信号。只杀直接子进程时，其残留孙进程
     // 会握住 stdout 管道使 'close' 无限推迟，超时机制形同虚设（实测 30s vs 1s）。
-    const child = spawn(config.claudeBin, ['-p', prompt, '--dangerously-skip-permissions'], { cwd, detached: true });
+    const child = spawn(config.claudeBin, ['-p', prompt, '--dangerously-skip-permissions', '--name', name], { cwd, detached: true });
     if (child.pid) activePids.add(child.pid); // spawn 失败时 pid 为 undefined，不登记
     const killGroup = (sig) => { try { process.kill(-child.pid, sig); } catch { /* 进程组已消失 */ } };
     const log = createWriteStream(logPath, { flags: 'a' });
@@ -144,7 +150,7 @@ export async function runTask(task, config, lark, hooks = {}) {
   const logPath = join(config.logsDir, `task-${task.messageId}.log`);
   const claimedRid = await lark.addReaction(task.messageId, config.reactions.claimed);
 
-  const { tail, timedOut } = await runClaude(config, worktree, renderPrompt(task, branch, config.chatId), logPath);
+  const { tail, timedOut } = await runClaude(config, worktree, renderPrompt(task, branch, config.chatId), logPath, sessionName(task.text));
   const result = parseResult(tail);
   const verdict = timedOut ? 'fail' : (result?.verdict ?? 'fail');
 

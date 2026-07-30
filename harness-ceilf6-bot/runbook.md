@@ -10,7 +10,7 @@ install 脚本会逐项机械检查，缺一项即拒装（不再靠人肉核对
 | `lark-cli` | 事件流与全部飞书回应 | `command -v`（还需已绑定 taskhall profile 且完成 user 授权，见「本机绑定与配置」） |
 | `claude` | 无人值守执行任务 | `command -v` |
 | `bytedcli` | harness 收尾建 MR | `command -v` |
-| `codex` | harness 的对抗式 CR 循环 | `command -v` |
+| `traex` | harness 的对抗式 CR 评审员（默认模型 gpt-5.6-sol，env `CODEX_BIN`/`CR_MODEL` 可覆盖） | `command -v`（还需 `traex login status` 已登录） |
 | `git`（真装了 CLT 的） | runner 建 worktree | `command -v` **加** `git --version`——macOS 的 `/usr/bin/git` 只是 Command Line Tools 的 shim，没装 CLT 时它照样在 PATH 里、`command -v` 照样过，只有执行才报错。报「git 不可用」就跑 `xcode-select --install` |
 
 这些必须在 PATH 里能 `command -v` 到 —— install 脚本把它们各自的目录写进 plist 的 `PATH`，launchd 启动的进程不读你的 shell profile（node 走 nvm 时尤其致命）。

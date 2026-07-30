@@ -42,18 +42,24 @@ test('pass：worktree 保留、✅、私信含 MR 链接、prompt 含任务原�
   const calls = [];
   process.env.STUB_VERDICT = 'pass';
   process.env.STUB_PROMPT_OUT = join(root, 'prompt.txt');
+  process.env.STUB_ARGS_OUT = join(root, 'args.txt');
   const out = await runTask(TASK, makeConfig(root, repo), fakeLark(calls));
   assert.equal(out.verdict, 'pass');
   assert.ok(existsSync(out.worktree));
   assert.ok(out.branch.startsWith('bot/'));
   assert.ok(out.branch.endsWith('654321'));
   assert.ok(readFileSync(process.env.STUB_PROMPT_OUT, 'utf8').includes('修一个真实任务 $&原样'));
+  const args = readFileSync(process.env.STUB_ARGS_OUT, 'utf8').split('\n');
+  const ni = args.indexOf('--name');
+  assert.ok(ni > -1, '--name 参数缺失');
+  assert.equal(args[ni + 1], '修一个真实任务 $&原样'); // 首行 12 code points，不截断
   assert.ok(readFileSync(out.logPath, 'utf8').includes('RESULT'));
   assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'del', 'dm']); // claimed → done → 撤 claimed → 私信
   assert.equal(calls[0][2], 'THUMBSUP');
   assert.equal(calls[1][2], 'DONE'); // 钉住 done 键，防 done/failed 互换后仍然全绿
   assert.equal(calls[2][2], 'rid_1'); // 撤的是接单那一枚，不是刚打上的终态
   assert.ok(calls[3][2].includes('https://mr/9'));
+  delete process.env.STUB_ARGS_OUT;
   rmFixture(root);
 });
 
@@ -214,5 +220,18 @@ test('claudeBin 缺失：spawn 失败不崩进程、按 fail 分发', async () =
   const out = await runTask(TASK, makeConfig(root, repo, { claudeBin: '/nonexistent-claude-bin' }), fakeLark(calls));
   assert.equal(out.verdict, 'fail');
   assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'del', 'dm']); // ❌ 路径；测试自然跑完即进程存活
+  rmFixture(root);
+});
+
+test('会话名：任务首行按 code point 截 20，跨行不带入', async () => {
+  const { root, repo } = makeFixture();
+  process.env.STUB_VERDICT = 'skip';
+  delete process.env.STUB_PROMPT_OUT;
+  process.env.STUB_ARGS_OUT = join(root, 'args.txt');
+  const longTask = { ...TASK, text: '一二三四五六七八九十一二三四五六七八九十超出部分\n第二行不应出现' };
+  await runTask(longTask, makeConfig(root, repo), fakeLark([]));
+  const args = readFileSync(process.env.STUB_ARGS_OUT, 'utf8').split('\n');
+  assert.equal(args[args.indexOf('--name') + 1], '一二三四五六七八九十一二三四五六七八九十');
+  delete process.env.STUB_ARGS_OUT;
   rmFixture(root);
 });

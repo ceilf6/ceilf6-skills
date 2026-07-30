@@ -8,7 +8,7 @@ node_bin=$(command -v node) || { echo "缺少依赖：node" >&2; exit 1; }
 command -v lark-cli >/dev/null || { echo "缺少依赖：lark-cli（事件流与所有飞书回应）" >&2; exit 1; }
 command -v claude >/dev/null || { echo "缺少依赖：claude（无人值守执行任务）" >&2; exit 1; }
 command -v bytedcli >/dev/null || { echo "缺少依赖：bytedcli（harness 收尾建 MR）" >&2; exit 1; }
-command -v codex >/dev/null || { echo "缺少依赖：codex（harness 的对抗式 CR 循环）" >&2; exit 1; }
+command -v traex >/dev/null || { echo "缺少依赖：traex（harness 的对抗式 CR 评审员）" >&2; exit 1; }
 command -v git >/dev/null || { echo "缺少依赖：git（runner 建 worktree）" >&2; exit 1; }
 # /usr/bin/git 是 Command Line Tools 的 shim：未装 CLT 时它照样在 PATH 里、command -v 照样过，
 # 只有真正执行才弹窗失败。runner 的第一个动作就是 git worktree add，这里必须用 --version 证伪。
@@ -53,7 +53,7 @@ fi
 mkdir -p "${here}/logs" "${here}/state"
 
 path_extra="$(dirname "$node_bin"):$(dirname "$(command -v lark-cli)"):$(dirname "$(command -v claude)")"
-path_extra="${path_extra}:$(dirname "$(command -v bytedcli)"):$(dirname "$(command -v codex)")"
+path_extra="${path_extra}:$(dirname "$(command -v bytedcli)"):$(dirname "$(command -v traex)")"
 # & 是 sed 替换里的「整个匹配」、\ 是 sed 的转义引导符（探针实证会被静默吞掉）、& 与 < 又是 XML
 # 元字符：含这些字符的路径不会报错，只会静默渲染出一份错误的 plist。
 case "${here}${node_bin}${path_extra}" in

@@ -2,6 +2,7 @@
 # 假 claude：按 STUB_VERDICT 输出 RESULT 行；hang 模式睡眠触发超时；把收到的 prompt 存档供断言。
 set -euo pipefail
 [ -n "${STUB_PROMPT_OUT:-}" ] && printf '%s\n' "$2" > "$STUB_PROMPT_OUT"
+[ -n "${STUB_ARGS_OUT:-}" ] && printf '%s\n' "$@" > "$STUB_ARGS_OUT"
 mode="${STUB_VERDICT:?需要 STUB_VERDICT}"
 case "$mode" in
   hang) sleep 30 ;;
