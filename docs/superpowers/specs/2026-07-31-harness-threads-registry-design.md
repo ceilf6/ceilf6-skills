@@ -54,6 +54,16 @@ harness-ceilf6 过计划门那一步（已在做会话改名，`CLAUDE_CODE_SESS
 
 默认只列未完成（`status != done`），`--all` 列全部。
 
+### 唤回（resume）
+
+`harness-threads resume <序号|关键词>`：切到该线程的 cwd、必要时切需求分支、`exec claude --resume <id>`，用户终端直接落在该线程里。
+
+**为什么必须由用户的 shell 执行、不能在会话内完成**：唤回等于在终端起一个新的 claude 进程接管该终端；跑在已有会话里的 agent 无法把用户终端交给另一个会话，最多打印命令。这也是本功能做成 PATH 命令而非技能的根本原因——技能的执行者是会话内的 agent，而此动作的执行者是用户的 shell。会话内仍可「看」（agent 跑 `list` 展示表格），但「进」只能用户自己做。
+
+技术前提已验证：resume 的作用域看**进程 cwd**，脚本内 `cd` 后 `exec` 的 claude 继承目标目录即可（探针实测）。
+
+守卫两条：目标检出**有未提交改动**时拒绝自动 `git checkout`，改为打印命令交用户判断（唤回动作不得弄丢用户手上的改动）；关键词匹配到多条时列出候选、不猜。
+
 ### 清理（prune）
 
 删除 ctx 目录已不存在的登记行（重写整表，此操作由用户显式触发、非并发路径，可安全读-改-写）。
@@ -64,9 +74,15 @@ harness-ceilf6 过计划门那一步（已在做会话改名，`CLAUDE_CODE_SESS
 
 ### 落点：不新增技能
 
-用户裁定不为此新增技能。实现落 `harness-ceilf6/scripts/threads.sh`，子命令 `register|list|prune`（与 `ctx-dir.sh resolve|init|new-entry|set-status` 同款形态）；`harness-ceilf6/SKILL.md` 两处增补：过门后步骤加登记动作、增补一行说明 list 用法。登记表由 harness-ceilf6 端到端拥有（它写、它读），harness-context 保持「当前仓库需求仓管」的作用域不变。
+用户裁定不为此新增技能。实现落 `harness-ceilf6/scripts/threads.sh`，子命令 `register|list|resume|prune`（与 `ctx-dir.sh resolve|init|new-entry|set-status` 同款形态）；`harness-ceilf6/SKILL.md` 两处增补：过门后步骤加登记动作、增补一行说明 list 用法。登记表由 harness-ceilf6 端到端拥有（它写、它读），harness-context 保持「当前仓库需求仓管」的作用域不变。
 
-脚本可直接执行、无需加载技能：`bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh list`。
+### 全局命令
+
+`~/.local/bin/harness-threads` 软链至仓库内 `harness-ceilf6/scripts/threads.sh`。该目录已在 PATH（`traex`/`gh`/`rg` 同处），四个候选名均无冲突。
+
+选软链而非 shell alias：alias 只在交互式 bash 生效，PATH 命令在 bash / zsh / 脚本中一致可用；且与技能的 symlink 安装同源（仓库即真源，改仓库即生效）。由 `install-harness.sh` 创建，换机或误删跑一次修复。
+
+**实现注意**：经软链调用时 `$0` 指向 `~/.local/bin/harness-threads`，`dirname "$0"` 得到的是 bin 目录而非脚本所在目录。本脚本只读登记表与各 `meta.json`、不依赖同目录兄弟文件，故不受影响；若后续需要引用兄弟脚本，必须先解析真实路径（同 bot listener 的 `realpathSync` 教训）。
 
 ## 验收
 
@@ -75,9 +91,15 @@ harness-ceilf6 过计划门那一步（已在做会话改名，`CLAUDE_CODE_SESS
 - list：分支一致时唤回命令不含 checkout；不一致时含 `git checkout <需求分支>`。
 - list：ctx 目录被删 → 标失效；会话文件缺失 → 标会话丢失但需求仍列出。
 - 默认隐藏 `status=done`，`--all` 显示。
+- resume：序号命中唯一线程时切目录+切分支+接管终端；关键词多命中时列候选并退出、不猜；目标检出有未提交改动时拒绝自动 checkout、改打印命令。
 - prune 删除失效行、保留有效行。
+- 全局命令：`harness-threads` 在 PATH 中可直接调用；`install-harness.sh` 重复执行幂等（软链已存在时覆盖为正确指向）。
 - 三条回填线程在 list 中正确显示（含 byteview-web 的分支漂移标注）。
 
 ## 不做
 
-新增技能；把状态字段冗余进登记表；跨机同步（登记表是本机状态）；自动执行唤回（只给命令，执行由用户决定——`--resume` 会把线程接管到当前终端，不该由列表命令代劳）。
+新增技能；把状态字段冗余进登记表；跨机同步（登记表是本机状态）；在 Claude 会话内代替用户执行唤回（物理上不可能，见 resume 一节）。
+
+## 修订记录
+
+- 2026-07-31 初稿曾把「自动执行唤回」列为不做，理由是 `--resume` 会接管终端。经用户追问确认这正是「唤醒」的预期语义，改为提供 `resume` 子命令 + 全局命令；被接管的是用户自己主动运行该命令的终端，无副作用。
