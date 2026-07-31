@@ -9,7 +9,9 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 
 **开发者是当前会话本身**（不 shell 出 claude 子进程）；只有评审员是外部进程。用户全程在场、随时可插话纠偏。
 
-机械层脚本（均在 `~/.claude/skills/harness-ceilf6/scripts/`，依赖 git、jq、traex CLI）：`cr-round.sh`（CR 轮次）、`squash-branch.sh`（收尾压单提交）、`rename-session.sh`（会话改名）。评审员默认 `traex -m gpt-5.6-sol`，env `CODEX_BIN` / `CR_MODEL` 可覆盖。
+机械层脚本（均在 `~/.claude/skills/harness-ceilf6/scripts/`，依赖 git、jq、traex CLI）：`cr-round.sh`（CR 轮次）、`squash-branch.sh`（收尾压单提交）、`rename-session.sh`（会话改名）、`threads.sh`（线程全局登记与唤回，另经 `~/.local/bin/harness-threads` 暴露为全局命令）。
+
+**跨线程总览**：`harness-threads` 列出本机所有 harness 线程（检出 / 需求分支 / 状态 / 唤回命令，并标注检出分支漂移与会话丢失）。**唤回只能由用户的 shell 执行**（`harness-threads resume <序号|关键词>`）——它要起一个新 claude 进程接管终端，会话内的 agent 做不到；在会话里能做的只是列表与给出命令。评审员默认 `traex -m gpt-5.6-sol`，env `CODEX_BIN` / `CR_MODEL` 可覆盖。
 
 ## 模式
 
@@ -40,6 +42,7 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 2. **需求短题**：从 plan.md 目标提炼 ≤20 字短题；会话名 / wiki 子文档标题 / MR 标题三处同源用它；
 3. **会话改名**：`bash ~/.claude/skills/harness-ceilf6/scripts/rename-session.sh --title '<短题>'`（同名自动跳过；非会话环境自动跳过，不阻塞）。bot 无人值守场景 runner 已用 `--name` 给初始名，这里过门后覆盖为短题；
 4. **需求 wiki 子文档**：meta.wiki_url 已指向「02-需求」（`JhrcwNjUdiUXPMkIUnWcIiOdntc`）下的文档（用 lark-cli 的 wiki 节点查询确认其父节点，机械用法见 `lark-cli skills read lark-wiki`）→ 复用不重建；否则在「02-需求」下新建子文档（space_id `7658115519924686035`，`--obj-type docx`，标题 = 短题），初始内容 = plan 四段 + 来源（bot 场景带 chat/message id），并回写 meta.wiki_url（`jq '.wiki_url="<url>"' meta.json > tmp && mv tmp meta.json`）。wiki 操作失败如实报告后继续——文档可收尾时补建，不阻塞开发。
+5. **登记线程**：`bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh register --ctx-dir "$CTX" --title '<短题>'`。登记表 `~/.harness-ceilf6/threads.jsonl` 是所有 harness 线程的全局索引，session_id 取自 `CLAUDE_CODE_SESSION_ID`（取不到则记 null，唤回退化为新会话续入）。**必须在会话本身的 cwd 下执行**：`claude --resume` 严格按进程 cwd 判定作用域，登记的 cwd 差一层就恢复不了。续入时重复登记即覆盖（读时 last-wins）。
 
 ### 阶段 1：开发（TDD 红绿纪律）
 
