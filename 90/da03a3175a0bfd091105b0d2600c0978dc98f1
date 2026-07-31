@@ -1,0 +1,29 @@
+harness-ceilf6/scripts/base-ref.sh
+  s_c00b1287bcdd38::t_a23ec6e9b52136 1-26
+harness-ceilf6/scripts/cr-round.sh
+  s_c00b1287bcdd38::t_4d32a0f40d21ff 17-19,40,92
+harness-ceilf6/scripts/squash-branch.sh
+  s_c00b1287bcdd38::t_02fda8c2795cb6 11-15,38-39,53
+harness-ceilf6/tests/test-cr-round.sh
+  s_c00b1287bcdd38::t_5a032e3bac1bc6 146-153
+harness-ceilf6/tests/test-squash-branch.sh
+  s_c00b1287bcdd38::t_89f613f83cd847 87-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "90da03a3175a0bfd091105b0d2600c0978dc98f1",
+  "prompts": {},
+  "sessions": {
+    "s_c00b1287bcdd38": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_c00b1287bcdd38",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
