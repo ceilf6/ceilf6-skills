@@ -8,6 +8,11 @@ die() { echo "squash-branch: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "缺少依赖：$1"; }
 need jq; need git
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+BASE_LIB="$SCRIPT_DIR/base-ref.sh"
+[ -f "$BASE_LIB" ] || die "缺少 $BASE_LIB"
+. "$BASE_LIB"
+
 CTX_DIR=""; MSG_FILE=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -30,7 +35,8 @@ BASE=$(jq -r .base_branch "$CTX_DIR/meta.json")
 BRANCH=$(git -C "$REPO_ROOT" symbolic-ref --short -q HEAD) || die "detached HEAD：无法确定分支，不做 squash"
 [ "$BRANCH" != "$BASE" ] || die "当前在 base 分支（${BRANCH}）上，拒绝 squash"   # ${} 必须：bash 3.2
 OLD=$(git -C "$REPO_ROOT" rev-parse HEAD)
-MB=$(git -C "$REPO_ROOT" merge-base "$BASE" HEAD) || die "merge-base ${BASE}...HEAD 求解失败"
+BASE_REF=$(resolve_base_ref "$REPO_ROOT" "$BASE")
+MB=$(git -C "$REPO_ROOT" merge-base "$BASE_REF" HEAD) || die "merge-base ${BASE_REF}...HEAD 求解失败"
 [ "$OLD" != "$MB" ] || die "没有可 squash 的提交（HEAD 即 merge-base）"
 
 # 备份指针：单一引用每次覆盖，更早状态靠 reflog
@@ -44,6 +50,6 @@ if ! git -C "$REPO_ROOT" diff --quiet "$OLD" HEAD; then
   die "等价验证失败（diff 非空），已回退到旧 HEAD ${OLD}"   # ${} 必须：bash 3.2
 fi
 
-echo "squash-branch: ${BRANCH} 已压成单提交"   # ${} 必须：bash 3.2
+echo "squash-branch: ${BRANCH} 已压成单提交（base：${BASE_REF}）"   # ${} 必须：bash 3.2
 echo "  旧 HEAD：${OLD}（备份：harness-backup/${BRANCH}）"   # ${} 必须：bash 3.2
 echo "  新 HEAD：$NEW"

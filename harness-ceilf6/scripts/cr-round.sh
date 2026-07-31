@@ -14,6 +14,9 @@ CODEX_BIN="${CODEX_BIN:-traex}"
 CR_MODEL="${CR_MODEL:-gpt-5.6-sol}"
 
 need jq; need git; need "$CODEX_BIN"
+BASE_LIB="$SKILL_DIR/scripts/base-ref.sh"
+[ -f "$BASE_LIB" ] || die "缺少 $BASE_LIB"
+. "$BASE_LIB"
 [ -f "$SCHEMA" ] || die "缺少 $SCHEMA"
 [ -f "$TEMPLATE" ] || die "缺少 $TEMPLATE"
 [ -f "$VALIDATE" ] || die "缺少 $VALIDATE"
@@ -34,6 +37,7 @@ CTX_DIR=$(cd "$CTX_DIR" && pwd)
 REPO_ROOT=$(git -C "$CTX_DIR" rev-parse --show-toplevel)
 BASE=$(jq -r .base_branch "$CTX_DIR/meta.json")
 { [ -n "$BASE" ] && [ "$BASE" != null ]; } || die "meta.base_branch 缺失"
+BASE_REF=$(resolve_base_ref "$REPO_ROOT" "$BASE")
 
 # ---- 轮次选择 ----
 # 最高已存在轮次 H（目录名须为合法数字；无则 H=0）
@@ -85,7 +89,7 @@ INSTR="$ROUND_DIR/instructions.md"
   echo "## 评审范围"
   echo
   # traex 为 codex fork，同约束：codex 0.124+ 的 exec review --base 与自定义指令互斥（openai/codex#22145），故用 plain exec、范围钉死在指令内
-  echo "本轮评审对象是当前分支相对 base 分支的全部已提交变更。先运行 \`git diff ${BASE}...HEAD\`（必要时配合 \`git log ${BASE}..HEAD --oneline\`）获取 diff 再开始评审；工作区未提交内容不在评审范围内。"
+  echo "本轮评审对象是当前分支相对 base 分支的全部已提交变更。先运行 \`git diff ${BASE_REF}...HEAD\`（必要时配合 \`git log ${BASE_REF}..HEAD --oneline\`）获取 diff 再开始评审；工作区未提交内容不在评审范围内。"
   echo
   echo "## 验收基准（plan.md 全文）"
   echo

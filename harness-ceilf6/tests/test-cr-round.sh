@@ -143,5 +143,13 @@ STUB_STATE="$state" STUB_MODE=pass CODEX_BIN="$STUB" CR_MODEL=other-model bash "
 grep -qx -- 'other-model' "$state/args" && ok "CR_MODEL 可覆盖" || bad "CR_MODEL 可覆盖"
 cleanup_repo
 
+echo "== 评审范围随 base 解析走远程跟踪 ref =="
+make_ctx
+git -C "$R" update-ref refs/remotes/origin/master "$(git -C "$R" rev-parse master)"
+state=$(mktemp -d)
+STUB_STATE="$state" STUB_MODE=pass CODEX_BIN="$STUB" bash "$CR" --dir "$ctx" >/dev/null
+grep -q 'git diff origin/master\.\.\.HEAD' "$ctx/cr/round-1/instructions.md" && ok "范围用 origin/master" || bad "范围未用 origin/master"
+cleanup_repo
+
 echo; echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" = 0 ]

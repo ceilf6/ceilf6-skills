@@ -84,5 +84,32 @@ MSG=$(mktemp); printf 'x\n' > "$MSG"
 check_die "零提交拒绝" '没有可 squash' bash "$SQ" --dir "$ctx2" --message-file "$MSG"
 cleanup_repo
 
+echo "== 本地 base 落后时按远程跟踪 ref 求分叉点（不吞上游提交）=="
+# 真机成因：worktree 流从 origin/<base> 切分支，本地 base 不参与、必然滞后（实测落后 16 提交）。
+# 按本地 base 求 merge-base 会把上游别人的提交压进本分支的单提交里。
+R=$(mktemp -d); R=$(cd "$R" && pwd -P)
+git -C "$R" init -q -b master
+git -C "$R" config user.email t@t
+git -C "$R" config user.name t
+echo base > "$R/f.txt"; git -C "$R" add .; git -C "$R" commit -qm init
+STALE=$(git -C "$R" rev-parse HEAD)
+echo up1 >> "$R/f.txt"; git -C "$R" commit -qam 'upstream 1'
+echo up2 >> "$R/f.txt"; git -C "$R" commit -qam 'upstream 2'
+UPSTREAM=$(git -C "$R" rev-parse HEAD)
+git -C "$R" update-ref refs/remotes/origin/master "$UPSTREAM"
+git -C "$R" checkout -q -b feat/y "$UPSTREAM"  # 分支从远程 tip 切出（须先离开 master 才能改它）
+git -C "$R" branch -f master "$STALE"          # 本地 master 停在两个提交之前
+ctx3="$R/.harness-ceilf6/feat__y"; mkdir -p "$ctx3"
+jq -n '{branch:"feat/y", base_branch:"master"}' > "$ctx3/meta.json"
+echo mine >> "$R/f.txt"; git -C "$R" commit -qam '我的提交'
+MSG=$(mktemp); printf 'feat(y): 我的改动\n' > "$MSG"
+bash "$SQ" --dir "$ctx3" --message-file "$MSG"
+[ "$(git -C "$R" rev-parse HEAD^)" = "$UPSTREAM" ] && ok "父提交是远程 tip" || bad "父提交: $(git -C "$R" rev-parse --short HEAD^)（应为远程 tip ${UPSTREAM}）"
+# 直接钉危害：评审员与 MR 看到的是 origin/master...HEAD，父提交挂错会让上游改动混进本次 diff
+if git -C "$R" diff origin/master...HEAD | grep -q '^+up'; then bad "MR 视角 diff 混入上游改动"; else ok "MR 视角 diff 只含本人改动"; fi
+git -C "$R" merge-base --is-ancestor "$UPSTREAM" HEAD && ok "上游提交仍在历史中" || bad "上游提交被吞"
+rm -f "$MSG"
+cleanup_repo
+
 echo; echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" = 0 ]
