@@ -29,6 +29,7 @@ PAGE = """<!doctype html>
  .n-done{color:#16a34a}
  .n-cur{color:#ca8a04;font-weight:700}
  .n-todo{color:#dc2626}
+ .n-final{color:#111}
  .arrow{color:#bbb}
  .node{font-weight:600}
  .cmd{display:flex;gap:8px;align-items:center;margin-top:6px}
@@ -81,7 +82,7 @@ function renderNodes(t){
     wrap.appendChild(arrow());
   });
   const done = cur >= ORDER.length;
-  wrap.appendChild(chip((done ? '● ' : '○ ') + '可交付', done ? 'n-done' : 'n-todo',
+  wrap.appendChild(chip((done ? '● ' : '○ ') + '可交付', 'n-final',
     done ? '点击撤销可交付（自测回到未完成）' : '点击全部完成',
     done ? () => { if (confirm('撤销可交付？自测节点将回到未完成')) setNode(t.ctx_dir, 'selftest_done'); }
          : () => setNode(t.ctx_dir, 'delivered')));
