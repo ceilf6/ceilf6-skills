@@ -288,5 +288,39 @@ echo "$out" | jq -e 'length == 2 and ([.[] | select(.branch=="feat/badmeta")][0]
 echo "$out" | jq -e '.[] | select(.branch=="feat/badmeta") | .node == "-"' >/dev/null && ok "空 meta 节点列降级 -" || bad "空 meta 节点列: $(echo "$out" | jq -r '.[] | select(.branch=="feat/badmeta") | .node')"
 cleanup_env
 
+echo "== set-node：绝对定位（推进/回退/delivered） =="
+make_env
+make_repo repo-u feat/setnode developing
+bash "$TH" set-node --ctx-dir "$CTX" cr_passed >/dev/null
+jq -e '.milestones | has("plan_gate") and has("dev_done") and (has("cr_passed") | not)' "$CTX/meta.json" >/dev/null \
+  && ok "推进：前序补点、目标及以后为空" || bad "推进结果: $(jq -c .milestones "$CTX/meta.json")"
+old=$(jq -r '.milestones.plan_gate' "$CTX/meta.json")
+bash "$TH" set-node --ctx-dir "$CTX" selftest_done >/dev/null
+[ "$(jq -r '.milestones.plan_gate' "$CTX/meta.json")" = "$old" ] && ok "既有时间戳保留" || bad "既有时间戳被覆盖"
+jq -e '.milestones | has("human_cr_done") and (has("selftest_done") | not)' "$CTX/meta.json" >/dev/null \
+  && ok "推进到自测前全点亮" || bad "推进到自测: $(jq -c .milestones "$CTX/meta.json")"
+bash "$TH" set-node --ctx-dir "$CTX" dev_done >/dev/null
+jq -e '.milestones == {"plan_gate": .milestones.plan_gate}' "$CTX/meta.json" >/dev/null \
+  && ok "回退：目标及之后清除" || bad "回退结果: $(jq -c .milestones "$CTX/meta.json")"
+bash "$TH" set-node --ctx-dir "$CTX" delivered >/dev/null
+[ "$(jq -r '.milestones | length' "$CTX/meta.json")" = 6 ] && ok "delivered 六节点全点亮" || bad "delivered: $(jq -c .milestones "$CTX/meta.json")"
+out=$(bash "$TH" progress --ctx-dir "$CTX")
+has "delivered 后可交付点亮" '● 可交付' "$out"
+check_die "set-node 未知目标" '未知目标' bash "$TH" set-node --ctx-dir "$CTX" bogus
+check_die "set-node 缺参数" '用法' bash "$TH" set-node --ctx-dir "$CTX"
+cleanup_env
+
+echo "== list --json：current/cr_rounds/resume 字段 =="
+make_env
+make_repo repo-v feat/fields awaiting_human
+mk_session sid-fields
+(cd "$REPO" && CLAUDE_CODE_SESSION_ID=sid-fields bash "$TH" register --ctx-dir "$CTX" --title '字段') >/dev/null
+mkdir -p "$CTX/cr/round-1" "$CTX/cr/round-2"
+out=$(bash "$TH" list --json)
+echo "$out" | jq -e '.[0].current == "human_cr_done"' >/dev/null && ok "current 机器节点" || bad "current: $(echo "$out" | jq -r '.[0].current')"
+echo "$out" | jq -e '.[0].cr_rounds == 2' >/dev/null && ok "cr_rounds 计数" || bad "cr_rounds: $(echo "$out" | jq -r '.[0].cr_rounds')"
+echo "$out" | jq -e '.[0].resume | test("--resume sid-fields")' >/dev/null && ok "resume 命令含会话恢复" || bad "resume: $(echo "$out" | jq -r '.[0].resume')"
+cleanup_env
+
 echo; echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" = 0 ]

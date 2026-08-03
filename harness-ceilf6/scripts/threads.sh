@@ -156,6 +156,33 @@ cmd_progress() {
   progress_line "$ctx/meta.json"
 }
 
+cmd_set_node() { # 看板手控入口：把当前节点钉为 <目标>——其前节点保留既有时间戳/缺则补点，其及其后删除；
+                 # delivered = 六节点全点亮。绝对定位语义下 cr_passed 可作为位置的一部分被补点，
+                 # 单点 mark 对 cr_passed 的拒绝不适用于此（那防的是手滑，这里是人为定位）。
+  local ctx="" target="" meta tmp
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --ctx-dir) ctx="${2:?--ctx-dir 需要值}"; shift 2 ;;
+      -*) usage ;;
+      *) if [ -z "$target" ]; then target="$1"; else usage; fi; shift ;;
+    esac
+  done
+  if [ -z "$ctx" ] || [ -z "$target" ]; then die "用法：set-node --ctx-dir <路径> <节点|delivered>"; fi
+  meta="$ctx/meta.json"
+  [ -f "$meta" ] || die "缺 meta.json：${ctx}"
+  case " $MILESTONES delivered " in *" $target "*) ;; *) die "未知目标：${target}（可用：${MILESTONES} delivered）" ;; esac
+  tmp=$(mktemp)
+  jq --arg order "$MILESTONES" --arg target "$target" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+    ($order | split(" ")) as $ord
+    | (.milestones // {}) as $old
+    | (if $target == "delivered" then ($ord | length) else ($ord | index($target)) end) as $i
+    | .milestones = (reduce $ord[:$i][] as $k ({}; .[$k] = ($old[$k] // $t)))
+  ' "$meta" > "$tmp" || die "meta 不可解析：${meta}"
+  mv "$tmp" "$meta"
+  echo "harness-threads: 当前节点已钉为 ${target}"
+  progress_line "$meta"
+}
+
 cmd_mark() {
   local ctx="" a="" b="" node
   while [ $# -gt 0 ]; do
@@ -191,6 +218,7 @@ usage() {
   ht mark <序号|关键词> <human-cr|selftest>   标记人工节点完成
   ht mark --ctx-dir <路径> <节点>             直指形式（cr_passed 除外，供会话流程）
   ht progress --ctx-dir <路径>      输出该线程节点进度图
+  ht set-node --ctx-dir <路径> <节点|delivered>   看板手控：当前节点绝对定位（推进/回退）
   ht web [--port 7657]              本地节点看板（127.0.0.1）
 EOF
   exit 1
@@ -295,7 +323,7 @@ cmd_register() {
 }
 
 cmd_list_json() { # <show_all>：web 看板数据源；文本列表与看板共用 enumerate 聚合
-  local show_all="$1" out idx ctx cwd branch sid title status cur sess nodecol ms prog
+  local show_all="$1" out idx ctx cwd branch sid title status cur sess nodecol ms prog curnode crr resume
   # 必须先命令替换捕获再喂 heredoc，不能 `done < <(enumerate ...)`：进程替换子 shell 里
   # errexit 存活，某行 meta.json 坏掉会让 enumerate 中途退出，数组静默截断却仍 rc=0。
   out=$(enumerate "$show_all")
@@ -304,12 +332,19 @@ cmd_list_json() { # <show_all>：web 看板数据源；文本列表与看板共�
       ms=$(jq -c '.milestones // {}' "$ctx/meta.json" 2>/dev/null || echo '{}')
       # 零字节 meta.json 下 jq 退出 0 且零输出，|| 分支不触发，空串会让 --argjson 直接报错
       [ -n "$ms" ] || ms='{}'
-      prog=""
-      [ -f "$ctx/meta.json" ] && prog=$(progress_line "$ctx/meta.json")
+      prog=""; curnode="-"
+      if [ -f "$ctx/meta.json" ]; then
+        prog=$(progress_line "$ctx/meta.json")
+        curnode=$(current_node "$ctx/meta.json")
+      fi
+      crr=$(find "$ctx/cr" -maxdepth 1 -name 'round-*' 2>/dev/null | grep -c . || true)
+      resume=$(wake_cmd "$cwd" "$branch" "$sid" "$cur")
       jq -cn --arg idx "$idx" --arg ctx "$ctx" --arg branch "$branch" --arg title "$title" \
         --arg status "$status" --arg node "$nodecol" --arg progress "$prog" --argjson ms "$ms" \
+        --arg current "$curnode" --arg crr "$crr" --arg resume "$resume" \
         '{idx:($idx|tonumber), ctx_dir:$ctx, branch:$branch, title:$title, status:$status,
-          node:$node, progress:$progress, milestones:$ms}'
+          node:$node, current:$current, cr_rounds:($crr|tonumber), progress:$progress,
+          resume:$resume, milestones:$ms}'
     done <<EOF
 $out
 EOF
@@ -447,6 +482,7 @@ case "$cmd" in
   web) cmd_web "$@" ;;
   mark) cmd_mark "$@" ;;
   progress) cmd_progress "$@" ;;
+  set-node) cmd_set_node "$@" ;;
   -h|--help) usage ;;
   *) echo "harness-threads: 未知子命令 ${cmd}" >&2; usage ;;
 esac

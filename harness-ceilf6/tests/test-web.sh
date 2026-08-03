@@ -47,5 +47,17 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/
 code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/nope")
 [ "$code" = 404 ] && ok "未知路径 404" || bad "未知路径: $code"
 
+out=$(curl -s "http://127.0.0.1:${PORT}/api/threads")
+echo "$out" | jq -e '.[0] | has("current") and has("cr_rounds") and has("resume")' >/dev/null \
+  && ok "看板字段 current/cr_rounds/resume" || bad "看板字段: $out"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/set-node" \
+  -d "{\"ctx_dir\": \"$CTX\", \"target\": \"dev_done\"}")
+[ "$code" = 200 ] && ok "set-node 接口 200" || bad "set-node 接口: $code"
+jq -e '.milestones | has("plan_gate") and (has("dev_done") | not)' "$CTX/meta.json" >/dev/null \
+  && ok "set-node 回退落盘" || bad "set-node 落盘: $(jq -c .milestones "$CTX/meta.json")"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/set-node" \
+  -d "{\"ctx_dir\": \"$CTX\", \"target\": \"bogus\"}")
+[ "$code" = 400 ] && ok "set-node 非法目标 400" || bad "set-node 非法目标: $code"
+
 echo; echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" = 0 ]
