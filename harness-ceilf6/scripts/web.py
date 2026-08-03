@@ -98,9 +98,7 @@ async function load(){
     d.className = 'card';
     const h = document.createElement('div');
     const b = document.createElement('b'); b.textContent = t.title || t.branch;
-    const st = document.createElement('span'); st.textContent = ' [' + t.status + '] ';
-    const nd = document.createElement('span'); nd.className = 'node'; nd.textContent = t.node;
-    h.appendChild(b); h.appendChild(st); h.appendChild(nd);
+    h.appendChild(b);
     d.appendChild(h);
     d.appendChild(renderNodes(t));
     if (t.resume){
