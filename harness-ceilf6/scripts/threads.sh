@@ -21,11 +21,11 @@ PROJ="${CLAUDE_PROJECTS_DIR:-$HOME/.claude/projects}"
 
 usage() {
   cat >&2 <<'EOF'
-用法:
-  harness-threads [list] [--all]     列出线程（默认隐藏 status=done）
-  harness-threads register --ctx-dir <路径> [--title <短题>] [--session-id <id>]
-  harness-threads resume <序号|关键词> [--dry-run]
-  harness-threads prune              清除 ctx 目录已消失的登记行
+用法（harness-threads 与短别名 ht 等价）:
+  ht [list] [--all]     列出线程（默认隐藏 status=done）
+  ht register --ctx-dir <路径> [--title <短题>] [--session-id <id>]
+  ht resume <序号|关键词> [--dry-run]
+  ht prune              清除 ctx 目录已消失的登记行
 EOF
   exit 1
 }
@@ -82,6 +82,19 @@ wake_cmd() {
   printf '%s' "$c"
 }
 
+# 同 wake_cmd，但拆成两行便于逐行复制：cd 一行，切分支+恢复一行
+wake_lines() {
+  local ind="$1" cwd="$2" branch="$3" sid="$4" cur="$5" second
+  printf '%scd %s\n' "$ind" "$cwd"
+  if [ -n "$sid" ]; then
+    second="claude --resume $sid"
+    if [ "$cur" != "$branch" ]; then second="git checkout $branch && $second"; fi
+  else
+    second="claude   # 无 session_id：新开会话，装载 harness-context 续入"
+  fi
+  printf '%s%s\n' "$ind" "$second"
+}
+
 cmd_register() {
   local ctx="" title="" sid="${CLAUDE_CODE_SESSION_ID:-}" branch cwd
   while [ $# -gt 0 ]; do
@@ -108,8 +121,12 @@ cmd_register() {
   echo "harness-threads: 已登记 ${branch}（${cwd}）"
 }
 
+# 卡片式而非对齐表格：分支名/中文标题长短悬殊，printf 又按字节算宽，列对齐必崩。
+# 每条：标题行（人先认需求）→ 位置行（检出目录 · 分支）→ 可逐行复制的唤回命令，条目间空行分隔。
 cmd_list() {
-  local show_all=0 out idx ctx cwd branch sid title status cur sess mark line
+  local show_all=0 out idx ctx cwd branch sid title status cur sess mark first=1
+  local BOLD="" DIM="" RST=""
+  if [ -t 1 ]; then BOLD=$'\033[1m'; DIM=$'\033[2m'; RST=$'\033[0m'; fi
   while [ $# -gt 0 ]; do
     case "$1" in --all) show_all=1; shift ;; *) usage ;; esac
   done
@@ -123,13 +140,16 @@ cmd_list() {
     mark=""
     if [ -n "$cur" ] && [ "$cur" != "$branch" ]; then mark="${mark}  ⚠ 检出在 ${cur}"; fi
     if [ -n "$sid" ] && [ "$sess" = 0 ]; then mark="${mark}  [会话丢失]"; fi
-    line="$(printf '%2s  %-16s %-34s %-14s' "$idx" "$(basename "$cwd")" "$branch" "$status")"
-    if [ -n "$title" ]; then line="${line} ${title}"; fi
-    echo "${line}${mark}"
-    echo "    唤回: $(wake_cmd "$cwd" "$branch" "$sid" "$cur")"
+    [ "$first" = 1 ] || echo
+    first=0
+    printf '%s%2s  %s  [%s]%s%s\n' "$BOLD" "$idx" "${title:-$branch}" "$status" "$RST" "$mark"
+    printf '    %s%s · %s%s\n' "$DIM" "$(basename "$cwd")" "$branch" "$RST"
+    wake_lines "    " "$cwd" "$branch" "$sid" "$cur"
   done <<EOF
 $out
 EOF
+  echo
+  echo "唤回: 逐行复制命令，或直接 ht resume <序号|关键词>（自动 cd + 切分支 + 恢复会话）"
 }
 
 cmd_resume() {
@@ -168,7 +188,7 @@ EOF
   # 唤回不得弄丢用户手上的改动：需要切分支但工作区脏时只给命令、不代劳
   if [ "$cur" != "$branch" ] && [ -n "$(git -C "$cwd" status --porcelain 2>/dev/null)" ]; then
     echo "harness-threads: ${cwd} 有未提交改动，拒绝自动切分支。请自行判断后执行：" >&2
-    echo "  $(wake_cmd "$cwd" "$branch" "$sid" "$cur")" >&2
+    wake_lines "  " "$cwd" "$branch" "$sid" "$cur" >&2
     exit 2
   fi
   if [ "$dry" = 1 ]; then
