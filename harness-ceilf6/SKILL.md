@@ -72,8 +72,9 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
      1. **squash**：把 commit message 写入临时文件后 `bash ~/.claude/skills/harness-ceilf6/scripts/squash-branch.sh --dir "$CTX" --message-file <文件>`。message 实质性规则：描述改了什么行为、为什么，从 plan.md 目标 + 实际改动提炼；禁止「处理CR意见」「修复评审问题」「harness 自动开发」这类过程叙事；续入时重写为覆盖全部范围的最终表述。旧状态在 `harness-backup/<分支>` 引用可回退。
      2. **push**：`git push --force-with-lease origin <分支>`。force-with-lease 仅限 harness 需求分支——2026-07-30 用户裁定方案 A（MR 恒单 commit），是既有自动 push 豁免（2026-07-29）的延伸。
      3. **MR**：调用 bytedcli-bits-mr 建 MR——标题 = 需求短题，描述必含：任务来源（bot 场景带 chat/message id）、plan 四段摘要、CR 轮次表、遗留 minor/nit 清单。**续入不重复建 MR**：当前分支已存在开放 MR 时只在既有 MR 追加一条评论（本轮变更摘要 + 新增 CR 轮次 + 注明历史已重写），MR 链接沿用。建成后 bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh mark --ctx-dir "$CTX" mr_created。
-     4. **沉淀**：harness-context 供料 + lark-sediment 流程——需求结论、CR 往返要点、踩坑追加到 meta.wiki_url 需求子文档（wiki_url 为空则先按阶段 0 第 4 步补建）；同批产出 B 线四问叙事节（lark-sediment「两条沉淀线」）追加到**同一篇**需求子文档；跨需求通用经验按 lark-sediment 正常去重、分类落位，不塞进需求文档；写 `$CTX/sediment.md` 台账。沉淀失败如实报告后继续汇总（MR 已建，不因沉淀失败回滚）。无人值守模式沉淀全程不需人工。
-     5. 输出收尾汇总（模板见下，首行进度图、次行未自测警示，MR 为过程产物行）。
+     4. **自测矩阵**：在 meta.wiki_url 需求子文档追加「自测场景矩阵」——「环境 × 场景」表格，行 = 环境/端（如 PC online、iOS/Android online、fallback 替包等，按需求实际分发面取舍），列 = 本需求的用户可感知场景（从 plan.md 验收标准 + 改动影响面推导，覆盖所有需测场景；按产品视角「设备×产品线×用户可感知」划分，不按代码机制）。不适用格子预填「不涉及」+ 一句原因；待测格子留 ⬜ 并附具体验证要点（看什么、怎么算过）。表前写填写约定（✅ 通过附截图 / ❌ 不通过附现象与截图；预期降级行为的通过标准单独注明）与版本确认方式（如何证明加载的是目标版本，如版本标签/白名单切法）。该矩阵是阶段 3 自测节点的执行清单。
+     5. **沉淀**：harness-context 供料 + lark-sediment 流程——需求结论、CR 往返要点、踩坑追加到 meta.wiki_url 需求子文档（wiki_url 为空则先按阶段 0 第 4 步补建）；同批产出 B 线四问叙事节（lark-sediment「两条沉淀线」）追加到**同一篇**需求子文档；跨需求通用经验按 lark-sediment 正常去重、分类落位，不塞进需求文档；写 `$CTX/sediment.md` 台账。沉淀失败如实报告后继续汇总（MR 已建，不因沉淀失败回滚）。无人值守模式沉淀全程不需人工。
+     6. 输出收尾汇总（模板见下，首行进度图、次行未自测警示，MR 为过程产物行）。
 
      失败/熔断/超时**不 squash、不 push、不建 MR、不沉淀**——半成品不进团队远端视野、不上 wiki。
    - `pass=false` → **逐条处置**每个 finding：修复，或书面不采纳。全部 blocker/major 处置完后写 `$CTX/cr/round-N/fixes.md`（格式见下），回到第 1 步。
@@ -104,12 +105,12 @@ meta.max_rounds 非 null 时，达到该轮数也停下交用户（默认 null �
 - 改动概览：<一段话>
 - 轮次记录：cr/round-1..N（verdict / fixes 齐全）
 - 遗留 minor/nit：<清单，含文件位置>（修不修由你定）
-- 下一步（两步闭环）：① 人工 CR ② 自测。每完成一步就确认——会话里说「人工 CR 完成 / 自测完成」，或 `ht mark <序号> human-cr|selftest`，或 web 看板按钮。两步齐后输出「可交付版汇总」，那才是可外发版本。发现问题用 harness-context add 存入后喊我续跑
+- 下一步（两步闭环）：① 人工 CR ② 自测（按需求子文档中的自测场景矩阵逐格验证、填结果贴截图）。每完成一步就确认——会话里说「人工 CR 完成 / 自测完成」，或 `ht mark <序号> human-cr|selftest`，或 web 看板按钮。两步齐后输出「可交付版汇总」，那才是可外发版本。发现问题用 harness-context add 存入后喊我续跑
 ```
 
 ### 阶段 3：人工节点与可交付
 
-收尾后进入人工区间，两节点顺序：人工 CR → 自测。用户在会话说「人工 CR 完成」「自测完成」→ `bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh mark --ctx-dir "$CTX" <human_cr_done|selftest_done>` 并转发进度图。另两条渠道（`ht mark`、web 看板）与此同一写入口、可能发生在会话外——收到用户后续消息时先 `progress` 一次核对现状再回应。
+收尾后进入人工区间，两节点顺序：人工 CR → 自测（依据需求子文档中的自测场景矩阵逐格执行；矩阵缺失时先按收尾第 4 步补建）。用户在会话说「人工 CR 完成」「自测完成」→ `bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh mark --ctx-dir "$CTX" <human_cr_done|selftest_done>` 并转发进度图。另两条渠道（`ht mark`、web 看板）与此同一写入口、可能发生在会话外——收到用户后续消息时先 `progress` 一次核对现状再回应。
 
 `human_cr_done` 与 `selftest_done` 齐备后输出**可交付版汇总**；在此之前对本需求不得使用「完成 / 可交付」措辞：
 
