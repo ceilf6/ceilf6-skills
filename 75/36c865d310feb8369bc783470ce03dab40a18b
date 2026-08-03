@@ -1,0 +1,114 @@
+harness-ceilf6/tests/test-threads.sh
+  s_c50d63c1e340ac::t_858864221a2b43 59,70,139
+  s_c50d63c1e340ac::t_f1a78b3421f921 160-192
+  s_c50d63c1e340ac::t_e2cfafed1a9be7 193-207
+  s_18b4786183ec9f::t_7a439f1f20e90d 208-221
+  s_18b4786183ec9f::t_0583d08b966766 222-236
+  s_da9c600d4c8db9::t_8e769cda37e225 237-248
+  s_731897f27f0739::t_9f8681f126fed6 249-262
+  s_731897f27f0739::t_862289ae8cfb21 263-274,276-278,280-281
+  s_fa44db693f1595::t_e43be40ca10024 275,279
+harness-ceilf6/scripts/threads.sh
+  s_c50d63c1e340ac::t_7dc234c04f1be0 22-48,51-79,88,90-98,108-129,131-137,152-153,163,418-419
+  s_c50d63c1e340ac::t_59ece2cb9386f2 89,99-107
+  s_18b4786183ec9f::t_ce95a00f314e42 80-87,130,138-145,149-151,161-162
+  s_18b4786183ec9f::t_38c0fc0053fe17 147,321-326,345-349,351-359
+  s_da9c600d4c8db9::t_e4ab099ba4843c 146,148,180,190-191,194,205,207,304,311,350,360
+  s_731897f27f0739::t_81858505d2493b 157,178,267,272-274,277-282,287-288,292,296,298
+  s_731897f27f0739::t_f00052cf07c77a 268-271,275-276,283-286
+  s_722bc4944f49a8::t_b4bcbf77161e59 164,400-408,417
+  s_fa44db693f1595::t_d65cdf2ff05c01 49-50
+lark-recall/SKILL.md
+  s_c50d63c1e340ac::t_cb571c90993c0a 3,16-33
+harness-ceilf6/scripts/cr-round.sh
+  s_fe759595256b94::t_3d3c19317bc540 162-164
+harness-ceilf6/tests/test-cr-round.sh
+  s_fe759595256b94::t_5561cb8322ca69 72,80
+harness-ceilf6/SKILL.md
+  s_0dd937f0d77ea7::t_dad7313249677d 12,26-29,50,95,99,101-102,107,110-111,113-121,123
+  s_0dd937f0d77ea7::t_8b8ed098d3db70 3,76
+  s_0dd937f0d77ea7::t_4b0605416c6d78 39,48,62,74,100,112
+  s_722bc4944f49a8::t_005f5fffbe96e6 14
+  s_fa44db693f1595::t_94c1b09184dfe7 22
+harness-context/SKILL.md
+  s_0dd937f0d77ea7::t_3503c75d95b2b1 16
+  s_0dd937f0d77ea7::t_3828e09d75d710 94
+harness-ceilf6/scripts/web.py
+  s_722bc4944f49a8::t_f3083fa6006923 1-132
+harness-ceilf6/tests/test-web.sh
+  s_722bc4944f49a8::t_093a88bd645019 1-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "7536c865d310feb8369bc783470ce03dab40a18b",
+  "prompts": {},
+  "sessions": {
+    "s_0dd937f0d77ea7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a053cfa88e41b4a78",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_18b4786183ec9f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ada1510e82df83345",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_722bc4944f49a8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a2259ad429a4b4671",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_731897f27f0739": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a3b2ca81ece385e8f",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_c50d63c1e340ac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ad1b8b45b15402807",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_da9c600d4c8db9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-afe12d71367b5f753",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_fa44db693f1595": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ace32123c578d3a6b",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_fe759595256b94": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a5a5a2936754948ad",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
