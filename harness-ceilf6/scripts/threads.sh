@@ -69,30 +69,34 @@ enumerate() {
   done < <(rows)
 }
 
+# harness 线程都是无人值守/半无人值守跑，唤回默认全权限，免得恢复后卡在权限确认上
+CLAUDE_CMD="claude --dangerously-skip-permissions"
+
 # 唤回命令：会话恢复的只是对话，工作区是该目录此刻的样子——分支漂移时必须先切回需求分支
 wake_cmd() {
   local cwd="$1" branch="$2" sid="$3" cur="$4" c
   c="cd $cwd"
   if [ -n "$sid" ]; then
     if [ "$cur" != "$branch" ]; then c="$c && git checkout $branch"; fi
-    c="$c && claude --resume $sid"
+    c="$c && $CLAUDE_CMD --resume $sid"
   else
-    c="$c && claude   # 无 session_id：新开会话，装载 harness-context 续入"
+    c="$c && $CLAUDE_CMD   # 无 session_id：新开会话，装载 harness-context 续入"
   fi
   printf '%s' "$c"
 }
 
-# 同 wake_cmd，但拆成两行便于逐行复制：cd 一行，切分支+恢复一行
+# 同 wake_cmd，但拆成两行便于逐行复制：cd 一行，切分支+恢复一行。
+# 命令行一律顶格不缩进：终端整行复制时不带前导空格。
 wake_lines() {
-  local ind="$1" cwd="$2" branch="$3" sid="$4" cur="$5" second
-  printf '%scd %s\n' "$ind" "$cwd"
+  local cwd="$1" branch="$2" sid="$3" cur="$4" second
+  printf 'cd %s\n' "$cwd"
   if [ -n "$sid" ]; then
-    second="claude --resume $sid"
+    second="$CLAUDE_CMD --resume $sid"
     if [ "$cur" != "$branch" ]; then second="git checkout $branch && $second"; fi
   else
-    second="claude   # 无 session_id：新开会话，装载 harness-context 续入"
+    second="$CLAUDE_CMD   # 无 session_id：新开会话，装载 harness-context 续入"
   fi
-  printf '%s%s\n' "$ind" "$second"
+  printf '%s\n' "$second"
 }
 
 cmd_register() {
@@ -144,7 +148,7 @@ cmd_list() {
     first=0
     printf '%s%2s  %s  [%s]%s%s\n' "$BOLD" "$idx" "${title:-$branch}" "$status" "$RST" "$mark"
     printf '    %s%s · %s%s\n' "$DIM" "$(basename "$cwd")" "$branch" "$RST"
-    wake_lines "    " "$cwd" "$branch" "$sid" "$cur"
+    wake_lines "$cwd" "$branch" "$sid" "$cur"
   done <<EOF
 $out
 EOF
@@ -188,7 +192,7 @@ EOF
   # 唤回不得弄丢用户手上的改动：需要切分支但工作区脏时只给命令、不代劳
   if [ "$cur" != "$branch" ] && [ -n "$(git -C "$cwd" status --porcelain 2>/dev/null)" ]; then
     echo "harness-threads: ${cwd} 有未提交改动，拒绝自动切分支。请自行判断后执行：" >&2
-    wake_lines "  " "$cwd" "$branch" "$sid" "$cur" >&2
+    wake_lines "$cwd" "$branch" "$sid" "$cur" >&2
     exit 2
   fi
   if [ "$dry" = 1 ]; then
@@ -200,7 +204,7 @@ EOF
   cd "$cwd"
   if [ "$cur" != "$branch" ]; then git checkout "$branch"; fi
   # exec：claude 继承本进程 cwd，而 --resume 的作用域正是按进程 cwd 判定
-  exec claude --resume "$sid"
+  exec $CLAUDE_CMD --resume "$sid"
 }
 
 cmd_prune() {
