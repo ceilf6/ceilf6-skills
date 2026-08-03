@@ -199,10 +199,17 @@ grep -q '警告' "$err" && ok "跳过前序节点有警告" || bad "跳过前序
 jq -e '.milestones.mr_created' "$CTX/meta.json" >/dev/null && ok "仍放行落盘" || bad "仍放行落盘"
 rm -f "$err"
 
-echo "== 无 milestones 字段：progress 按全未完成渲染 =="
+echo "== 无 milestones 字段：progress 按 status 回退当前节点 =="
 make_repo repo-p feat/legacy developing
 out=$(bash "$TH" progress --ctx-dir "$CTX")
-has "legacy 当前在计划门" '◉ 计划门（当前）' "$out"
+has "legacy developing 当前在开发" '◉ 开发（当前）' "$out"
+has "legacy 前序位置点亮" '● 计划门' "$out"
+make_repo repo-p2 feat/olddone done
+out=$(bash "$TH" progress --ctx-dir "$CTX")
+has "legacy done 全亮可交付" '● 可交付' "$out"
+make_repo repo-p3 feat/badstatus bogus
+out=$(bash "$TH" progress --ctx-dir "$CTX")
+has "未知 status 按全未完成" '◉ 计划门（当前）' "$out"
 cleanup_env
 
 echo "== mark 序号/别名形式 =="
@@ -234,16 +241,18 @@ jq -e '.milestones.human_cr_done' "$CTX/meta.json" >/dev/null && ok "唯一命�
 jq -e '.milestones | not' "$CTX1/meta.json" >/dev/null && ok "另一线程未被误写" || bad "另一线程未被误写"
 cleanup_env
 
-echo "== list 节点列 =="
+echo "== list 节点列：旧线程 status 回退与首次 mark 补录 =="
 make_env
-make_repo repo-m feat/nodecol developing
+make_repo repo-m feat/nodecol awaiting_human
 mk_session sid-node
 (cd "$REPO" && CLAUDE_CODE_SESSION_ID=sid-node bash "$TH" register --ctx-dir "$CTX" --title '节点列') >/dev/null
 out=$(bash "$TH" list)
-has "无 milestones 显示 -" '· -]' "$out"
-bash "$TH" mark --ctx-dir "$CTX" plan_gate >/dev/null
+has "旧线程 awaiting_human 回退待人工CR" '· 待人工CR]' "$out"
+bash "$TH" mark --ctx-dir "$CTX" human_cr_done >/dev/null 2>&1
+jq -e '.milestones | has("plan_gate") and has("dev_done") and has("cr_passed") and has("mr_created")' "$CTX/meta.json" >/dev/null \
+  && ok "首次 mark 自动补录前序" || bad "首次 mark 自动补录前序"
 out=$(bash "$TH" list)
-has "节点列推导当前节点" '· 开发中]' "$out"
+has "mark 后推进到待自测" '· 待自测]' "$out"
 cleanup_env
 
 echo "== list --json =="

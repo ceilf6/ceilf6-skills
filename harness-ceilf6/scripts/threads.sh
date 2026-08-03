@@ -46,20 +46,32 @@ node_label() { # 当前节点内部名 → 列表「节点」列文案；空串=
   esac
 }
 
-current_node() { # <meta.json> → 第一个缺键节点名；全齐输出空串；无 milestones 字段或 meta 不可解析均输出 -（按全未完成降级）
-  jq -e . "$1" >/dev/null 2>&1 || { echo "-"; return 0; }
+current_node() { # <meta.json> → 第一个缺键节点名；全齐输出空串；meta 不可解析输出 -（按全未完成降级）。
+                 # 无 milestones 字段 = 本功能上线前的旧线程：按 status 粗推当前节点（status 也认不出才输出 -），
+                 # 否则存量线程全部显示在计划门，比「未完成」更糟——是错误信息。
+  local meta="$1"
+  jq -e . "$meta" >/dev/null 2>&1 || { echo "-"; return 0; }
+  if ! jq -e '(.milestones | type) == "object"' "$meta" >/dev/null 2>&1; then
+    case "$(jq -r '.status // ""' "$meta")" in
+      planning) echo plan_gate ;;
+      developing) echo dev_done ;;
+      cr) echo cr_passed ;;
+      awaiting_human) echo human_cr_done ;;
+      done) echo "" ;;
+      *) echo "-" ;;
+    esac
+    return 0
+  fi
   jq -r --arg order "$MILESTONES" '
-    if (.milestones | type) != "object" then "-"
-    else .milestones as $ms
-      | ($order | split(" ")) | map(select(($ms[.] // "") == "")) | first // ""
-    end' "$1"
+    .milestones as $ms
+    | ($order | split(" ")) | map(select(($ms[.] // "") == "")) | first // ""' "$meta"
 }
 
 progress_line() { # <meta.json> → 一行进度图；机审CR 段带已有轮数
   local meta="$1" ctx cur m sym label parts="" reached=0 rounds
   ctx=$(dirname "$meta")
   cur=$(current_node "$meta")
-  [ "$cur" = "-" ] && cur="plan_gate"   # 无 milestones 字段按全未完成渲染
+  [ "$cur" = "-" ] && cur="plan_gate"   # meta 不可解析 / status 不识别时按全未完成渲染
   for m in $MILESTONES; do
     label=$(milestone_label "$m")
     if [ "$m" = cr_passed ]; then
@@ -86,10 +98,28 @@ alias_to_node() { # 人工节点别名；序号/关键词形式只收这两个�
 }
 
 mark_write() { # <ctx目录> <节点内部名>：幂等不覆盖、乱序警告放行、拒绝 cr_passed
-  local ctx="$1" node="$2" meta="$1/meta.json" tmp prev missing="" m2
+  local ctx="$1" node="$2" meta="$1/meta.json" tmp prev missing="" m2 fb bt nfill m3
   [ -f "$meta" ] || die "缺 meta.json：${ctx}"
   case " $MILESTONES " in *" $node "*) ;; *) die "未知节点：${node}（可用：${MILESTONES// cr_passed/}）" ;; esac
   [ "$node" = cr_passed ] && die "cr_passed 由 cr-round.sh 写入，不接受人工 mark"
+  # 旧线程（无 milestones 字段）首次 mark：把 status 粗推当前节点之前的前序节点一次补录——
+  # 否则只写单个后段节点后「第一个缺键」会倒退回 plan_gate，进度显示反而后退。本次请求的节点留给正常路径写。
+  if ! jq -e '(.milestones | type) == "object"' "$meta" >/dev/null 2>&1; then
+    fb=$(current_node "$meta")
+    if [ "$fb" != "-" ]; then
+      bt=$(date -u +%Y-%m-%dT%H:%M:%SZ); nfill=0
+      for m3 in $MILESTONES; do
+        if [ "$m3" = "$fb" ]; then break; fi
+        if [ "$m3" = "$node" ]; then continue; fi
+        tmp=$(mktemp)
+        jq --arg k "$m3" --arg t "$bt" '.milestones[$k] = $t' "$meta" > "$tmp" && mv "$tmp" "$meta"
+        nfill=$((nfill + 1))
+      done
+      if [ "$nfill" != 0 ]; then
+        echo "harness-threads: 旧线程无里程碑，按 status 补录 ${nfill} 个前序节点" >&2
+      fi
+    fi
+  fi
   prev=$(jq -r --arg k "$node" '.milestones[$k] // empty' "$meta")
   if [ -n "$prev" ]; then
     echo "harness-threads: ${node} 已于 ${prev} 完成，不覆盖"
