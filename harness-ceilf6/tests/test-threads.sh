@@ -56,7 +56,7 @@ has "list 含检出名" 'repo-a' "$out"
 has "list 含需求分支" 'feat/alpha' "$out"
 has "list 含状态" 'developing' "$out"
 has "list 含短题" '需求甲' "$out"
-has "list 含唤回命令" 'claude --resume sid-aaa' "$out"
+has "list 含唤回命令" 'claude --dangerously-skip-permissions --resume sid-aaa' "$out"
 
 echo "== 分支一致：唤回命令不含 checkout =="
 hasnt "无多余 checkout" 'git checkout' "$out"
@@ -67,7 +67,7 @@ mk_session sid-bbb
 [ "$(wc -l < "$HARNESS_THREADS_FILE" | tr -d ' ')" = 2 ] && ok "追加而非改写（2 行）" || bad "行数: $(wc -l < "$HARNESS_THREADS_FILE")"
 out=$(bash "$TH" list)
 [ "$(printf '%s' "$out" | grep -c 'feat/alpha')" = 1 ] && ok "list 去重后只一条" || bad "去重失败"
-has "取新 session" 'claude --resume sid-bbb' "$out"
+has "取新 session" 'claude --dangerously-skip-permissions --resume sid-bbb' "$out"
 hasnt "旧 session 不再出现" 'sid-aaa' "$out"
 cleanup_env
 
@@ -136,7 +136,7 @@ make_repo repo-i feat/apricot developing
 mk_session sid-apricot
 (cd "$REPO" && CLAUDE_CODE_SESSION_ID=sid-apricot bash "$TH" register --ctx-dir "$CTX") >/dev/null
 out=$(bash "$TH" resume 1 --dry-run || true)
-has "序号唤回给出完整命令" 'claude --resume' "$out"
+has "序号唤回给出完整命令" 'claude --dangerously-skip-permissions --resume' "$out"
 has "序号唤回含 cd" 'cd ' "$out"
 out=$(bash "$TH" resume apple --dry-run || true)
 has "关键词唯一命中" 'sid-apple' "$out"
@@ -155,6 +155,128 @@ cleanup_env
 echo "== 未知子命令 =="
 make_env
 check_die "未知子命令" '用法' bash "$TH" bogus
+cleanup_env
+
+echo "== mark 直指形式：写入 / 幂等 / 校验 =="
+make_env
+make_repo repo-j feat/mark developing
+out=$(bash "$TH" mark --ctx-dir "$CTX" plan_gate)
+jq -e '.milestones.plan_gate' "$CTX/meta.json" >/dev/null && ok "plan_gate 落盘" || bad "plan_gate 落盘"
+has "回显进度图（当前节点标记）" '◉' "$out"
+has "计划门已完成段" '● 计划门' "$out"
+has "开发为当前节点" '◉ 开发（当前）' "$out"
+out=$(bash "$TH" mark --ctx-dir "$CTX" plan_gate)
+has "幂等不覆盖" '不覆盖' "$out"
+check_die "cr_passed 拒绝人工写" 'cr-round' bash "$TH" mark --ctx-dir "$CTX" cr_passed
+check_die "未知节点报错" '未知节点' bash "$TH" mark --ctx-dir "$CTX" bogus_node
+check_die "缺 meta.json 报错" 'meta.json' bash "$TH" mark --ctx-dir "$T/nonexist" plan_gate
+
+echo "== mark 乱序：警告但放行 =="
+err=$(mktemp)
+bash "$TH" mark --ctx-dir "$CTX" selftest_done >/dev/null 2>"$err"
+jq -e '.milestones.selftest_done' "$CTX/meta.json" >/dev/null && ok "乱序仍落盘" || bad "乱序仍落盘"
+grep -q '警告' "$err" && ok "乱序有警告" || bad "乱序有警告"
+rm -f "$err"
+
+echo "== progress：全齐 → 可交付 =="
+tmp=$(mktemp)
+jq '.milestones.dev_done="2026-08-03T00:00:00Z" | .milestones.cr_passed="2026-08-03T00:00:01Z"' \
+  "$CTX/meta.json" > "$tmp" && mv "$tmp" "$CTX/meta.json"
+bash "$TH" mark --ctx-dir "$CTX" mr_created >/dev/null
+bash "$TH" mark --ctx-dir "$CTX" human_cr_done >/dev/null
+out=$(bash "$TH" progress --ctx-dir "$CTX")
+has "全齐后可交付点亮" '● 可交付' "$out"
+hasnt "全齐后无当前标记" '（当前）' "$out"
+check_die "progress 缺 --ctx-dir" 'ctx-dir' bash "$TH" progress
+cleanup_env
+
+echo "== mark 乱序通用：前序未完成即警告 =="
+make_env
+make_repo repo-o feat/order developing
+err=$(mktemp)
+bash "$TH" mark --ctx-dir "$CTX" mr_created >/dev/null 2>"$err"
+grep -q '警告' "$err" && ok "跳过前序节点有警告" || bad "跳过前序节点有警告"
+jq -e '.milestones.mr_created' "$CTX/meta.json" >/dev/null && ok "仍放行落盘" || bad "仍放行落盘"
+rm -f "$err"
+
+echo "== 无 milestones 字段：progress 按全未完成渲染 =="
+make_repo repo-p feat/legacy developing
+out=$(bash "$TH" progress --ctx-dir "$CTX")
+has "legacy 当前在计划门" '◉ 计划门（当前）' "$out"
+cleanup_env
+
+echo "== mark 序号/别名形式 =="
+make_env
+make_repo repo-l feat/alias developing
+mk_session sid-alias
+(cd "$REPO" && CLAUDE_CODE_SESSION_ID=sid-alias bash "$TH" register --ctx-dir "$CTX" --title '别名测试') >/dev/null
+check_die "序号形式拒绝节点内部名" '人工节点' bash "$TH" mark 1 dev_done
+check_die "序号越界" '序号' bash "$TH" mark 9 human-cr
+bash "$TH" mark 1 human-cr >/dev/null 2>/dev/null
+jq -e '.milestones.human_cr_done' "$CTX/meta.json" >/dev/null && ok "序号+human-cr 落盘" || bad "序号+human-cr 落盘"
+bash "$TH" mark alias selftest >/dev/null 2>&1
+jq -e '.milestones.selftest_done' "$CTX/meta.json" >/dev/null && ok "关键词+selftest 落盘" || bad "关键词+selftest 落盘"
+check_die "缺节点参数" '用法' bash "$TH" mark 1
+cleanup_env
+
+echo "== mark 多线程：唯一命中与多命中守卫 =="
+make_env
+make_repo repo-q feat/pear developing
+mk_session sid-pear
+(cd "$REPO" && CLAUDE_CODE_SESSION_ID=sid-pear bash "$TH" register --ctx-dir "$CTX" --title '梨需求') >/dev/null
+CTX1="$CTX"
+make_repo repo-r feat/peach developing
+mk_session sid-peach
+(cd "$REPO" && CLAUDE_CODE_SESSION_ID=sid-peach bash "$TH" register --ctx-dir "$CTX" --title '桃需求') >/dev/null
+check_die "mark 关键词多命中" '多条' bash "$TH" mark 'feat/pe' human-cr
+bash "$TH" mark peach human-cr 2>/dev/null >/dev/null
+jq -e '.milestones.human_cr_done' "$CTX/meta.json" >/dev/null && ok "唯一命中落对线程" || bad "唯一命中落对线程"
+jq -e '.milestones | not' "$CTX1/meta.json" >/dev/null && ok "另一线程未被误写" || bad "另一线程未被误写"
+cleanup_env
+
+echo "== list 节点列 =="
+make_env
+make_repo repo-m feat/nodecol developing
+mk_session sid-node
+(cd "$REPO" && CLAUDE_CODE_SESSION_ID=sid-node bash "$TH" register --ctx-dir "$CTX" --title '节点列') >/dev/null
+out=$(bash "$TH" list)
+has "无 milestones 显示 -" '· -]' "$out"
+bash "$TH" mark --ctx-dir "$CTX" plan_gate >/dev/null
+out=$(bash "$TH" list)
+has "节点列推导当前节点" '· 开发中]' "$out"
+cleanup_env
+
+echo "== list --json =="
+make_env
+make_repo repo-n feat/json developing
+mk_session sid-json
+(cd "$REPO" && CLAUDE_CODE_SESSION_ID=sid-json bash "$TH" register --ctx-dir "$CTX" --title 'json测试') >/dev/null
+bash "$TH" mark --ctx-dir "$CTX" plan_gate >/dev/null
+out=$(bash "$TH" list --json)
+echo "$out" | jq -e 'type == "array" and length == 1' >/dev/null && ok "输出 JSON 数组" || bad "输出 JSON 数组"
+echo "$out" | jq -e '.[0] | .ctx_dir and .branch and .status and .node and .progress and (.milestones | type == "object")' >/dev/null \
+  && ok "字段齐全" || bad "字段齐全"
+echo "$out" | jq -e '.[0].node == "开发中"' >/dev/null && ok "node 推导正确" || bad "node: $(echo "$out" | jq -r '.[0].node')"
+echo "$out" | jq -e '.[0].milestones.plan_gate' >/dev/null && ok "milestones 透传" || bad "milestones 透传"
+cleanup_env
+
+echo "== list --json 容错：坏 meta 与空 meta 不静默丢线程 =="
+make_env
+make_repo repo-s feat/good developing
+mk_session sid-good
+(cd "$REPO" && CLAUDE_CODE_SESSION_ID=sid-good bash "$TH" register --ctx-dir "$CTX" --title '好线程') >/dev/null
+make_repo repo-t feat/badmeta developing
+mk_session sid-bad
+(cd "$REPO" && CLAUDE_CODE_SESSION_ID=sid-bad bash "$TH" register --ctx-dir "$CTX" --title '坏线程') >/dev/null
+echo 'not json' > "$CTX/meta.json"
+out=$(bash "$TH" list --json 2>/dev/null)
+echo "$out" | jq -e 'length == 2' >/dev/null && ok "坏 meta 不丢线程" || bad "坏 meta 行数: $(echo "$out" | jq 'length')"
+echo "$out" | jq -e '.[] | select(.branch=="feat/badmeta") | .milestones == {}' >/dev/null && ok "坏 meta milestones 回落 {}" || bad "坏 meta milestones 回落 {}"
+echo "$out" | jq -e '.[] | select(.branch=="feat/badmeta") | .node == "-"' >/dev/null && ok "坏 meta 节点列降级 -" || bad "坏 meta 节点列: $(echo "$out" | jq -r '.[] | select(.branch=="feat/badmeta") | .node')"
+: > "$CTX/meta.json"
+out=$(bash "$TH" list --json 2>/dev/null)
+echo "$out" | jq -e 'length == 2 and ([.[] | select(.branch=="feat/badmeta")][0].milestones == {})' >/dev/null && ok "空 meta 回落 {}" || bad "空 meta 回落 {}"
+echo "$out" | jq -e '.[] | select(.branch=="feat/badmeta") | .node == "-"' >/dev/null && ok "空 meta 节点列降级 -" || bad "空 meta 节点列: $(echo "$out" | jq -r '.[] | select(.branch=="feat/badmeta") | .node')"
 cleanup_env
 
 echo; echo "PASS=$PASS FAIL=$FAIL"

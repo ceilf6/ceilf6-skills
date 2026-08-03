@@ -159,7 +159,9 @@ jq -r --arg n "$N" '
 PASSED=$(jq -r .pass "$VERDICT")
 if [ "$PASSED" = true ]; then
   tmp=$(mktemp)
-  jq '.status = "awaiting_human"' "$CTX_DIR/meta.json" > "$tmp" && mv "$tmp" "$CTX_DIR/meta.json"
+  jq --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '.status = "awaiting_human" | .milestones.cr_passed = (.milestones.cr_passed // $t)' \
+    "$CTX_DIR/meta.json" > "$tmp" && mv "$tmp" "$CTX_DIR/meta.json"
 fi
 
 # ---- 摘要回显 ----

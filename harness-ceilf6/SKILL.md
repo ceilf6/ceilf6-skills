@@ -1,6 +1,6 @@
 ---
 name: harness-ceilf6
-description: 个人需求交付 harness：装载 harness-context 的需求上下文（harness-context 各动作完成后默认自动接续进入本技能），过计划门（轻量复述自动过门 / 实在不明确才转 superpowers 完整规划 / 续入跳过），过门后确保需求 wiki 子文档并把会话改名为需求短题，当前会话直接开发（TDD 红绿纪律），自动驱动评审员（traex gpt-5.6-sol）对抗式 CR 循环（送审→结构化判定→修复→再送审）直至通过或熔断，通过后全量 squash 成单个实质性 commit、force-with-lease 推送、经 bytedcli-bits-mr 建 MR、沉淀到需求子文档；支持无人值守模式（bot 场景由调用方声明）。人工 CR / 测试发现问题后可带全部历史续跑。当用户在装载上下文后要求「开始开发」「跑 harness」「继续 CR 循环」「续跑」时使用。前置：需求分支 + harness-context 已 init。
+description: 个人需求交付 harness：装载 harness-context 的需求上下文（harness-context 各动作完成后默认自动接续进入本技能），过计划门（轻量复述自动过门 / 实在不明确才转 superpowers 完整规划 / 续入跳过），过门后确保需求 wiki 子文档并把会话改名为需求短题，当前会话直接开发（TDD 红绿纪律），自动驱动评审员（traex gpt-5.6-sol）对抗式 CR 循环（送审→结构化判定→修复→再送审）直至通过或熔断，通过后全量 squash 成单个实质性 commit、force-with-lease 推送、经 bytedcli-bits-mr 建 MR、沉淀到需求子文档，收尾汇总不以完成姿态给 MR（待人工 CR → 自测两节点 mark 齐后才产可交付版汇总）；支持无人值守模式（bot 场景由调用方声明）。人工 CR / 测试发现问题后可带全部历史续跑。当用户在装载上下文后要求「开始开发」「跑 harness」「继续 CR 循环」「续跑」时使用。前置：需求分支 + harness-context 已 init。
 ---
 
 # harness-ceilf6：开发 + 对抗式 CR 循环
@@ -9,9 +9,9 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 
 **开发者是当前会话本身**（不 shell 出 claude 子进程）；只有评审员是外部进程。用户全程在场、随时可插话纠偏。
 
-机械层脚本（均在 `~/.claude/skills/harness-ceilf6/scripts/`，依赖 git、jq、traex CLI）：`cr-round.sh`（CR 轮次）、`squash-branch.sh`（收尾压单提交）、`rename-session.sh`（会话改名）、`threads.sh`（线程全局登记与唤回，另经 `~/.local/bin/harness-threads` 与短别名 `ht` 暴露为全局命令）。
+机械层脚本（均在 `~/.claude/skills/harness-ceilf6/scripts/`，依赖 git、jq、traex CLI）：`cr-round.sh`（CR 轮次）、`squash-branch.sh`（收尾压单提交）、`rename-session.sh`（会话改名）、`threads.sh`（线程全局登记与唤回、里程碑 mark/progress，另经 `~/.local/bin/harness-threads` 与短别名 `ht` 暴露为全局命令）。
 
-**跨线程总览**：`harness-threads`（短别名 `ht`）列出本机所有 harness 线程（检出 / 需求分支 / 状态 / 唤回命令，并标注检出分支漂移与会话丢失）。**唤回只能由用户的 shell 执行**（`harness-threads resume <序号|关键词>`）——它要起一个新 claude 进程接管终端，会话内的 agent 做不到；在会话里能做的只是列表与给出命令。评审员默认 `traex -m gpt-5.6-sol`，env `CODEX_BIN` / `CR_MODEL` 可覆盖。
+**跨线程总览**：`harness-threads`（短别名 `ht`）列出本机所有 harness 线程（检出 / 需求分支 / 状态 / 唤回命令，并标注检出分支漂移与会话丢失）。**唤回只能由用户的 shell 执行**（`harness-threads resume <序号|关键词>`）——它要起一个新 claude 进程接管终端，会话内的 agent 做不到；在会话里能做的只是列表与给出命令。评审员默认 `traex -m gpt-5.6-sol`，env `CODEX_BIN` / `CR_MODEL` 可覆盖。本地看板：ht web（127.0.0.1:7657，读线程聚合、可点按人工节点，写入仍走 threads.sh mark）。
 
 ## 模式
 
@@ -19,9 +19,13 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 
 - 计划门·完整路径：交互模式转 superpowers brainstorming 与用户协商；无人值守模式**不可用**，按调用方约定输出 escalate 结果后结束。
 - 僵局熔断：交互模式停下交用户裁决；无人值守模式不等人，按调用方约定输出 fused 结果后结束。
-- 结果输出：无人值守模式结束时按调用方约定输出结果行（如 RESULT 契约）；交互模式面向用户汇总。
+- 结果输出：无人值守模式结束时按调用方约定输出结果行（如 RESULT 契约），「未人工CR/未自测」标注写进结果 JSON 的 summary 字段内，不得缀在 JSON 之后或另起一行——契约消费方按行取前缀后整体 JSON.parse，行尾散文会让 pass 被误判为 fail。bot 不能替人完成人工节点，milestones 停在 mr_created；交互模式面向用户汇总。
 
 ## 流程
+
+### 里程碑与进度图
+
+`meta.json.milestones` 是节点进度唯一真源：`plan_gate → dev_done → cr_passed → mr_created → human_cr_done → selftest_done`，值为完成时间戳、缺键即未完成，当前节点 = 第一个缺键节点。写入单点收敛到 `threads.sh mark`（`cr_passed` 由 cr-round.sh 内联写）。进度图一律用 `bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh progress --ctx-dir "$CTX"` 输出并原样转发用户，不手绘。输出时机：过计划门后、进入 CR 循环前、收尾汇总顶部、续入装载后、每次人工节点 mark 后。
 
 ### 前置：装载上下文
 
@@ -32,7 +36,7 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 
 出口统一为 `$CTX/plan.md`（目标 / 范围 / 改法 / 验收标准 四段）。三条路径：
 
-1. **续入路径**：`$CTX/plan.md` 已存在 → 跳过门。本轮新增问题以「## 验收增补（<日期>）」小节追加进 plan.md。用户明确说「重新规划」才走重规划：旧内容整体降级为「## 历史版本（<日期>归档）」小节保留于文件尾部，新四段写在文件头。
+1. **续入路径**：`$CTX/plan.md` 已存在 → 跳过门。本轮新增问题以「## 验收增补（<日期>）」小节追加进 plan.md。同时重置里程碑：`jq 'del(.milestones.dev_done, .milestones.cr_passed, .milestones.human_cr_done, .milestones.selftest_done)' "$CTX/meta.json" > "$CTX/tmp" && mv "$CTX/tmp" "$CTX/meta.json"`（`plan_gate`/`mr_created` 保留——计划门跳过、MR 复用），随后输出进度图。用户明确说「重新规划」才走重规划：旧内容整体降级为「## 历史版本（<日期>归档）」小节保留于文件尾部，新四段写在文件头。
 2. **轻量路径（默认，自动过门）**：能从上下文复述出可信的目标/范围/改法/验收四段 → 写入 plan.md 并向用户播报（交互场景你在场，随时可打断修正），**不等待确认直接过门**——用户 2026-07-29 裁定：只有实在不明确的需求才需要人工协商。plan.md 头部加一行「> 计划门自动通过（<日期>）」。
 3. **完整路径（实在不明确才走）**：复述不出可信四段（缺关键信息或解读分歧大），或用户点名「走 brainstorming」→ 交互模式转 superpowers 的 brainstorming → writing-plans 全流程与用户协商，结束后把最终 plan 内容归一写入 plan.md；无人值守模式按「模式」节输出 escalate。
 
@@ -41,8 +45,9 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 1. `bash ~/.claude/skills/harness-context/scripts/ctx-dir.sh set-status developing`；
 2. **需求短题**：从 plan.md 目标提炼 ≤20 字短题；会话名 / wiki 子文档标题 / MR 标题三处同源用它；
 3. **会话改名**：`bash ~/.claude/skills/harness-ceilf6/scripts/rename-session.sh --title '<短题>'`（同名自动跳过；非会话环境自动跳过，不阻塞）。bot 无人值守场景 runner 已用 `--name` 给初始名，这里过门后覆盖为短题；
-4. **需求 wiki 子文档**：meta.wiki_url 已指向「02-需求」（`JhrcwNjUdiUXPMkIUnWcIiOdntc`）下的文档（用 lark-cli 的 wiki 节点查询确认其父节点，机械用法见 `lark-cli skills read lark-wiki`）→ 复用不重建；否则在「02-需求」下新建子文档（space_id `7658115519924686035`，`--obj-type docx`，标题 = 短题），初始内容 = plan 四段 + 来源（bot 场景带 chat/message id），并回写 meta.wiki_url（`jq '.wiki_url="<url>"' meta.json > tmp && mv tmp meta.json`）。wiki 操作失败如实报告后继续——文档可收尾时补建，不阻塞开发。
+4. **需求 wiki 子文档**：meta.wiki_url 已指向「02-需求」（`JhrcwNjUdiUXPMkIUnWcIiOdntc`）下的文档（用 lark-cli 的 wiki 节点查询确认其父节点，机械用法见 `lark-cli skills read lark-wiki`）→ 复用不重建；否则在「02-需求」下新建子文档（space_id `7658115519924686035`，`--obj-type docx`，标题 = 短题），初始内容 = plan 四段 + 来源（bot 场景带 chat/message id），并回写 meta.wiki_url（`jq '.wiki_url="<url>"' "$CTX/meta.json" > "$CTX/tmp" && mv "$CTX/tmp" "$CTX/meta.json"`）。wiki 操作失败如实报告后继续——文档可收尾时补建，不阻塞开发。
 5. **登记线程**：`bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh register --ctx-dir "$CTX" --title '<短题>'`。登记表 `~/.harness-ceilf6/threads.jsonl` 是所有 harness 线程的全局索引，session_id 取自 `CLAUDE_CODE_SESSION_ID`（取不到则记 null，唤回退化为新会话续入）。**必须在会话本身的 cwd 下执行**：`claude --resume` 严格按进程 cwd 判定作用域，登记的 cwd 差一层就恢复不了。续入时重复登记即覆盖（读时 last-wins）。
+6. **里程碑**：`bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh mark --ctx-dir "$CTX" plan_gate`，回显进度图转发用户。
 
 ### 阶段 1：开发（TDD 红绿纪律）
 
@@ -54,7 +59,7 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 4. 红绿证据（每个行为点：测试文件、红灯命令+失败摘要、绿灯命令+通过摘要）落 `$CTX/tdd-evidence.md`，按需求进展追加。
 5. **豁免规则**：纯文案、样式微调等确无可断言行为的变更可豁免红绿，但豁免理由必须写进 tdd-evidence.md——不可测是性质判断，不是成本判断。
 
-完成自检（typecheck、全量相关测试）后进入阶段 2。
+完成自检（typecheck、全量相关测试）后 bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh mark --ctx-dir "$CTX" dev_done（转发进度图），进入阶段 2。
 
 ### 阶段 2：CR 循环（无轮次上限）
 
@@ -66,9 +71,9 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
    - `pass=true` → 循环结束（脚本已置 status=awaiting_human），进入**收尾**，顺序固定：
      1. **squash**：把 commit message 写入临时文件后 `bash ~/.claude/skills/harness-ceilf6/scripts/squash-branch.sh --dir "$CTX" --message-file <文件>`。message 实质性规则：描述改了什么行为、为什么，从 plan.md 目标 + 实际改动提炼；禁止「处理CR意见」「修复评审问题」「harness 自动开发」这类过程叙事；续入时重写为覆盖全部范围的最终表述。旧状态在 `harness-backup/<分支>` 引用可回退。
      2. **push**：`git push --force-with-lease origin <分支>`。force-with-lease 仅限 harness 需求分支——2026-07-30 用户裁定方案 A（MR 恒单 commit），是既有自动 push 豁免（2026-07-29）的延伸。
-     3. **MR**：调用 bytedcli-bits-mr 建 MR——标题 = 需求短题，描述必含：任务来源（bot 场景带 chat/message id）、plan 四段摘要、CR 轮次表、遗留 minor/nit 清单。**续入不重复建 MR**：当前分支已存在开放 MR 时只在既有 MR 追加一条评论（本轮变更摘要 + 新增 CR 轮次 + 注明历史已重写），MR 链接沿用。
+     3. **MR**：调用 bytedcli-bits-mr 建 MR——标题 = 需求短题，描述必含：任务来源（bot 场景带 chat/message id）、plan 四段摘要、CR 轮次表、遗留 minor/nit 清单。**续入不重复建 MR**：当前分支已存在开放 MR 时只在既有 MR 追加一条评论（本轮变更摘要 + 新增 CR 轮次 + 注明历史已重写），MR 链接沿用。建成后 bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh mark --ctx-dir "$CTX" mr_created。
      4. **沉淀**：harness-context 供料 + lark-sediment 流程——需求结论、CR 往返要点、踩坑追加到 meta.wiki_url 需求子文档（wiki_url 为空则先按阶段 0 第 4 步补建）；同批产出 B 线四问叙事节（lark-sediment「两条沉淀线」）追加到**同一篇**需求子文档；跨需求通用经验按 lark-sediment 正常去重、分类落位，不塞进需求文档；写 `$CTX/sediment.md` 台账。沉淀失败如实报告后继续汇总（MR 已建，不因沉淀失败回滚）。无人值守模式沉淀全程不需人工。
-     5. 输出收尾汇总（模板见下，MR 链接置顶）。
+     5. 输出收尾汇总（模板见下，首行进度图、次行未自测警示，MR 为过程产物行）。
 
      失败/熔断/超时**不 squash、不 push、不建 MR、不沉淀**——半成品不进团队远端视野、不上 wiki。
    - `pass=false` → **逐条处置**每个 finding：修复，或书面不采纳。全部 blocker/major 处置完后写 `$CTX/cr/round-N/fixes.md`（格式见下），回到第 1 步。
@@ -87,22 +92,35 @@ meta.max_rounds 非 null 时，达到该轮数也停下交用户（默认 null �
 - 说明：修复→改了什么、在哪个提交；不采纳→理由与依据
 ```
 
-**收尾汇总模板**（pass 或熔断后输出给用户）：
+**收尾汇总模板**（pass 或熔断后输出给用户；首行进度图取 `threads.sh progress` 实际输出）：
 
 ```markdown
 ## CR 循环收尾
-- MR：<链接>（失败/熔断时写「未创建」）
+<进度图>
+⚠️ MR 已建，但人工 CR、自测未完成——请勿把 MR 链接作为完成交付外发（失败/熔断时本行改写：未建 MR，无可外发物）
+- 结果：机审通过（第 N 轮），人工 CR 与自测未开始 ｜ 熔断待裁决
+- MR（已建，待人工 CR → 自测）：<链接>（失败/熔断时写「未创建」）
 - wiki 沉淀：<需求子文档链接>（失败/熔断时写「未沉淀」）
-- 结果：通过（第 N 轮）｜ 熔断待裁决
 - 改动概览：<一段话>
 - 轮次记录：cr/round-1..N（verdict / fixes 齐全）
 - 遗留 minor/nit：<清单，含文件位置>（修不修由你定）
-- 下一步：人工 CR / 测试；发现问题用 harness-context add 存入后再喊我续跑
+- 下一步（两步闭环）：① 人工 CR ② 自测。每完成一步就确认——会话里说「人工 CR 完成 / 自测完成」，或 `ht mark <序号> human-cr|selftest`，或 web 看板按钮。两步齐后输出「可交付版汇总」，那才是可外发版本。发现问题用 harness-context add 存入后喊我续跑
 ```
 
-### 阶段 3：人工阶段与续入
+### 阶段 3：人工节点与可交付
 
-用户人工 CR / 测试。发现问题 → 用户经 harness-context add 存入（或直接口述）→ 再次调用本技能：走续入路径（plan.md 增补验收条目），回到阶段 1 修复、阶段 2 再循环。全部完成后用户可 `set-status done`。
+收尾后进入人工区间，两节点顺序：人工 CR → 自测。用户在会话说「人工 CR 完成」「自测完成」→ `bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh mark --ctx-dir "$CTX" <human_cr_done|selftest_done>` 并转发进度图。另两条渠道（`ht mark`、web 看板）与此同一写入口、可能发生在会话外——收到用户后续消息时先 `progress` 一次核对现状再回应。
+
+`human_cr_done` 与 `selftest_done` 齐备后输出**可交付版汇总**；在此之前对本需求不得使用「完成 / 可交付」措辞：
+
+```markdown
+## 可交付
+- MR：<链接>
+- 改动：<一句话>
+- 已完成：机审 CR（N 轮）+ 人工 CR + 自测
+```
+
+发现问题 → 用户经 harness-context add 存入（或直接口述）→ 再次调用本技能：走续入路径（plan.md 增补验收条目 + 重置里程碑），回到阶段 1 修复、阶段 2 再循环。全部完成后用户可 `set-status done`。
 
 ## 约束
 

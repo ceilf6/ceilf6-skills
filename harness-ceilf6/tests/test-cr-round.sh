@@ -69,6 +69,7 @@ grep -q 'git diff master\.\.\.HEAD' "$ctx/cr/round-1/instructions.md" && ok "含
 [ -f "$ctx/cr/round-1/verdict.json" ] && ok "verdict 捕获" || bad "verdict 捕获"
 grep -q 'pass' "$ctx/cr/round-1/review.md" && ok "review 渲染" || bad "review 渲染"
 [ "$(jq -r .status "$ctx/meta.json")" = awaiting_human ] && ok "pass 后 status=awaiting_human" || bad "status: $(jq -r .status "$ctx/meta.json")"
+[ -n "$(jq -r '.milestones.cr_passed // empty' "$ctx/meta.json")" ] && ok "pass 写 cr_passed 里程碑" || bad "cr_passed 里程碑"
 echo "$out" | grep -q '第 1 轮' && ok "摘要回显轮次" || bad "摘要回显"
 cleanup_repo
 
@@ -76,6 +77,7 @@ echo "== round-1 未通过路径 =="
 make_ctx
 run_cr fail "$ctx" >/dev/null
 [ "$(jq -r .status "$ctx/meta.json")" = cr ] && ok "未通过 status 保持 cr" || bad "未通过 status"
+[ -z "$(jq -r '.milestones.cr_passed // empty' "$ctx/meta.json")" ] && ok "未通过不写 cr_passed" || bad "未通过误写 cr_passed"
 grep -q 'major' "$ctx/cr/round-1/review.md" && ok "review 含 severity" || bad "review 含 severity"
 
 echo "== round-2 前置与上下文注入 =="
