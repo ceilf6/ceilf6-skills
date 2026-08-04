@@ -15,11 +15,12 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 
 ## 模式
 
-默认**交互模式**。当调用方在会话开头明确声明「无人值守模式」（如任务大厅 bot 的 bootstrap prompt）时，仅以下三处分叉，其余（**含计划门自动过门**）两种模式一致：
+默认**交互模式**。当调用方在会话开头明确声明「无人值守模式」（如任务大厅 bot 的 bootstrap prompt）时，仅以下四处分叉，其余（**含计划门自动过门**）两种模式一致：
 
-- 计划门·完整路径：交互模式转 superpowers brainstorming 与用户协商；无人值守模式**不可用**，按调用方约定输出 escalate 结果后结束。
-- 僵局熔断：交互模式停下交用户裁决；无人值守模式不等人，按调用方约定输出 fused 结果后结束。
-- 结果输出：无人值守模式结束时按调用方约定输出结果行（如 RESULT 契约），「未人工CR/未自测」标注写进结果 JSON 的 summary 字段内，不得缀在 JSON 之后或另起一行——契约消费方按行取前缀后整体 JSON.parse，行尾散文会让 pass 被误判为 fail。bot 不能替人完成人工节点，milestones 停在 mr_created；交互模式面向用户汇总。
+- 计划门·完整路径：交互模式转 superpowers brainstorming 与用户协商；无人值守模式按调用方约定输出 ask 结果（question 写清缺口与分歧），等用户回复视作计划门协商输入继续，可多轮。
+- 僵局熔断：交互模式停下交用户裁决；无人值守模式同样不擅断——按调用方约定输出 ask 结果（question 写清熔断现场与候选项），等用户裁决后继续。
+- 开发中关键决策拿不准（多方案取舍缺依据、需求解读分歧大）：交互模式问用户；无人值守模式以 ask 输出等待回复。
+- 结果输出：无人值守模式**每轮**结束按调用方约定输出结果行（如 RESULT 契约），pass/fail/skip 为终态、ask 为等待用户回复的中间态；「未人工CR/未自测」标注写进结果 JSON 的 summary 字段内，不得缀在 JSON 之后或另起一行——契约消费方按行取前缀后整体 JSON.parse，行尾散文会让 pass 被误判为 fail。bot 不能替人完成人工节点，milestones 停在 mr_created；交互模式面向用户汇总。
 
 ## 流程
 
@@ -38,7 +39,7 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 
 1. **续入路径**：`$CTX/plan.md` 已存在 → 跳过门。本轮新增问题以「## 验收增补（<日期>）」小节追加进 plan.md。同时重置里程碑：`jq 'del(.milestones.dev_done, .milestones.cr_passed, .milestones.human_cr_done, .milestones.selftest_done)' "$CTX/meta.json" > "$CTX/tmp" && mv "$CTX/tmp" "$CTX/meta.json"`（`plan_gate`/`mr_created` 保留——计划门跳过、MR 复用），随后输出进度图。用户明确说「重新规划」才走重规划：旧内容整体降级为「## 历史版本（<日期>归档）」小节保留于文件尾部，新四段写在文件头。
 2. **轻量路径（默认，自动过门）**：能从上下文复述出可信的目标/范围/改法/验收四段 → 写入 plan.md 并向用户播报（交互场景你在场，随时可打断修正），**不等待确认直接过门**——用户 2026-07-29 裁定：只有实在不明确的需求才需要人工协商。plan.md 头部加一行「> 计划门自动通过（<日期>）」。
-3. **完整路径（实在不明确才走）**：复述不出可信四段（缺关键信息或解读分歧大），或用户点名「走 brainstorming」→ 交互模式转 superpowers 的 brainstorming → writing-plans 全流程与用户协商，结束后把最终 plan 内容归一写入 plan.md；无人值守模式按「模式」节输出 escalate。
+3. **完整路径（实在不明确才走）**：复述不出可信四段（缺关键信息或解读分歧大），或用户点名「走 brainstorming」→ 交互模式转 superpowers 的 brainstorming → writing-plans 全流程与用户协商，结束后把最终 plan 内容归一写入 plan.md；无人值守模式按「模式」节输出 ask 等待用户回复。
 
 过门后依次执行（交互与无人值守一致）：
 

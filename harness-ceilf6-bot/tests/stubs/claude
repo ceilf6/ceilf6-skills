@@ -1,14 +1,52 @@
-#!/usr/bin/env bash
-# 假 claude：按 STUB_VERDICT 输出 RESULT 行；hang 模式睡眠触发超时；把收到的 prompt 存档供断言。
-set -euo pipefail
-[ -n "${STUB_PROMPT_OUT:-}" ] && printf '%s\n' "$2" > "$STUB_PROMPT_OUT"
-[ -n "${STUB_ARGS_OUT:-}" ] && printf '%s\n' "$@" > "$STUB_ARGS_OUT"
-mode="${STUB_VERDICT:?需要 STUB_VERDICT}"
-case "$mode" in
-  hang) sleep 30 ;;
-  pass) echo '过程输出'; echo 'RESULT {"verdict":"pass","branch":"b","mr_url":"https://mr/9","summary":"完成"}' ;;
-  skip) echo 'RESULT {"verdict":"skip","reason":"闲聊"}' ;;
-  escalate) echo 'RESULT {"verdict":"escalate","reason":"需求不明确"}' ;;
-  garbage) echo '没有结果行' ;;
-  *) echo "RESULT {\"verdict\":\"$mode\"}" ;;
-esac
+#!/usr/bin/env node
+// 假 claude（stream-json 长驻协议）：启动即发 init 事件；每收到一条 user 消息按 STUB_TURNS
+// 第 N 条指令回一个 result 事件（超出用最后一条）；stdin 关闭即退出。
+// hang 指令不回 result（进程仍活着），用于触发每轮超时；die 指令收到消息即退出 1
+// 且不回 result，用于活跃轮次进程死亡分支。STUB_VERDICT 是单指令旧名。
+import { appendFileSync, writeFileSync } from 'node:fs';
+import { createInterface } from 'node:readline';
+
+const args = process.argv.slice(2);
+if (process.env.STUB_ARGS_OUT) writeFileSync(process.env.STUB_ARGS_OUT, args.join('\n') + '\n');
+const turns = (process.env.STUB_TURNS ?? process.env.STUB_VERDICT ?? 'pass').split(';');
+const SESSION = process.env.STUB_SESSION_ID ?? 'sess_stub_1';
+// STUB_SPLIT_MULTIBYTE：把事件行在首个多字节 UTF-8 字符中间劈成两个先后到达的 chunk，
+// 供消费方验证跨 chunk 的字节缓冲解码（无多字节字符的行不劈）。
+const emit = (o) => {
+  const line = Buffer.from(JSON.stringify(o) + '\n');
+  const hi = line.findIndex((b) => b >= 0x80);
+  if (process.env.STUB_SPLIT_MULTIBYTE && hi >= 0) {
+    process.stdout.write(line.subarray(0, hi + 1));
+    setTimeout(() => process.stdout.write(line.subarray(hi + 1)), 30);
+    return;
+  }
+  process.stdout.write(line);
+};
+let n = 0;
+emit({ type: 'system', subtype: 'init', session_id: SESSION });
+createInterface({ input: process.stdin }).on('line', (line) => {
+  let msg;
+  try { msg = JSON.parse(line); } catch { return; }
+  const content = String(msg?.message?.content ?? '');
+  if (n === 0 && process.env.STUB_PROMPT_OUT) writeFileSync(process.env.STUB_PROMPT_OUT, content);
+  if (process.env.STUB_MSGS_OUT) appendFileSync(process.env.STUB_MSGS_OUT, content.replaceAll('\n', '⏎') + '\n');
+  const directive = turns[Math.min(n, turns.length - 1)];
+  n++;
+  const [kind, ...rest] = directive.split(':');
+  const arg = rest.join(':');
+  if (kind === 'hang') return;
+  if (kind === 'die') process.exit(1);
+  if (kind === 'error') { emit({ type: 'result', is_error: true, result: arg || '假 API 错误', session_id: SESSION }); return; }
+  const finalLine = {
+    pass: 'RESULT {"verdict":"pass","branch":"b","mr_url":"https://mr/9","summary":"完成"}',
+    skip: 'RESULT {"verdict":"skip","reason":"闲聊"}',
+    fail: 'RESULT {"verdict":"fail","reason":"跑挂了"}',
+    escalate: 'RESULT {"verdict":"escalate","reason":"需求不明确"}',
+    fused: 'RESULT {"verdict":"fused","reason":"CR 熔断"}',
+    noresult: '没有结果行',
+    garbage: '没有结果行',
+    ask: `RESULT {"verdict":"ask","question":${JSON.stringify(arg || '缺信息')}}`,
+  }[kind] ?? `RESULT {"verdict":"${kind}"}`;
+  emit({ type: 'result', is_error: false, result: `过程输出\n${finalLine}`, session_id: SESSION });
+});
+process.stdin.on('end', () => process.exit(0));

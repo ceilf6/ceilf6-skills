@@ -39,8 +39,9 @@ export function makeLark(config) {
     async sendDm(openId, text) {
       const res = await call(['im', '+messages-send', '--user-id', openId,
         '--msg-type', 'text', '--content', JSON.stringify({ text })]);
-      if (!res?.ok) { console.error(`[lark] sendDm 失败 ${openId}`); return false; }
-      return true;
+      if (!res?.ok) { console.error(`[lark] sendDm 失败 ${openId}`); return null; }
+      // message_id 供 awaiting 登记做「引用回复」匹配；调用方不关心时忽略即可。
+      return res.data?.message_id ?? '';
     },
   };
 }

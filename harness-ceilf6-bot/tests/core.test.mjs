@@ -71,6 +71,28 @@ test('decide 门禁对 reply 同样生效：他群/bot/过短/重复一律先被
   assert.equal(decide(ev, CONFIG, () => true).reason, 'duplicate');
 });
 
+const RAW_DM = { chat_id: 'oc_p2p_1', chat_type: 'p2p', message_id: 'om_dm_1', message_type: 'text', sender_type: 'user', sender_id: 'ou_me', content: '好的' };
+const DM_CONFIG = { ...CONFIG, dmOpenId: 'ou_me' };
+
+test('normalize 提取 chatType', () => {
+  assert.equal(normalize(RAW_DM).chatType, 'p2p');
+  assert.equal(normalize(RAW).chatType, 'group');
+});
+test('decide 私信：本人 p2p 消息判 dm，且不受 minTextLength 门槛（「好的」也是合法拍板）', () => {
+  assert.equal(decide(normalize(RAW_DM), DM_CONFIG, notProcessed).action, 'dm');
+});
+test('decide 私信拒绝：他人 p2p / bot 自己 / 空文本 / 重复', () => {
+  const ev = normalize(RAW_DM);
+  assert.equal(decide({ ...ev, senderOpenId: 'ou_other' }, DM_CONFIG, notProcessed).reason, 'other-dm');
+  assert.equal(decide({ ...ev, senderType: 'bot' }, DM_CONFIG, notProcessed).reason, 'other-dm');
+  assert.equal(decide({ ...ev, text: '' }, DM_CONFIG, notProcessed).reason, 'too-short');
+  assert.equal(decide(ev, DM_CONFIG, () => true).reason, 'duplicate');
+});
+test('decide 群链路回归：chatType=group 走既有三态', () => {
+  assert.equal(decide(normalize(RAW), DM_CONFIG, notProcessed).action, 'enqueue');
+  assert.equal(decide(normalize(RAW_REPLY), DM_CONFIG, notProcessed).action, 'reply');
+});
+
 test('Store 持久化：processed 与 queue 重启可恢复', () => {
   const dir = mkdtempSync(join(tmpdir(), 'thb-'));
   const s1 = new Store(dir);
@@ -148,6 +170,38 @@ test('Store 容错：threads.jsonl 坏行只跳过不抛，好行照常加载', 
   rmSync(dir, { recursive: true, force: true });
 });
 
+test('Store awaiting：recordAsk 跨轮累积 questionMsgIds、waiting 翻转、resumeFlags 保留、跨重启可恢复', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'thb-'));
+  const s1 = new Store(dir);
+  assert.equal(s1.findAwaiting('om_t'), null);
+  s1.recordAsk('om_t', { threadId: 'omt_1', branch: 'bot/x', worktree: '/wt/x', sessionId: 'sess_1', question: '问1', questionMsgId: 'om_q1', statusRid: 'rid_9', title: '短题' });
+  assert.equal(s1.findAwaiting('om_t').waiting, true);
+  assert.equal(s1.findAwaitingByQuestionMsg('om_q1').messageId, 'om_t');
+  s1.patchAwaiting('om_t', { waiting: false, resumeFlags: ['--model', 'opus'] });
+  assert.equal(s1.listWaiting().length, 0);
+  s1.recordAsk('om_t', { sessionId: 'sess_1', question: '问2', questionMsgId: 'om_q2', statusRid: 'rid_10', title: '短题' });
+  const e = s1.findAwaiting('om_t');
+  assert.deepEqual(e.questionMsgIds, ['om_q1', 'om_q2']); // 引用任一轮提问都可命中
+  assert.deepEqual(e.resumeFlags, ['--model', 'opus']);   // 命令设置跨轮存续
+  assert.equal(e.waiting, true);
+  assert.equal(e.branch, 'bot/x'); // 未再传的字段保留
+  const s2 = new Store(dir); // 模拟重启
+  assert.equal(s2.findAwaitingByQuestionMsg('om_q2').sessionId, 'sess_1');
+  assert.equal(s2.listWaiting().length, 1);
+  s2.dropAwaiting('om_t');
+  assert.equal(new Store(dir).findAwaiting('om_t'), null); // 删除也持久化
+  rmSync(dir, { recursive: true, force: true });
+});
+test('Store awaiting 容错：坏行只跳过不抛', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'thb-'));
+  const s1 = new Store(dir);
+  s1.recordAsk('om_ok', { question: 'q', questionMsgId: 'om_qq', title: 't' });
+  appendFileSync(join(dir, 'awaiting.jsonl'), '{{{ 坏行\nnull\n{"noMessageId":1}\n');
+  const s2 = new Store(dir);
+  assert.equal(s2.findAwaiting('om_ok').question, 'q');
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test('parseResult 解析末行 RESULT', () => {
   const out = '一些过程输出\nRESULT {"verdict":"pass","mr_url":"https://mr/1","branch":"bot/x","summary":"s"}\n';
   assert.equal(parseResult(out).verdict, 'pass');
@@ -162,4 +216,10 @@ test('parseResult 异常输入返回 null', () => {
   assert.equal(parseResult('RESULT 不是json'), null);
   assert.equal(parseResult('RESULT {"verdict":"bogus"}'), null);
   assert.equal(parseResult(''), null);
+});
+test('parseResult 接受 ask verdict 并带出 question', () => {
+  const out = 'RESULT {"verdict":"ask","question":"选 A 还是 B？\\n背景：…"}';
+  const r = parseResult(out);
+  assert.equal(r.verdict, 'ask');
+  assert.ok(r.question.includes('选 A 还是 B'));
 });

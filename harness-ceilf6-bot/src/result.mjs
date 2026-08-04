@@ -1,5 +1,6 @@
 // RESULT 契约解析：stdout 中最后一个 `RESULT ` 前缀行；坏 JSON / 非法 verdict → null（按 fail 处理）。
-const VERDICTS = new Set(['skip', 'escalate', 'pass', 'fail', 'fused']);
+// ask 是中间态（等用户私信回复），其余为终态；escalate/fused 仅旧会话兼容。
+const VERDICTS = new Set(['skip', 'ask', 'escalate', 'pass', 'fail', 'fused']);
 
 export function parseResult(stdout) {
   const lines = String(stdout ?? '').split('\n');

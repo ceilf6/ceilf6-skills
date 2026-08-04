@@ -9,7 +9,8 @@ import { decide } from './filter.mjs';
 import { appendContextEntry } from './context.mjs';
 import { Store } from './state.mjs';
 import { makeLark } from './lark.mjs';
-import { runTask, killActiveChildren } from './runner.mjs';
+import { runTask, resumeTask, injectReply, killSession, killActiveChildren } from './runner.mjs';
+import { parseDmReply, mergeFlags, SUPPORTED_HINT } from './commands.mjs';
 
 export function nextBackoff(attempt) {
   return Math.min(1000 * 2 ** attempt, 60_000);
@@ -71,17 +72,33 @@ if (isMain) {
   let running = 0;
   let stopping = false;
 
+  const counted = new Set(); // 占着 concurrency 槽的任务：首次 ask 即释放（用户裁定：回复轮不受槽位限制）
+  const taskHooks = {
+    onWorktreeReady: (info) => registerThread(store, info),
+    onAsk: (info) => {
+      store.recordAsk(info.messageId, info);
+      if (counted.delete(info.messageId)) { running--; pump(); }
+    },
+  };
+  function settleTask(task) {
+    return (out) => {
+      store.dropAwaiting(task.messageId);
+      // skip 会把 worktree 与分支删掉，登记不注销的话后续回复会往已删目录写出无人读的文件。
+      if (out?.verdict === 'skip') unregisterThread(store, task);
+    };
+  }
+
   async function pump() {
     while (!stopping && running < config.concurrency && store.size() > 0) {
       const task = store.dequeue();
       running++;
-      runTask(task, config, lark, { onWorktreeReady: (info) => registerThread(store, info) })
-        .then((out) => {
-          // skip 会把 worktree 与分支删掉，登记不注销的话后续回复会往已删目录写出无人读的文件。
-          if (out?.verdict === 'skip') unregisterThread(store, task);
-        })
+      counted.add(task.messageId);
+      runTask(task, config, lark, taskHooks)
+        .then(settleTask(task))
         .catch((e) => console.error(`[listener] runTask 异常：${e.message}`))
-        .finally(() => { running--; pump(); });
+        .finally(() => {
+          if (counted.delete(task.messageId)) { running--; pump(); }
+        });
     }
   }
 
@@ -111,6 +128,59 @@ if (isMain) {
     await lark.addReaction(ev.messageId, config.reactions.context);
   }
 
+  // 私信回路：路由（引用精确 > 单任务直发）→ 斜杠命令 → 注入活会话或懒续跑。
+  // 懒续跑轮不占 concurrency 槽（用户裁定实时优先）。
+  async function handleDm(ev) {
+    store.markProcessed(ev.messageId);
+    let target = ev.rootId ? store.findAwaitingByQuestionMsg(ev.rootId) : null;
+    if (target && !target.waiting) {
+      await lark.sendDm(config.dmOpenId, '该任务正在跑本轮，暂未等待回复。');
+      return;
+    }
+    if (!target) {
+      const waitingList = store.listWaiting();
+      if (waitingList.length === 0) { await lark.sendDm(config.dmOpenId, '当前没有等待回复的任务。'); return; }
+      if (waitingList.length > 1) { await lark.sendDm(config.dmOpenId, `有 ${waitingList.length} 个任务在等回复，请引用对应提问消息回复。`); return; }
+      target = waitingList[0];
+    }
+    const parsed = parseDmReply(ev.text);
+    if (parsed.unknown.length) {
+      await lark.sendDm(config.dmOpenId, `无法执行的命令：${parsed.unknown.join(' ')}；${SUPPORTED_HINT}。整条消息未注入。`);
+      return;
+    }
+    if (parsed.flags.length) {
+      const merged = mergeFlags(target.resumeFlags ?? [], parsed.flags);
+      store.patchAwaiting(target.messageId, { resumeFlags: merged });
+      killSession(target.messageId); // 新参数只能在重建进程时生效；挂起态收割无损
+      if (!parsed.body) {
+        await lark.sendDm(config.dmOpenId, `已记录 ${merged.join(' ')}，下一轮续跑生效。`);
+        return;
+      }
+      target = store.findAwaiting(target.messageId) ?? target;
+    }
+    store.patchAwaiting(target.messageId, { waiting: false }); // 防同一轮被二次注入
+    // 注入/懒续跑异常时必须回滚 waiting=true：不回滚则条目永久失联——引用回复恒得「正在跑」、
+    // 直发恒得「没有等待」、重启后 listWaiting 也不选中，只能手改 awaiting.jsonl。
+    // 回滚只恢复可路由性，用户重发一条回复即可再触发注入/懒续跑。
+    if (!parsed.flags.length) {
+      // 换过参数（flags）必走懒续跑：新参数只在 spawn 生效，且旧进程正在被收割、注入必死于半路。
+      try {
+        if (await injectReply(target.messageId, parsed.body)) return;
+      } catch (e) {
+        console.error(`[listener] 注入异常：${e.message}`);
+        store.patchAwaiting(target.messageId, { waiting: true });
+        return; // 注入异常后旧进程状态未知，不得再叠一个懒续跑进程
+      }
+    }
+    const info = store.findAwaiting(target.messageId) ?? target;
+    resumeTask(info, parsed.body, config, lark, { onAsk: taskHooks.onAsk })
+      .then(settleTask({ messageId: info.messageId, threadId: info.threadId }))
+      .catch((e) => {
+        console.error(`[listener] 懒续跑异常：${e.message}`);
+        store.patchAwaiting(info.messageId, { waiting: true });
+      });
+  }
+
   let attempt = 0;
   function startConsumer() {
     if (stopping) return;
@@ -131,7 +201,12 @@ if (isMain) {
       const ev = normalize(raw);
       const d = decide(ev, config, (id) => store.isProcessed(id));
       if (d.action === 'ignore') {
-        if (d.reason !== 'other-chat') console.error(`[listener] 忽略 ${ev?.messageId ?? '?'}（${d.reason}）`);
+        if (d.reason !== 'other-chat' && d.reason !== 'other-dm') console.error(`[listener] 忽略 ${ev?.messageId ?? '?'}（${d.reason}）`);
+        return;
+      }
+      if (d.action === 'dm') {
+        // 本回调是同步的，未捕获的 rejection 会按默认策略掀掉常驻进程。
+        handleDm(ev).catch((e) => console.error(`[listener] 私信处理异常：${e.message}`));
         return;
       }
       // 归属任务已登记 → 并进它的上下文；未登记（bot 启动前的老话题）→ 退化为新任务候选。

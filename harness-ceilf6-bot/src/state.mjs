@@ -1,4 +1,4 @@
-// 文件持久化状态：processed.jsonl 只增；queue.jsonl 与 threads.jsonl 全量重写。
+// 文件持久化状态：processed.jsonl 只增；queue.jsonl、threads.jsonl 与 awaiting.jsonl 全量重写。
 // 事件总线可能重放消息，processed 去重是正确性底线。
 import { readFileSync, appendFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -9,11 +9,15 @@ export class Store {
     this.processedPath = join(stateDir, 'processed.jsonl');
     this.queuePath = join(stateDir, 'queue.jsonl');
     this.threadsPath = join(stateDir, 'threads.jsonl');
+    this.awaitingPath = join(stateDir, 'awaiting.jsonl');
     this.processed = new Set(this.#readEntries(this.processedPath).map((e) => e.id));
     this.queue = this.#readEntries(this.queuePath);
     this.threads = new Map(this.#readEntries(this.threadsPath)
       .filter((e) => typeof e.threadId === 'string' && e.threadId && e.info)
       .map((e) => [e.threadId, e.info]));
+    this.awaiting = new Map(this.#readEntries(this.awaitingPath)
+      .filter((e) => typeof e.messageId === 'string' && e.messageId)
+      .map((e) => [e.messageId, e]));
   }
   #readEntries(p) {
     if (!existsSync(p)) return [];
@@ -61,6 +65,38 @@ export class Store {
   dropThread(threadId) {
     if (!this.threads.delete(threadId)) return false; // 无此登记就不空转写盘
     this.#flushThreads();
+    return true;
+  }
+  // awaiting 登记表：等私信回复的任务（懒续跑真源）。条目跨多轮 ask 存续，终态才删。
+  #flushAwaiting() { this.#flushLines(this.awaitingPath, [...this.awaiting.values()]); }
+  recordAsk(messageId, info) {
+    const prev = this.awaiting.get(messageId) ?? {};
+    const { questionMsgId, ...rest } = info;
+    this.awaiting.set(messageId, {
+      ...prev, ...rest, messageId,
+      questionMsgIds: [...(prev.questionMsgIds ?? []), ...(questionMsgId ? [questionMsgId] : [])],
+      resumeFlags: prev.resumeFlags ?? [],
+      waiting: true,
+      askedAt: new Date().toISOString(),
+    });
+    this.#flushAwaiting();
+  }
+  findAwaiting(messageId) { return this.awaiting.get(messageId) ?? null; }
+  findAwaitingByQuestionMsg(msgId) {
+    for (const e of this.awaiting.values()) if (e.questionMsgIds?.includes(msgId)) return e;
+    return null;
+  }
+  listWaiting() { return [...this.awaiting.values()].filter((e) => e.waiting); }
+  patchAwaiting(messageId, patch) {
+    const prev = this.awaiting.get(messageId);
+    if (!prev) return false;
+    this.awaiting.set(messageId, { ...prev, ...patch });
+    this.#flushAwaiting();
+    return true;
+  }
+  dropAwaiting(messageId) {
+    if (!this.awaiting.delete(messageId)) return false;
+    this.#flushAwaiting();
     return true;
   }
 }

@@ -31,10 +31,10 @@ test('deleteReaction 走 DELETE 且返回 true', async () => {
   assert.ok(readFileSync(log, 'utf8').includes('rid_123'));
   rmSync(dir, { recursive: true, force: true });
 });
-test('replyInThread 与 sendDm 返回 true', async () => {
+test('replyInThread 与 sendDm：sendDm 返回 message_id', async () => {
   const { dir, log, lark } = setup();
   assert.equal(await lark.replyInThread('om_1', '回帖文本'), true);
-  assert.equal(await lark.sendDm('ou_me', '私信文本'), true);
+  assert.equal(await lark.sendDm('ou_me', '私信文本'), 'om_send_2'); // 本用例第 2 次调用
   const calls = readFileSync(log, 'utf8');
   assert.ok(calls.includes('messages-reply'));
   assert.ok(calls.includes('messages-send'));

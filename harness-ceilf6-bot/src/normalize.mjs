@@ -6,6 +6,7 @@ export function normalize(raw) {
   if (!messageId) return null;
   return {
     chatId: raw.chat_id ?? raw.message?.chat_id ?? '',
+    chatType: raw.chat_type ?? raw.message?.chat_type ?? '',
     senderType: raw.sender_type ?? raw.sender?.sender_type ?? '',
     // lark-cli 已把 sender 拍平成 sender_id 字符串；后一路径兜飞书原始 webhook 的嵌套形状。
     senderOpenId: raw.sender_id ?? raw.sender?.sender_id?.open_id ?? '',

@@ -26,6 +26,6 @@ case "$1" in
       *DELETE*) echo '{"ok":true,"data":{}}' ;;
       *) echo '{"ok":true,"data":{"reaction_id":"rid_123"}}' ;;
     esac ;;
-  im) echo '{"ok":true,"data":{"message_id":"om_reply1"}}' ;;
+  im) echo "{\"ok\":true,\"data\":{\"message_id\":\"om_send_${calls}\"}}" ;;
   *) echo '{"ok":true,"data":{}}' ;;
 esac
