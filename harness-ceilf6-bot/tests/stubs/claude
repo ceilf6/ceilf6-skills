@@ -2,7 +2,9 @@
 // 假 claude（stream-json 长驻协议）：启动即发 init 事件；每收到一条 user 消息按 STUB_TURNS
 // 第 N 条指令回一个 result 事件（超出用最后一条）；stdin 关闭即退出。
 // hang 指令不回 result（进程仍活着），用于触发每轮超时；die 指令收到消息即退出 1
-// 且不回 result，用于活跃轮次进程死亡分支。STUB_VERDICT 是单指令旧名。
+// 且不回 result，用于活跃轮次进程死亡分支。ask 的参数以 | 分隔 question 与 summary。
+// STUB_SELF_TURN（{"afterMs":N,"directive":"…"}）：回完一轮后无需输入自发再出一轮 result，
+// 模拟会话自布后台任务完成触发的自唤醒轮，只触发一次。STUB_VERDICT 是单指令旧名。
 import { appendFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
@@ -22,7 +24,36 @@ const emit = (o) => {
   }
   process.stdout.write(line);
 };
+
+function resultLineFor(kind, arg) {
+  if (kind === 'ask') {
+    const [q, s] = arg.split('|');
+    const obj = { verdict: 'ask', question: q || '缺信息' };
+    if (s) obj.summary = s;
+    return 'RESULT ' + JSON.stringify(obj);
+  }
+  return {
+    pass: 'RESULT {"verdict":"pass","branch":"b","mr_url":"https://mr/9","summary":"完成"}',
+    skip: 'RESULT {"verdict":"skip","reason":"闲聊"}',
+    fail: 'RESULT {"verdict":"fail","reason":"跑挂了"}',
+    escalate: 'RESULT {"verdict":"escalate","reason":"需求不明确"}',
+    fused: 'RESULT {"verdict":"fused","reason":"CR 熔断"}',
+    noresult: '没有结果行',
+    garbage: '没有结果行',
+  }[kind] ?? `RESULT {"verdict":"${kind}"}`;
+}
+
+function emitTurn(directive) {
+  const [kind, ...rest] = directive.split(':');
+  const arg = rest.join(':');
+  if (kind === 'hang') return;
+  if (kind === 'die') process.exit(1);
+  if (kind === 'error') { emit({ type: 'result', is_error: true, result: arg || '假 API 错误', session_id: SESSION }); return; }
+  emit({ type: 'result', is_error: false, result: `过程输出\n${resultLineFor(kind, arg)}`, session_id: SESSION });
+}
+
 let n = 0;
+let selfArmed = !!process.env.STUB_SELF_TURN;
 emit({ type: 'system', subtype: 'init', session_id: SESSION });
 createInterface({ input: process.stdin }).on('line', (line) => {
   let msg;
@@ -32,21 +63,11 @@ createInterface({ input: process.stdin }).on('line', (line) => {
   if (process.env.STUB_MSGS_OUT) appendFileSync(process.env.STUB_MSGS_OUT, content.replaceAll('\n', '⏎') + '\n');
   const directive = turns[Math.min(n, turns.length - 1)];
   n++;
-  const [kind, ...rest] = directive.split(':');
-  const arg = rest.join(':');
-  if (kind === 'hang') return;
-  if (kind === 'die') process.exit(1);
-  if (kind === 'error') { emit({ type: 'result', is_error: true, result: arg || '假 API 错误', session_id: SESSION }); return; }
-  const finalLine = {
-    pass: 'RESULT {"verdict":"pass","branch":"b","mr_url":"https://mr/9","summary":"完成"}',
-    skip: 'RESULT {"verdict":"skip","reason":"闲聊"}',
-    fail: 'RESULT {"verdict":"fail","reason":"跑挂了"}',
-    escalate: 'RESULT {"verdict":"escalate","reason":"需求不明确"}',
-    fused: 'RESULT {"verdict":"fused","reason":"CR 熔断"}',
-    noresult: '没有结果行',
-    garbage: '没有结果行',
-    ask: `RESULT {"verdict":"ask","question":${JSON.stringify(arg || '缺信息')}}`,
-  }[kind] ?? `RESULT {"verdict":"${kind}"}`;
-  emit({ type: 'result', is_error: false, result: `过程输出\n${finalLine}`, session_id: SESSION });
+  emitTurn(directive);
+  if (selfArmed) {
+    selfArmed = false;
+    const cfg = JSON.parse(process.env.STUB_SELF_TURN);
+    setTimeout(() => emitTurn(cfg.directive), cfg.afterMs);
+  }
 });
 process.stdin.on('end', () => process.exit(0));

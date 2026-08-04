@@ -83,14 +83,17 @@ async function swapReaction(lark, messageId, newKey, currentRid) {
   return rid;
 }
 
-function askDmText(rt, question) {
-  return `⏳ ${rt.title} 需要你拍板\n问题：${question}\n分支：${rt.branch}\nworktree：${rt.worktree}\n直接回复本消息即可续跑；多任务在等时请引用本条回复。`;
+// progress 是 RESULT 的 summary：question 常写得贫瘠（会话把上下文都放 summary），
+// 只发 question 会让用户拿不到决策依据。
+function askDmText(rt, question, progress) {
+  const progressLine = progress ? `\n进展：${progress}` : '';
+  return `⏳ ${rt.title} 需要你拍板\n问题：${question}${progressLine}\n分支：${rt.branch}\nworktree：${rt.worktree}\n直接回复本消息即可续跑；多任务在等时请引用本条回复。`;
 }
 
-async function goWaiting(rt, question) {
+async function goWaiting(rt, question, progress) {
   rt.state = 'waiting';
   rt.correctionUsed = false;
-  const qMsgId = await rt.lark.sendDm(rt.config.dmOpenId, askDmText(rt, question));
+  const qMsgId = await rt.lark.sendDm(rt.config.dmOpenId, askDmText(rt, question, progress));
   rt.statusRid = await swapReaction(rt.lark, rt.task.messageId, rt.config.reactions.escalate, rt.statusRid);
   try {
     rt.hooks.onAsk?.({
@@ -138,11 +141,15 @@ async function handleEvent(rt, ev) {
     }
     return settle(rt, 'fail', { why: '会话进程退出且无有效 RESULT 行' });
   }
-  // 挂起中没有在途轮次（send 才起轮，waiting 期间从不 send），任何 turn 都是异常来源
-  // （CLI 自发/重复 result）：忽略，不得当正常轮分发——否则会在等人拍板时被杂音推进终态。
+  // 挂起中会话可自唤醒：它自己布的后台任务（pre-commit 钩子、机审 CR）完成通知会触发新轮次，
+  // 带有效 RESULT 的轮是真实续跑，必须照常分发——吞掉会让最终 ✅ 永远到不了用户。
+  // 无有效 RESULT / API 错误的 turn 仍按杂音忽略：纠偏与终态化在等人拍板时误动状态。
   if (rt.state === 'waiting') {
-    console.error(`[runner] 挂起中收到 turn 事件，忽略：${truncate(ev.text, 120)}`);
-    return;
+    if (ev.isError || !parseResult(ev.text)) {
+      console.error(`[runner] 挂起中收到无有效 RESULT 的 turn 事件，忽略：${truncate(ev.text, 120)}`);
+      return;
+    }
+    rt.state = 'active';
   }
   if (ev.sessionId) rt.sessionId = ev.sessionId;
   if (ev.isError) {
@@ -155,12 +162,15 @@ async function handleEvent(rt, ev) {
     return rt.session.send(CORRECTION_MSG);
   }
   rt.correctionUsed = false;
-  if (result.verdict === 'ask') return goWaiting(rt, result.question || result.reason || '（会话未给出具体问题，请回复指示）');
+  if (result.verdict === 'ask') {
+    return goWaiting(rt, result.question || result.reason || '（会话未给出具体问题，请回复指示）', result.summary || '');
+  }
   // 旧会话（ask 契约之前启动、经懒续跑续起的）仍会产出 escalate/fused：一律映射为挂起等回复——
   // 终态化会把 RESULT 里的真实阻塞原因丢成固定文案，用户无从作答；接管命令保留在问题文本里作逃生口。
   if (result.verdict === 'escalate' || result.verdict === 'fused') {
     const why = result.question || result.reason || result.summary || '（旧会话未给出原因）';
-    return goWaiting(rt, `${why}\n（旧契约 ${result.verdict}；如需人工接管：cd ${rt.worktree} && claude "载入 /harness-context 上下文，走计划门完整路径"）`);
+    return goWaiting(rt, `${why}\n（旧契约 ${result.verdict}；如需人工接管：cd ${rt.worktree} && claude "载入 /harness-context 上下文，走计划门完整路径"）`,
+      result.summary && result.summary !== why ? result.summary : '');
   }
   return settle(rt, result.verdict, { why: `verdict=${result.verdict}`, result });
 }
@@ -185,9 +195,13 @@ function startTurnLoop(init) {
 // state 同步置位于 swap 之前：此窗口内进程死亡要走 close 的 active 分流（可见 fail），不得被 waiting 分支吞掉。
 export async function injectReply(messageId, replyText) {
   const rt = liveTasks.get(messageId);
-  if (!rt || rt.state !== 'waiting' || !rt.session?.alive) return false;
-  rt.state = 'active';
-  rt.statusRid = await swapReaction(rt.lark, rt.task.messageId, rt.config.reactions.claimed, rt.statusRid);
+  if (!rt || !rt.session?.alive) return false;
+  if (rt.state === 'waiting') {
+    rt.state = 'active';
+    rt.statusRid = await swapReaction(rt.lark, rt.task.messageId, rt.config.reactions.claimed, rt.statusRid);
+  }
+  // 活跃态注入直接进 stdin（stream-json 输入按序排队，成为下一轮输入）：自唤醒转活跃与
+  // 用户回复并发的窗口里若退回懒续跑，会对同一 worktree 起第二个进程。
   rt.session.send(REPLY_FRAME(replyText));
   return true;
 }

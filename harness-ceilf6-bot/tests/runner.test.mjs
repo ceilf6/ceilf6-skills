@@ -330,6 +330,59 @@ test('API 错误轮转挂起：is_error 不终态，回复后续跑', async () =
   rmFixture(root);
 });
 
+test('ask 私信带 summary 进展：question 贫瘠时用户仍有决策依据', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  const asks = [];
+  process.env.STUB_TURNS = 'ask:回复继续即可|开发已完成全绿，等 pre-commit 钩子;pass';
+  const p = runTask(TASK, makeConfig(root, repo), fakeLark(calls), { onAsk: (i) => asks.push(i) });
+  await poll(() => asks.length === 1);
+  const dmQ = calls.find((c) => c[0] === 'dm')[2];
+  assert.ok(dmQ.includes('问题：回复继续即可'));
+  assert.ok(dmQ.includes('进展：开发已完成全绿，等 pre-commit 钩子')); // summary 不得丢
+  assert.equal(await injectReply(TASK.messageId, '继续'), true);
+  assert.equal((await p).verdict, 'pass');
+  delete process.env.STUB_TURNS;
+  rmFixture(root);
+});
+
+test('自唤醒：挂起中会话自发的有效 RESULT 轮被正常续上，无需用户回复', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  const asks = [];
+  process.env.STUB_TURNS = 'ask:等钩子跑完，无需人工输入';
+  process.env.STUB_SELF_TURN = '{"afterMs":300,"directive":"pass"}';
+  const out = await runTask(TASK, makeConfig(root, repo), fakeLark(calls), { onAsk: (i) => asks.push(i) });
+  assert.equal(out.verdict, 'pass'); // 自唤醒 pass 直达终态，没被当杂音吞掉
+  assert.equal(asks.length, 1);
+  // 表情链：claimed → ⚠️（撤 claimed）→ ✅（撤 ⚠️）——自唤醒轮不经 injectReply，无中间回切
+  const rx = calls.filter((c) => c[0] !== 'dm');
+  assert.deepEqual(rx.map((c) => [c[0], c[2]]), [
+    ['add', 'THUMBSUP'], ['add', 'WARN'], ['del', 'rid_1'], ['add', 'DONE'], ['del', 'rid_2'],
+  ]);
+  delete process.env.STUB_TURNS;
+  delete process.env.STUB_SELF_TURN;
+  rmFixture(root);
+});
+
+test('自唤醒守卫：无有效 RESULT 的自发轮仍被忽略，等待态不动、注入照常', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  const asks = [];
+  process.env.STUB_TURNS = 'ask:等指示;pass';
+  process.env.STUB_SELF_TURN = '{"afterMs":250,"directive":"noresult"}';
+  const p = runTask(TASK, makeConfig(root, repo), fakeLark(calls), { onAsk: (i) => asks.push(i) });
+  await poll(() => asks.length === 1);
+  await new Promise((r) => setTimeout(r, 600)); // 自发杂音已到达
+  const raced = await Promise.race([p, new Promise((r) => setTimeout(() => r('pending'), 100))]);
+  assert.equal(raced, 'pending'); // 未被纠偏或终态化
+  assert.equal(await injectReply(TASK.messageId, '好，继续'), true);
+  assert.equal((await p).verdict, 'pass');
+  delete process.env.STUB_TURNS;
+  delete process.env.STUB_SELF_TURN;
+  rmFixture(root);
+});
+
 test('多轮 ask：每轮各发一条提问私信、注入后可再 ask', async () => {
   const { root, repo } = makeFixture();
   const calls = [];
