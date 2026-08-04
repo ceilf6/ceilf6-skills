@@ -1,0 +1,184 @@
+harness-ceilf6-bot/src/listener.mjs
+  s_8817a8a10e795b::t_e35947dd9ea07c 204
+  s_12349a04c1552d::t_1946ba43815981 162-174,178-181,206
+  s_12349a04c1552d::t_a8b308142da230 12-13,75-90,95-97,99-101,131-161,175-177,182-183,205,207-209
+harness-ceilf6-bot/src/lark.mjs
+  s_072e84d3b06774::t_67a15456c4ca10 42-44
+harness-ceilf6-bot/src/filter.mjs
+  s_8817a8a10e795b::t_48fe2229f54dd3 2,5-13
+harness-ceilf6-bot/tests/runner.test.mjs
+  s_77407d0125e110::t_9108538a1141e0 27,33,36-40,91,98,101-102,121,125,130,132-135
+  s_e97559966205ea::t_7e8d88c93c0df7 103-104,275-337,367-369,457-472
+  s_3916c2f46fa20c::t_fd8dccaac60c95 7,371-436
+  s_e97559966205ea::t_1ad1be92c38545 338-366
+  s_425cb3a2627a50::t_30f40eb6235ae4 106-117
+  s_d63c50c0ee7ae5::t_053f601b73b1ba 152-166,437-456
+  s_58f466b48ecbd2::t_99b7b8c22e7e0e 105,370
+harness-ceilf6-bot/tests/session.test.mjs
+  s_06a2bbf0993ddf::t_cb0fd588bd64f1 1-152
+harness-ceilf6-bot/src/normalize.mjs
+  s_8817a8a10e795b::t_5fd83406273bc0 9
+harness-ceilf6-bot/runbook.md
+  s_7f7d0ee898364f::t_3a476edaf881a4 11,57,68,72,106-107,127,129,132,135-136
+  s_d63c50c0ee7ae5::t_c7a2113ff698f9 120-121
+harness-ceilf6-bot/bootstrap-prompt.md
+  s_7f7d0ee898364f::t_e48970e0a0c2c8 15-17,19,21
+harness-ceilf6/SKILL.md
+  s_7f7d0ee898364f::t_bdd28be14ebca1 18,20-23,42
+harness-ceilf6-bot/src/state.mjs
+  s_4ae5e1521fb736::t_12bce1c68984f0 1,12,18-20,70-101
+harness-ceilf6-bot/src/result.mjs
+  s_01694280663ff2::t_5a391456da157f 2-3
+harness-ceilf6-bot/tests/stubs/lark-cli
+  s_072e84d3b06774::t_1f4603ffa0821a 29
+harness-ceilf6-bot/src/session.mjs
+  s_06a2bbf0993ddf::t_f44ada5d3ab686 1-84
+harness-ceilf6-bot/src/commands.mjs
+  s_f064640b531036::t_dff75f1448fc76 1,8,11-23,26-37
+  s_d63c50c0ee7ae5::t_a0e6ae687c0e7f 2-7,9-10,24-25
+harness-ceilf6-bot/tests/listener.test.mjs
+  s_12349a04c1552d::t_90a0ed7c086153 21-27,56,61-65,156-208,252-291
+  s_d63c50c0ee7ae5::t_f38138bfad4c4e 209-251
+harness-ceilf6-bot/tests/stubs/claude
+  s_06a2bbf0993ddf::t_e25f87fc6d4eb1 1-3,6-37,39-52
+  s_d63c50c0ee7ae5::t_f740181565ba61 4-5,38
+harness-ceilf6-bot/tests/lark.test.mjs
+  s_072e84d3b06774::t_e2abd160cd7bab 34,37
+harness-ceilf6-bot/tests/commands.test.mjs
+  s_f064640b531036::t_5648a34775dfa7 1-42
+  s_d63c50c0ee7ae5::t_277499fe81a4ef 43-53
+harness-ceilf6-bot/tests/core.test.mjs
+  s_4ae5e1521fb736::t_7da788802750ec 173-202
+  s_01694280663ff2::t_57f4b61209a33d 203,220-225
+  s_8817a8a10e795b::t_a597b1a2a3259f 74-95
+  s_01694280663ff2::t_901984b789a653 204
+harness-ceilf6-bot/src/runner.mjs
+  s_e97559966205ea::t_bc8ab65f2fd427 182-184,190
+  s_e97559966205ea::t_e8be41ca726126 146-151,179,181,185-189,191-201
+  s_77407d0125e110::t_dfffbf5f2937fe 1-4,8-10,14-18,49-51,68,78-145,152-178,264-268
+  s_d63c50c0ee7ae5::t_977f8e37ca3b73 210-217
+  s_3916c2f46fa20c::t_ebd960e749a2fc 202-209,218-228
+  s_e97559966205ea::t_b182c2b993db87 180
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "f22e33f58fa57b8aa1f63f07f2ee49b9151f1005",
+  "prompts": {},
+  "sessions": {
+    "s_01694280663ff2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-adb5a453d56f18382",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_06a2bbf0993ddf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a9b38b9732ab64d6f",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_072e84d3b06774": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-af4a765d03bd704c7",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_12349a04c1552d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-afdbe44ad96b464e5",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_3916c2f46fa20c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a8672933547856c9c",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_425cb3a2627a50": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a5e84ce50f699bec5",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_4ae5e1521fb736": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ad1f423f54e45976f",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_58f466b48ecbd2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0eef3d97-d8b1-4c2d-9a2b-5a142a082263",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_77407d0125e110": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a4f7c7dd5c58a638b",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_7f7d0ee898364f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ab127bd4cefb45069",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_8817a8a10e795b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-adb0838c46bacfc15",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_d63c50c0ee7ae5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a13e2a08ba25bfcf6",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_e97559966205ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ad1d85e31bf9d480a",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_f064640b531036": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-af5d9beae33bfab0a",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
