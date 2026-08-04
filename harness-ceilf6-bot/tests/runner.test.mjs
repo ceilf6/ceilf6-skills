@@ -88,33 +88,41 @@ test('skip：worktree 与分支删除（注册表已 prune）、留下 skipped �
   rmFixture(root);
 });
 
-test('escalate（旧契约兼容）：现场保留、⚠️、仅私信含恢复命令、零回帖', async () => {
+test('escalate（旧会话兼容）：映射为挂起等回复——私信带真实原因与接管命令，回复后续跑', async () => {
   const { root, repo } = makeFixture();
   const calls = [];
-  process.env.STUB_VERDICT = 'escalate';
-  const out = await runTask(TASK, makeConfig(root, repo), fakeLark(calls));
-  assert.equal(out.verdict, 'escalate');
-  assert.ok(existsSync(out.worktree));
-  assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'del', 'dm']); // claimed → ⚠️ → 撤 claimed → 私信
-  assert.equal(calls[1][2], 'WARN');
-  assert.equal(calls[2][2], 'rid_1');
-  assert.ok(calls[3][2].includes('该任务需要人工规划'));
-  assert.ok(calls[3][2].includes(`cd ${out.worktree} && claude`));
+  const asks = [];
+  delete process.env.STUB_VERDICT;
+  process.env.STUB_TURNS = 'escalate;pass';
+  const p = runTask(TASK, makeConfig(root, repo), fakeLark(calls), { onAsk: (i) => asks.push(i) });
+  await poll(() => asks.length === 1);
+  assert.ok(existsSync(asks[0].worktree));
+  assert.ok(asks[0].question.includes('需求不明确')); // RESULT 的 reason 原文转达，不得丢成固定文案
+  assert.ok(asks[0].question.includes(`cd ${asks[0].worktree} && claude`)); // 手工接管逃生口保留
+  const dmQ = calls.find((c) => c[0] === 'dm')[2];
+  assert.ok(dmQ.includes('需求不明确'));
+  assert.ok(!dmQ.includes('该任务需要人工规划')); // 旧固定文案吞原因，用户无从作答
+  const rx = calls.filter((c) => c[0] !== 'dm');
+  assert.deepEqual(rx.slice(0, 3).map((c) => [c[0], c[2]]), [['add', 'THUMBSUP'], ['add', 'WARN'], ['del', 'rid_1']]); // 挂起态 ⚠️，非终态
+  assert.equal(await injectReply(TASK.messageId, '按 A 方案继续'), true);
+  assert.equal((await p).verdict, 'pass');
+  delete process.env.STUB_TURNS;
   rmFixture(root);
 });
 
-test('fused（旧契约兼容）：走 fail 通道、❌、现场保留、私信带 verdict 与 reason', async () => {
+test('fused（旧会话兼容）：同样映射为挂起等回复，⚠️ 而非 ❌ 终态', async () => {
   const { root, repo } = makeFixture();
   const calls = [];
-  process.env.STUB_VERDICT = 'fused';
-  const out = await runTask(TASK, makeConfig(root, repo), fakeLark(calls));
-  assert.equal(out.verdict, 'fused'); // 原样透出，不折叠成 fail
-  assert.ok(existsSync(out.worktree)); // 熔断现场留给人工排查
-  assert.deepEqual(calls.map((c) => c[0]), ['add', 'add', 'del', 'dm']); // claimed → ❌ → 撤 claimed → 私信
-  assert.equal(calls[1][2], 'CROSS'); // 终态是 failed 键：fused 不该被误当 escalate 走 ⚠️
-  assert.equal(calls[2][2], 'rid_1');
-  assert.ok(calls[3][2].includes('verdict=fused'));
-  assert.ok(calls[3][2].includes('CR 熔断'));
+  const asks = [];
+  process.env.STUB_TURNS = 'fused;pass';
+  const p = runTask(TASK, makeConfig(root, repo), fakeLark(calls), { onAsk: (i) => asks.push(i) });
+  await poll(() => asks.length === 1);
+  assert.ok(asks[0].question.includes('CR 熔断')); // reason 原文转达
+  const rx = calls.filter((c) => c[0] !== 'dm');
+  assert.equal(rx[1][2], 'WARN'); // 挂起态表情：熔断裁决权交回用户，不直接 ❌
+  assert.equal(await injectReply(TASK.messageId, '放宽该项，继续'), true);
+  assert.equal((await p).verdict, 'pass');
+  delete process.env.STUB_TURNS;
   rmFixture(root);
 });
 

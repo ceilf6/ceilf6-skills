@@ -14,7 +14,7 @@ const TPL_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', 'bootstrap-
 // messageId → 运行时。挂起（等私信回复）的会话也在此登记，injectReply/killSession 按它寻址。
 const liveTasks = new Map();
 
-const REPLY_FRAME = (text) => `用户对上一轮问题的私信回复如下（原文）：\n${text}\n——继续按无人值守契约执行，本轮结束仍以 RESULT 行收尾。`;
+const REPLY_FRAME = (text) => `用户对上一轮问题的私信回复如下（原文）：\n${text}\n——继续按无人值守契约执行，本轮结束仍以 RESULT 行收尾；后续拿不准的点用 verdict=ask + question 收轮提问（不要用 escalate/fused）。`;
 const CORRECTION_MSG = '上一轮输出未以 RESULT 行收尾，违反无人值守契约。立即单独补发一行结果行（RESULT + 单行 JSON），不要其他内容。';
 
 function git(repo, args) {
@@ -114,11 +114,6 @@ async function settle(rt, verdict, { why, result } = {}) {
   if (verdict === 'skip') {
     await cleanupWorktree(config, rt.worktree, rt.branch);
     rt.statusRid = await swapReaction(lark, task.messageId, config.reactions.skipped, rt.statusRid);
-  } else if (verdict === 'escalate') {
-    // 旧契约兼容：仅私信（群里零文字消息），保留手工接管命令。
-    rt.statusRid = await swapReaction(lark, task.messageId, config.reactions.escalate, rt.statusRid);
-    await lark.sendDm(config.dmOpenId,
-      `该任务需要人工规划，请用命令 \`cd ${rt.worktree} && claude "载入 /harness-context 上下文，走计划门完整路径"\` 进行 spec。`);
   } else if (verdict === 'pass') {
     rt.statusRid = await swapReaction(lark, task.messageId, config.reactions.done, rt.statusRid);
     await lark.sendDm(config.dmOpenId,
@@ -161,6 +156,12 @@ async function handleEvent(rt, ev) {
   }
   rt.correctionUsed = false;
   if (result.verdict === 'ask') return goWaiting(rt, result.question || result.reason || '（会话未给出具体问题，请回复指示）');
+  // 旧会话（ask 契约之前启动、经懒续跑续起的）仍会产出 escalate/fused：一律映射为挂起等回复——
+  // 终态化会把 RESULT 里的真实阻塞原因丢成固定文案，用户无从作答；接管命令保留在问题文本里作逃生口。
+  if (result.verdict === 'escalate' || result.verdict === 'fused') {
+    const why = result.question || result.reason || result.summary || '（旧会话未给出原因）';
+    return goWaiting(rt, `${why}\n（旧契约 ${result.verdict}；如需人工接管：cd ${rt.worktree} && claude "载入 /harness-context 上下文，走计划门完整路径"）`);
+  }
   return settle(rt, result.verdict, { why: `verdict=${result.verdict}`, result });
 }
 
