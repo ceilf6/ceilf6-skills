@@ -1,0 +1,27 @@
+harness-ceilf6-bot/bootstrap-prompt.md
+  s_58f466b48ecbd2::t_2119a60ecfb07d 16
+harness-ceilf6-bot/src/runner.mjs
+  s_58f466b48ecbd2::t_3af4055b53dc91 86-90,93,96,144-146,148-152,165-167,172-173,198-204
+harness-ceilf6-bot/tests/runner.test.mjs
+  s_58f466b48ecbd2::t_8004f374d2e946 333-385
+harness-ceilf6-bot/tests/stubs/claude
+  s_58f466b48ecbd2::t_d7b4a0904cea9f 5-7,27-54,56,66-71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "43e1c6b03601018099cb91e3169e1f4b9a81680f",
+  "prompts": {},
+  "sessions": {
+    "s_58f466b48ecbd2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0eef3d97-d8b1-4c2d-9a2b-5a142a082263",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
