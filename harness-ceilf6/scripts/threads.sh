@@ -215,6 +215,8 @@ usage() {
   ht register --ctx-dir <路径> [--title <短题>] [--session-id <id>]
   ht resume <序号|关键词> [--dry-run]
   ht prune              清除 ctx 目录已消失的登记行
+  ht archive|unarchive --ctx-dir <路径>   看板视图开关（不删文件）
+  ht clean --ctx-dir <路径>               删 worktree 目录与分支（主检出拒绝）
   ht mark <序号|关键词> <human-cr|selftest>   标记人工节点完成
   ht mark --ctx-dir <路径> <节点>             直指形式（cr_passed 除外，供会话流程）
   ht progress --ctx-dir <路径>      输出该线程节点进度图
@@ -235,7 +237,7 @@ rows() {
 
 # 输出分隔字段：idx ctx cwd branch sid title status cur_branch sess_ok node_label
 enumerate() {
-  local show_all="$1" idx=0 line ctx cwd branch sid title status cur sess f node nodecol
+  local show_all="$1" idx=0 line ctx cwd branch sid title status cur sess f node nodecol arch
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     ctx=$(printf '%s' "$line" | jq -r '.ctx_dir // ""')
@@ -251,6 +253,13 @@ enumerate() {
       status="[失效]"   # ctx 目录已消失（检出被删 / worktree 被清）
       nodecol="-"
     fi
+    # 归档只在此处过滤、不进输出字段：分隔字段被 locate_thread / cmd_list / cmd_list_json
+    # 三处按位读取，增列会同时改坏三个消费者。archived 由 cmd_list_json 自行补进 JSON。
+    arch=0
+    if [ -f "$ctx/meta.json" ]; then
+      arch=$(jq -r 'if .archived == true then 1 else 0 end' "$ctx/meta.json" 2>/dev/null || echo 0)
+    fi
+    if [ "$show_all" != 1 ] && [ "$arch" = 1 ]; then continue; fi
     if [ "$show_all" != 1 ] && [ "$status" = done ]; then continue; fi
     cur=$(git -C "$cwd" symbolic-ref --short -q HEAD 2>/dev/null || echo "")
     sess=0
@@ -323,15 +332,20 @@ cmd_register() {
 }
 
 cmd_list_json() { # <show_all>：web 看板数据源；文本列表与看板共用 enumerate 聚合
-  local show_all="$1" out idx ctx cwd branch sid title status cur sess nodecol ms prog curnode crr resume
+  local show_all="$1" out idx ctx cwd branch sid title status cur sess nodecol ms prog curnode crr resume arch
   # 必须先命令替换捕获再喂 heredoc，不能 `done < <(enumerate ...)`：进程替换子 shell 里
   # errexit 存活，某行 meta.json 坏掉会让 enumerate 中途退出，数组静默截断却仍 rc=0。
   out=$(enumerate "$show_all")
   { while IFS="$SEP" read -r idx ctx cwd branch sid title status cur sess nodecol; do
       [ -n "$idx" ] || continue
       ms=$(jq -c '.milestones // {}' "$ctx/meta.json" 2>/dev/null || echo '{}')
+      arch=false
+      if [ -f "$ctx/meta.json" ]; then
+        arch=$(jq -r 'if .archived == true then "true" else "false" end' "$ctx/meta.json" 2>/dev/null || echo false)
+      fi
       # 零字节 meta.json 下 jq 退出 0 且零输出，|| 分支不触发，空串会让 --argjson 直接报错
       [ -n "$ms" ] || ms='{}'
+      [ -n "$arch" ] || arch=false
       prog=""; curnode="-"
       if [ -f "$ctx/meta.json" ]; then
         prog=$(progress_line "$ctx/meta.json")
@@ -339,12 +353,12 @@ cmd_list_json() { # <show_all>：web 看板数据源；文本列表与看板共�
       fi
       crr=$(find "$ctx/cr" -maxdepth 1 -name 'round-*' 2>/dev/null | grep -c . || true)
       resume=$(wake_cmd "$cwd" "$branch" "$sid" "$cur")
-      jq -cn --arg idx "$idx" --arg ctx "$ctx" --arg branch "$branch" --arg title "$title" \
+      jq -cn --arg idx "$idx" --arg ctx "$ctx" --arg cwd "$cwd" --arg branch "$branch" --arg title "$title" \
         --arg status "$status" --arg node "$nodecol" --arg progress "$prog" --argjson ms "$ms" \
-        --arg current "$curnode" --arg crr "$crr" --arg resume "$resume" \
-        '{idx:($idx|tonumber), ctx_dir:$ctx, branch:$branch, title:$title, status:$status,
+        --arg current "$curnode" --arg crr "$crr" --arg resume "$resume" --argjson arch "$arch" \
+        '{idx:($idx|tonumber), ctx_dir:$ctx, cwd:$cwd, branch:$branch, title:$title, status:$status,
           node:$node, current:$current, cr_rounds:($crr|tonumber), progress:$progress,
-          resume:$resume, milestones:$ms}'
+          resume:$resume, archived:$arch, milestones:$ms}'
     done <<EOF
 $out
 EOF
@@ -462,6 +476,57 @@ cmd_prune() {
   echo "harness-threads: 保留 ${kept} 行，清除 ${dropped} 行"
 }
 
+cmd_archive() { # <1|0>：看板视图开关，只写 meta.json 的 archived，不动任何文件
+  local flag="$1" ctx="" meta tmp
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in --ctx-dir) ctx="${2:-}"; shift 2 ;; *) usage ;; esac
+  done
+  [ -n "$ctx" ] || die "用法：${0##*/} archive|unarchive --ctx-dir <路径>"
+  meta="$ctx/meta.json"
+  [ -f "$meta" ] || die "meta.json 不存在：${meta}"
+  jq -e . "$meta" >/dev/null 2>&1 || die "meta.json 解析失败：${meta}"
+  tmp=$(mktemp)
+  jq --argjson a "$flag" '.archived = ($a == 1)' "$meta" > "$tmp" || die "写入 archived 失败：${meta}"
+  mv "$tmp" "$meta"
+  if [ "$flag" = 1 ]; then echo "harness-threads: 已归档 ${ctx}"; else echo "harness-threads: 已取消归档 ${ctx}"; fi
+}
+
+cmd_clean() { # 删 worktree 目录 + 分支 + 登记；主检出硬拒绝
+  local ctx="" cwd branch gd gc gitdirp commonp top
+  while [ $# -gt 0 ]; do
+    case "$1" in --ctx-dir) ctx="${2:-}"; shift 2 ;; *) usage ;; esac
+  done
+  [ -n "$ctx" ] || die "用法：${0##*/} clean --ctx-dir <路径>"
+  cwd=$(rows | jq -r --arg c "$ctx" 'select(.ctx_dir == $c) | .cwd' | tail -1)
+  branch=$(rows | jq -r --arg c "$ctx" 'select(.ctx_dir == $c) | .branch' | tail -1)
+  [ -n "$cwd" ] || die "登记表里没有 ctx_dir=${ctx}"
+  [ -d "$cwd" ] || die "检出目录不存在：${cwd}"
+  # 每个 rev-parse 都先取值再判空：cd "" 退出 0 且不改目录，拿 `cd $(...)` 当错误检查会让守卫
+  # 变成死代码——非 git 检出时路径静默退化成 cwd 自身，而下一步就是 rm -rf。
+  gd=$(cd "$cwd" && git rev-parse --git-dir 2>/dev/null) || true
+  gc=$(cd "$cwd" && git rev-parse --git-common-dir 2>/dev/null) || true
+  { [ -n "$gd" ] && [ -n "$gc" ]; } || die "不是 git 检出：${cwd}"
+  gitdirp=$(cd "$cwd" && cd "$gd" && pwd -P) || die "git 目录不可访问：${gd}"
+  commonp=$(cd "$cwd" && cd "$gc" && pwd -P) || die "共用 git 目录不可访问：${gc}"
+  # 主检出的 git-dir 就是全仓共用的 git 目录，linked worktree 的则是 <common>/worktrees/<名>：
+  # 删主检出等于删掉整个仓库，硬拒绝。判据一律走 rev-parse 再 pwd -P 归一，不比对 <cwd>/.git 的
+  # 路径形态——登记的 cwd 是会话启动目录（可能在检出的子目录里），.git 也可能是符号链接或 gitfile。
+  [ "$gitdirp" = "$commonp" ] && die "拒绝清理主检出：${cwd}"
+  # 删的是整棵工作树而非登记的 cwd：cwd 落在子目录时只删子目录会留下半残 worktree
+  top=$(cd "$cwd" && git rev-parse --show-toplevel 2>/dev/null) || true
+  [ -n "$top" ] || die "取不到工作树根：${cwd}"
+  top=$(cd "$top" && pwd -P) || die "工作树根不可访问：${top}"
+  # 三步各自独立且互不阻塞：worktree remove --force 要遍历校验整棵工作树，巨型仓库上要数分钟；
+  # prune 失败也必须继续，否则留下「树已删、分支还在、登记还在」的半完成态。
+  # git 一律指向共用 git 目录：它必然存在于被删工作树之外
+  rm -rf "$top"
+  git -C "$commonp" worktree prune >&2 || true
+  git -C "$commonp" branch -D "$branch" >/dev/null 2>&1 || true
+  cmd_prune >/dev/null
+  echo "harness-threads: 已清理 ${branch}（${top}）"
+}
+
 cmd_web() {
   need python3
   # ht 经 ~/.local/bin 符号链接进来时 dirname $0 不指向脚本目录，先按安装路径找
@@ -479,6 +544,9 @@ case "$cmd" in
   register) cmd_register "$@" ;;
   resume) cmd_resume "$@" ;;
   prune) cmd_prune "$@" ;;
+  archive) cmd_archive 1 "$@" ;;
+  unarchive) cmd_archive 0 "$@" ;;
+  clean) cmd_clean "$@" ;;
   web) cmd_web "$@" ;;
   mark) cmd_mark "$@" ;;
   progress) cmd_progress "$@" ;;

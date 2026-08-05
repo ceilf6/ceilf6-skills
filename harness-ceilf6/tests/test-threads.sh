@@ -322,5 +322,93 @@ echo "$out" | jq -e '.[0].cr_rounds == 2' >/dev/null && ok "cr_rounds 计数" ||
 echo "$out" | jq -e '.[0].resume | test("--resume sid-fields")' >/dev/null && ok "resume 命令含会话恢复" || bad "resume: $(echo "$out" | jq -r '.[0].resume')"
 cleanup_env
 
+# ---- archive / unarchive：看板视图开关，不动任何文件 ----
+make_env
+make_repo repo-arch feat/arch developing
+(cd "$REPO" && bash "$TH" register --ctx-dir "$CTX" --title '归档冒烟') >/dev/null
+out=$(bash "$TH" list --json)
+echo "$out" | jq -e '.[0].archived == false' >/dev/null && ok "list --json 默认 archived=false" || bad "archived 默认值：$out"
+echo "$out" | jq -e --arg w "$REPO" '.[0].cwd == $w' >/dev/null && ok "list --json 含 cwd" || bad "cwd 字段：$out"
+bash "$TH" archive --ctx-dir "$CTX" >/dev/null
+jq -e '.archived == true' "$CTX/meta.json" >/dev/null && ok "archive 写 meta.archived" || bad "archive 未写 meta"
+[ -f "$CTX/meta.json" ] && [ -d "$REPO" ] && ok "archive 不删任何文件" || bad "archive 删了东西"
+out=$(bash "$TH" list --json)
+echo "$out" | jq -e 'length == 0' >/dev/null && ok "默认视图隐藏已归档" || bad "默认视图未隐藏：$out"
+out=$(bash "$TH" list --json --all)
+echo "$out" | jq -e 'length == 1 and .[0].archived == true' >/dev/null && ok "--all 显示已归档" || bad "--all 未显示：$out"
+bash "$TH" unarchive --ctx-dir "$CTX" >/dev/null
+out=$(bash "$TH" list --json)
+echo "$out" | jq -e 'length == 1 and .[0].archived == false' >/dev/null && ok "unarchive 恢复显示" || bad "unarchive 失败：$out"
+echo 'not json' > "$CTX/meta.json"
+check_die "archive 遇坏 meta 不写坏文件" "解析失败" bash "$TH" archive --ctx-dir "$CTX"
+grep -q 'not json' "$CTX/meta.json" && ok "坏 meta 原样保留" || bad "坏 meta 被改写"
+check_die "archive 缺 --ctx-dir" "用法" bash "$TH" archive
+check_die "archive 指向无 meta 的目录" "meta.json" bash "$TH" archive --ctx-dir "$T/nope"
+cleanup_env
+
+# ---- clean：删 worktree 与分支，主检出硬拒绝 ----
+make_env
+MAIN="$T/repo-main"; mkdir -p "$MAIN"
+git -C "$MAIN" init -q -b master
+git -C "$MAIN" config user.email t@t
+git -C "$MAIN" config user.name t
+git -C "$MAIN" commit -q --allow-empty -m init
+WT="$T/wt-clean"
+git -C "$MAIN" worktree add -q "$WT" -b feat/clean
+CTX2="$WT/.harness-ceilf6/feat__clean"; mkdir -p "$CTX2"
+jq -n '{branch:"feat/clean", status:"developing", milestones:{}}' > "$CTX2/meta.json"
+(cd "$WT" && bash "$TH" register --ctx-dir "$CTX2" --title '清理冒烟') >/dev/null
+# 主检出必须拒绝：删它等于删掉整个仓库
+CTXM="$MAIN/.harness-ceilf6/master"; mkdir -p "$CTXM"
+jq -n '{branch:"master", status:"developing", milestones:{}}' > "$CTXM/meta.json"
+(cd "$MAIN" && bash "$TH" register --ctx-dir "$CTXM" --title '主检出') >/dev/null
+check_die "clean 拒绝主检出" "主检出" bash "$TH" clean --ctx-dir "$CTXM"
+[ -d "$MAIN/.git" ] && ok "主检出安然无恙" || bad "主检出被删"
+bash "$TH" clean --ctx-dir "$CTX2" >/dev/null
+[ -d "$WT" ] && bad "clean 未删 worktree 目录" || ok "clean 删掉 worktree 目录"
+git -C "$MAIN" branch --list feat/clean | grep -q . && bad "clean 未删分支" || ok "clean 删掉分支"
+git -C "$MAIN" worktree list | grep -q "$WT" && bad "worktree 注册表未 prune" || ok "worktree 注册表已 prune"
+bash "$TH" list --json --all | jq -e --arg c "$CTX2" 'map(select(.ctx_dir == $c)) | length == 0' >/dev/null \
+  && ok "clean 顺带清掉登记" || bad "clean 后登记仍在"
+# 登记在 worktree 子目录时，删的是整棵工作树而非登记的那层目录
+WT2="$T/wt-sub"
+git -C "$MAIN" worktree add -q "$WT2" -b feat/sub
+SUB2="$WT2/pkg/app"; mkdir -p "$SUB2"
+CTX3="$WT2/.harness-ceilf6/feat__sub"; mkdir -p "$CTX3"
+jq -n '{branch:"feat/sub", status:"developing", milestones:{}}' > "$CTX3/meta.json"
+(cd "$SUB2" && bash "$TH" register --ctx-dir "$CTX3" --title '子目录登记') >/dev/null
+bash "$TH" clean --ctx-dir "$CTX3" >/dev/null
+[ -d "$WT2" ] && bad "clean 只删了登记的子目录，工作树仍在" || ok "子目录登记：整棵工作树被删"
+git -C "$MAIN" worktree list | grep -q "$WT2" && bad "子目录登记：worktree 注册表未 prune" || ok "子目录登记：worktree 注册表已 prune"
+git -C "$MAIN" branch --list feat/sub | grep -q . && bad "子目录登记：未删分支" || ok "子目录登记：分支已删"
+# 非 git 检出要报自己的诊断，不能被主检出判据顺手吞掉
+PLAIN="$T/plain"; mkdir -p "$PLAIN"
+CTXP="$PLAIN/.harness-ceilf6/feat__plain"; mkdir -p "$CTXP"
+jq -n '{branch:"feat/plain", status:"developing", milestones:{}}' > "$CTXP/meta.json"
+(cd "$PLAIN" && bash "$TH" register --ctx-dir "$CTXP" --title '非仓库') >/dev/null
+check_die "clean 非 git 检出" "不是 git 检出" bash "$TH" clean --ctx-dir "$CTXP"
+[ -d "$PLAIN" ] && ok "非 git 检出未被删" || bad "非 git 检出被删"
+check_die "clean 缺 --ctx-dir" "用法" bash "$TH" clean
+# 主检出的判据不能依赖 cwd/.git 的路径形态：登记的 cwd 是会话启动目录，可能落在检出的子目录里
+SUB="$MAIN/pkg/app"; mkdir -p "$SUB"
+CTXS="$MAIN/.harness-ceilf6/master-sub"; mkdir -p "$CTXS"
+jq -n '{branch:"master", status:"developing", milestones:{}}' > "$CTXS/meta.json"
+(cd "$SUB" && bash "$TH" register --ctx-dir "$CTXS" --title '主检出子目录') >/dev/null
+check_die "clean 拒绝主检出（登记在子目录）" "主检出" bash "$TH" clean --ctx-dir "$CTXS"
+[ -d "$SUB" ] && ok "主检出子目录未被删" || bad "主检出子目录被删"
+# .git 是符号链接时，git-common-dir 指向别处，与 <cwd>/.git 对不上
+LNK="$T/repo-lnk"; mkdir -p "$LNK"
+git -C "$LNK" init -q -b master
+git -C "$LNK" config user.email t@t
+git -C "$LNK" config user.name t
+git -C "$LNK" commit -q --allow-empty -m init
+mkdir -p "$T/gitdirs"; mv "$LNK/.git" "$T/gitdirs/lnk"; ln -s "$T/gitdirs/lnk" "$LNK/.git"
+CTXL="$LNK/.harness-ceilf6/master"; mkdir -p "$CTXL"
+jq -n '{branch:"master", status:"developing", milestones:{}}' > "$CTXL/meta.json"
+(cd "$LNK" && bash "$TH" register --ctx-dir "$CTXL" --title '符号链接 git 目录') >/dev/null
+check_die "clean 拒绝主检出（.git 为符号链接）" "主检出" bash "$TH" clean --ctx-dir "$CTXL"
+[ -d "$LNK" ] && ok "符号链接主检出安然无恙" || bad "符号链接主检出被删"
+cleanup_env
+
 echo; echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" = 0 ]

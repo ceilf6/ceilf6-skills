@@ -223,3 +223,26 @@ test('parseResult 接受 ask verdict 并带出 question', () => {
   assert.equal(r.verdict, 'ask');
   assert.ok(r.question.includes('选 A 还是 B'));
 });
+
+test('Store 队列列举与按 id 移除：命中出队并落盘，未命中返回 null', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'thb-'));
+  const s = new Store(dir);
+  s.enqueue({ messageId: 'om_a', text: 'a' });
+  s.enqueue({ messageId: 'om_b', text: 'b' });
+  assert.deepEqual(s.listQueued().map((t) => t.messageId), ['om_a', 'om_b']);
+  assert.equal(s.removeQueued('om_nope'), null);
+  assert.equal(s.removeQueued('om_a').text, 'a');
+  assert.equal(s.size(), 1);
+  assert.equal(new Store(dir).listQueued()[0].messageId, 'om_b'); // 移除已落盘
+  rmSync(dir, { recursive: true, force: true });
+});
+test('Store listAwaiting 返回全部条目，不受 waiting 过滤', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'thb-'));
+  const s = new Store(dir);
+  s.recordAsk('om_1', { question: 'q1', questionMsgId: 'om_q1', title: 't1' });
+  s.recordAsk('om_2', { question: 'q2', questionMsgId: 'om_q2', title: 't2' });
+  s.patchAwaiting('om_2', { waiting: false });
+  assert.equal(s.listWaiting().length, 1);
+  assert.deepEqual(s.listAwaiting().map((e) => e.messageId).sort(), ['om_1', 'om_2']);
+  rmSync(dir, { recursive: true, force: true });
+});

@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, realpathSync, rmSync, symlinkSync, openSync, writeSync, closeSync, constants as FS } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Store } from '../src/state.mjs';
@@ -25,9 +26,11 @@ function dmLine(over = {}) {
     content: '好的，就这么办', ...over,
   });
 }
+// 判据可以是异步的（如查控制端口）：不 await 的话 Promise 恒真值，poll 首轮即假绿，
+// 且未决的请求会漏到用例之外变成 unhandledRejection。
 async function poll(fn, ms = 8000) {
   const until = Date.now() + ms;
-  while (Date.now() < until) { if (fn()) return true; await new Promise((r) => setTimeout(r, 150)); }
+  while (Date.now() < until) { if (await fn()) return true; await new Promise((r) => setTimeout(r, 150)); }
   return false;
 }
 // 本机 AI-IDE 守护进程会异步往新 git 仓库写 .git/ai/，清理撞上时 rmSync 抛 ENOTEMPTY；退避重试（机器怪癖，非缺陷）。
@@ -45,12 +48,22 @@ function writeConfig(root, repo, over = {}) {
     chatId: 'oc_test', profile: 'taskhall', repoPath: repo,
     worktreesDir: join(root, 'wt'), stateDir: join(root, 'state'), logsDir: join(root, 'logs'),
     concurrency: 1, taskTimeoutMs: 30000, killGraceMs: 500, minTextLength: 10,
+    // 端口区间放宽：测试文件并行跑，撞端口会让 listener 按「端口占用」退出 1、失败面误导
+    controlPort: (Math.floor(Math.random() * 8000) + 40000),
     dmOpenId: 'ou_me', claudeBin: CLAUDE_STUB, larkBin: LARK_STUB,
-    reactions: { claimed: 'THUMBSUP', done: 'DONE', failed: 'CrossMark', escalate: 'OnIt', skipped: 'Get', context: 'CTXKEY' },
+    reactions: { claimed: 'THUMBSUP', done: 'DONE', failed: 'CrossMark', escalate: 'OnIt', skipped: 'Get', context: 'CTXKEY', stopped: 'MUTE' },
     ...over,
   }));
   return cfgPath;
 }
+// listener 的 stderr 默认落进没人读的管道：诊断信息全丢，写满 64KB 还会把它自己堵死。
+// 接住并在用例失败时回吐——否则 boot 期失败（如控制端口被占）只表现为一次 8s 空等，无从查起。
+function tapStderr(child) {
+  const chunks = [];
+  child.stderr.on('data', (b) => chunks.push(b.toString()));
+  return () => chunks.join('');
+}
+
 // 事件流 stub 一次性吐完整个文件，无法在同一进程内编排「任务已就绪之后才到回复」；
 // 分两次启动既是确定性的时序编排，也顺带验证 threads.jsonl 跨重启可用。
 async function runListener({ cfgPath, root, events, verdict, turns, until }) {
@@ -65,10 +78,49 @@ async function runListener({ cfgPath, root, events, verdict, turns, until }) {
     },
   });
   const closed = new Promise((res) => child.on('close', res));
+  const stderr = tapStderr(child);
   const ok = await poll(until);
   child.kill('SIGTERM');
   await closed;
+  if (!ok) console.error(`[fixture] listener stderr：\n${stderr().slice(-2000)}`);
   return { ok, larkLog };
+}
+
+// 停「正在跑的活跃任务」这条路径要求任务先跑起来、控制命令后到，而事件流 stub 一次性 cat 完
+// 事件文件——用 FIFO 当事件文件即可按节奏逐条投递。O_RDWR 打开：FIFO 的只写打开会阻塞到读端就位，
+// listener 起不来时会把用例挂死而不是超时报错。
+async function runFedListener({ cfgPath, root, turns, env = {}, feed }) {
+  const fifo = join(root, `events-${Math.random().toString(36).slice(2)}.fifo`);
+  execFileSync('mkfifo', [fifo]);
+  const larkLog = join(root, 'lark-calls.log');
+  const child = spawn(process.execPath, [SRC, cfgPath], {
+    env: { ...process.env, STUB_LOG: larkLog, STUB_EVENTS_FILE: fifo, ...(turns ? { STUB_TURNS: turns } : {}), ...env },
+  });
+  const closed = new Promise((res) => child.on('close', res));
+  const stderr = tapStderr(child);
+  const fd = openSync(fifo, FS.O_RDWR);
+  let ok = false;
+  try {
+    ok = await feed((line) => writeSync(fd, line + '\n'));
+  } finally {
+    closeSync(fd);
+    child.kill('SIGTERM');
+    await closed;
+    if (!ok) console.error(`[fixture] listener stderr：\n${stderr().slice(-2000)}`);
+  }
+  return { ok, larkLog };
+}
+
+// 只挡 `git worktree add` 一个子命令（拖慢或拖垮），其余 git 调用原样透传：
+// 出队到 liveTasks 登记之间的启动窗口在小仓库上只有毫秒级，撑开它才谈得上观测。
+function gitShim(root, mode) {
+  const dir = join(root, `bin-${mode}`);
+  mkdirSync(dir, { recursive: true });
+  const real = execFileSync('which', ['git']).toString().trim();
+  const body = mode === 'slow' ? 'sleep 4' : 'echo "stub：worktree add 故意失败" >&2; exit 1';
+  writeFileSync(join(dir, 'git'),
+    `#!/bin/sh\ncase " $* " in *" worktree add "*) ${body} ;; esac\nexec ${real} "$@"\n`, { mode: 0o755 });
+  return dir;
 }
 
 test('端到端（stub）：过滤入队 → runTask → 状态与日志落盘', async () => {
@@ -289,6 +341,348 @@ test('端到端（stub）：/model 命令记入 resumeFlags、回执确认、后
   rmFixture(root);
 });
 
+test('端到端（stub）：话题内 /stop 立即停掉长轮次任务，不写 context、群里零文字消息，多余正文有回执', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-stop-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const threadsPath = join(root, 'state', 'threads.jsonl');
+  const { ok } = await runFedListener({
+    cfgPath, root, turns: 'hang',
+    feed: async (send) => {
+      // 先起一个 hang 任务（长轮次），等它登记 thread，再在同话题里发 /stop
+      send(evLine({ message_id: 'om_stop_111111', message_type: 'post', thread_id: 'omt_stop1' }));
+      assert.ok(await poll(() => existsSync(threadsPath) && readFileSync(threadsPath, 'utf8').includes('omt_stop1')),
+        '任务应已登记 thread');
+      // 命令行之后还带正文：它不会进会话，用户必须被告知，否则会以为补充说明也送到了
+      send(evLine({
+        message_id: 'om_stopcmd_2222', thread_id: 'omt_stop1', root_id: 'om_stop_111111',
+        content: '/stop\n顺带说一句：A 模块先别动',
+      }));
+      return poll(() => existsSync(larkLogPath) && readFileSync(larkLogPath, 'utf8').includes('MUTE')
+        && readFileSync(larkLogPath, 'utf8').includes('控制命令之后的正文未注入会话'));
+    },
+  });
+  assert.ok(ok, '/stop 应落下 stopped 表情，且多余正文有明确回执');
+  const info = new Store(join(root, 'state')).findThread('omt_stop1');
+  const ctxDir = join(info.worktree, '.harness-ceilf6', info.branch.replaceAll('/', '__'), 'context');
+  const calls = readFileSync(larkLogPath, 'utf8');
+  assert.ok(calls.includes('om_stop_111111/reactions'), '终态表情打在任务消息上');
+  assert.ok(!calls.includes('messages-reply'), '群里零文字消息');
+  assert.ok(!calls.includes('CTXKEY'), '控制命令不是补充信息，不该打 📝 回执');
+  assert.equal(existsSync(ctxDir) && readdirSync(ctxDir).length > 0, false, '控制命令不写 context');
+  rmFixture(root);
+});
+
+// 真实事故形态：bot 重启后进程没了、awaiting 条目还在，此前只能手改 awaiting.jsonl 手打表情收场。
+// 两程编排在这里是必需的——awaiting.jsonl 跨重启存活，第二程的新进程活表为空，
+// 在册视图只能来自 awaiting 残留这一路。
+test('端到端（stub）：bot 重启后 /stop 收拾无进程的等待态残留', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-residue-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const awaitingPath = join(root, 'state', 'awaiting.jsonl');
+  const first = await runListener({
+    cfgPath, root, turns: 'ask:等指示',
+    events: [evLine({ message_id: 'om_res_111111', message_type: 'post', thread_id: 'omt_res' })],
+    until: () => existsSync(awaitingPath) && readFileSync(awaitingPath, 'utf8').includes('"waiting":true'),
+  });
+  assert.ok(first.ok, 'ask 后 awaiting 条目应落盘');
+  const entry = JSON.parse(readFileSync(awaitingPath, 'utf8').trim());
+  assert.ok(entry.statusRid && entry.sessionId);
+  // 两程共用一份 lark 日志，且 stub 的 reaction_id 恒为 rid_123——第一程 ask 时的
+  // swapReaction 已经写过一条一模一样的 DELETE。断言必须只看第二程追加的那一段，
+  // 否则「旧表情被撤」是条恒真断言（摘掉 deleteReaction 也照绿）。
+  const beforeSecond = readFileSync(larkLogPath, 'utf8').length;
+  const second = await runListener({
+    cfgPath, root, verdict: 'pass',
+    events: [dmLine({ message_id: 'om_dm_res1111', content: '/stop' })],
+    until: () => readFileSync(larkLogPath, 'utf8').includes('等待态作废'),
+  });
+  assert.ok(second.ok, '/stop 应处置掉无进程的等待态');
+  assert.equal(readFileSync(awaitingPath, 'utf8').trim(), '', 'awaiting 条目应被删除，否则回复还会懒续跑起来');
+  const calls = readFileSync(larkLogPath, 'utf8').slice(beforeSecond).split('\n');
+  assert.ok(calls.find((l) => l.includes('om_res_111111/reactions') && l.includes('MUTE')), '任务消息上应落 stopped 表情');
+  assert.ok(calls.some((l) => l.includes(`om_res_111111/reactions/${entry.statusRid}`)), '旧状态表情应被撤（一条消息恒一个状态表情）');
+  assert.ok(calls.some((l) => l.includes(`cd ${entry.worktree} && claude --resume ${entry.sessionId}`)), '回执须给出可接管的命令');
+  rmFixture(root);
+});
+
+test('端到端（stub）：私信 /pause 把活跃任务转挂起态，不终态', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-pause-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const threadsPath = join(root, 'state', 'threads.jsonl');
+  const awaitingPath = join(root, 'state', 'awaiting.jsonl');
+  const { ok } = await runFedListener({
+    cfgPath, root, turns: 'hang',
+    feed: async (send) => {
+      send(evLine({ message_id: 'om_pause_1111', message_type: 'post', thread_id: 'omt_pause' }));
+      assert.ok(await poll(() => existsSync(threadsPath) && readFileSync(threadsPath, 'utf8').includes('omt_pause')));
+      send(dmLine({ message_id: 'om_dm_pause11', content: '/pause' }));
+      return poll(() => existsSync(awaitingPath) && readFileSync(awaitingPath, 'utf8').includes('"waiting":true'));
+    },
+  });
+  assert.ok(ok, '/pause 应给活跃任务补出等待态条目');
+  const entry = JSON.parse(readFileSync(awaitingPath, 'utf8').trim());
+  assert.equal(entry.messageId, 'om_pause_1111');
+  assert.ok(entry.sessionId, '等待条目须带 sessionId，否则回复只会得到一条「无法续跑」');
+  const calls = readFileSync(larkLogPath, 'utf8');
+  assert.ok(calls.split('\n').find((l) => l.includes('om_pause_1111/reactions') && l.includes('OnIt')), '应换成等回复的表情');
+  assert.ok(calls.includes('人工暂停，回复任意内容即续跑'), '挂起私信须是可回复的');
+  assert.equal(calls.includes('MUTE'), false, 'pause 不终态：不得落 stopped 表情');
+  rmFixture(root);
+});
+
+test('端到端（stub）：/tasks 合并活表与队列，排队中拒 /pause、/stop <short> 只把排队那个出队', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-queued-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const threadsPath = join(root, 'state', 'threads.jsonl');
+  const queuePath = join(root, 'state', 'queue.jsonl');
+  const { ok } = await runFedListener({
+    cfgPath, root, turns: 'hang',
+    feed: async (send) => {
+      // concurrency=1：第一个 hang 任务占住槽位，第二个只能留在队列里（尚未起进程）
+      send(evLine({ message_id: 'om_live_111111', message_type: 'post', thread_id: 'omt_live' }));
+      assert.ok(await poll(() => existsSync(threadsPath) && readFileSync(threadsPath, 'utf8').includes('omt_live')));
+      send(evLine({ message_id: 'om_queued_abc222', message_type: 'post', thread_id: 'omt_queued' }));
+      assert.ok(await poll(() => existsSync(queuePath) && readFileSync(queuePath, 'utf8').includes('om_queued_abc222')));
+      send(dmLine({ message_id: 'om_dm_tasks22', content: '/tasks' }));
+      assert.ok(await poll(() => readFileSync(larkLogPath, 'utf8').includes('运行中')
+        && readFileSync(larkLogPath, 'utf8').includes('排队中')), '/tasks 应同时列出活表与队列');
+      // short 定位（消息 id 后六位；纯数字参数按序号解释，故这里用非纯数字的后六位）
+      send(dmLine({ message_id: 'om_dm_pauseq1', content: '/pause abc222' }));
+      assert.ok(await poll(() => readFileSync(larkLogPath, 'utf8').includes('请改用 /stop')),
+        '排队中的任务没有进程可挂起，pause 应被拒并指路 /stop');
+      // 排队那个尚无进程，只需出队 + 终态表情
+      send(dmLine({ message_id: 'om_dm_stopq11', content: '/stop abc222' }));
+      return poll(() => readFileSync(larkLogPath, 'utf8').includes('已出队'));
+    },
+  });
+  assert.ok(ok, '/stop <short> 应把排队中的任务出队');
+  const listed = readFileSync(larkLogPath, 'utf8');
+  // 同一份列表里两种计时语义并存：跑着的行计已跑，还在队列里的行计已等。
+  assert.ok(/\[运行中\][^[]*· 已跑 \d+[smh]/.test(listed), `运行中的行应计已跑，实际：${listed}`);
+  assert.ok(/\[排队中\][^[]*· 已等 \d+[smh]/.test(listed), `排队中的行应计已等，实际：${listed}`);
+  const calls = listed.split('\n');
+  assert.ok(calls.find((l) => l.includes('om_queued_abc222/reactions'))?.includes('MUTE'), '终态表情打在出队的那条消息上');
+  assert.equal(calls.some((l) => l.includes('om_live_111111/reactions') && l.includes('MUTE')), false, '活跃任务不该被误停');
+  assert.deepEqual(new Store(join(root, 'state')).listQueued(), [], '队列应已清空');
+  rmFixture(root);
+});
+
+// 出队后、liveTasks 登记前的启动窗口：任务既不在队列里也不在活表里。此前这段时间 /tasks 不列它、
+// /stop 回「当前没有在册任务。」——而 byteview-web 上建 worktree 是分钟级，正是「发错了想立刻撤」
+// 的高频时刻，回执还是误导的。
+test('端到端（stub）：建 worktree 期间任务列为「启动中」，/stop 回执指明稍候重试', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-starting-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const queuePath = join(root, 'state', 'queue.jsonl');
+  const hits = (s, needle) => s.split('\n').filter((l) => l.includes(needle)).length;
+  const { ok } = await runFedListener({
+    cfgPath, root, turns: 'hang', env: { PATH: `${gitShim(root, 'slow')}:${process.env.PATH}` },
+    feed: async (send) => {
+      send(evLine({ message_id: 'om_start_111111', message_type: 'post', thread_id: 'omt_start' }));
+      // 空闲队列即刻出队，随后卡在 worktree add 上：队列已空 + 尚无 thread 登记 = 正处启动窗口
+      assert.ok(await poll(() => existsSync(queuePath) && readFileSync(queuePath, 'utf8').trim() === ''),
+        '任务应已出队');
+      // 三条一并投递，全落在同一个启动窗口里：话题（群里喊停的主通道）、私信、列表
+      send(evLine({
+        message_id: 'om_stopstart22', thread_id: 'omt_start', root_id: 'om_start_111111', content: '/stop',
+      }));
+      send(dmLine({ message_id: 'om_dm_sstart1', content: '/stop' }));
+      send(dmLine({ message_id: 'om_dm_tstart1', content: '/tasks' }));
+      return poll(() => {
+        const c = existsSync(larkLogPath) ? readFileSync(larkLogPath, 'utf8') : '';
+        return hits(c, '正在建 worktree') >= 2 && c.includes('启动中');
+      });
+    },
+  });
+  assert.ok(ok, '启动窗口内 /stop 应说明任务正在建 worktree，而不是「没有在册任务」');
+  const calls = readFileSync(larkLogPath, 'utf8');
+  assert.equal(hits(calls, '正在建 worktree'), 2, '话题与私信两条通道给同一条回执');
+  assert.equal(calls.includes('没有在册任务'), false, '启动中的任务必须在册可见');
+  assert.equal(calls.includes('该话题没有登记的任务'), false, '启动中的任务在话题里同样认领得到');
+  assert.ok(calls.includes('[启动中] 这是一个足够长的开发任务描述（111111）'),
+    `列表须带状态、标题与可定位的 short，实际：${calls}`);
+  // 尚未起进程的行，计时起点是消息入队时刻，量的是「等了多久」。
+  assert.ok(/\[启动中\][^[]*· 已等 \d+[smh]/.test(calls), `启动中的行应计已等，实际：${calls}`);
+  assert.equal(/\[启动中\][^[]*已跑/.test(calls), false, '尚未开跑的行不该说已跑');
+  rmFixture(root);
+});
+
+// 启动窗口的出口：worktree 就绪、活表登记完成即交棒。残留的「启动中」条目平时被在册视图的去重
+// 盖住，会在 pause 的飞书往返里浮出来——那段时间活表条目已按 stopping 隐去、等待态尚未落盘，
+// 视图里只剩它。于是运行了半天的任务被说成「启动中」，/stop 被挡在「稍候重试」上，而这正是
+// 人按刹车的时刻。
+test('端到端（stub）：worktree 就绪即出启动窗口，pause 的飞书往返期间不冒出「启动中」', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-onlive-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const threadsPath = join(root, 'state', 'threads.jsonl');
+  const hits = (s, needle) => s.split('\n').filter((l) => l.includes(needle)).length;
+  const read = () => (existsSync(larkLogPath) ? readFileSync(larkLogPath, 'utf8') : '');
+  const { ok } = await runFedListener({
+    // 私信整体慢 2s：pause 的提问私信一发出就把窗口撑开，够在里面问一次 /tasks
+    cfgPath, root, turns: 'hang', env: { STUB_SLOW_IM_S: '2' },
+    feed: async (send) => {
+      send(evLine({ message_id: 'om_onlive_aa1111', message_type: 'post', thread_id: 'omt_onlive' }));
+      assert.ok(await poll(() => existsSync(threadsPath) && readFileSync(threadsPath, 'utf8').includes('omt_onlive')),
+        'worktree 应已就绪');
+      send(dmLine({ message_id: 'om_dm_onlive11', content: '/tasks' }));
+      assert.ok(await poll(() => read().includes('在册任务')), '/tasks 应列出该任务');
+      assert.equal(hits(read(), 'aa1111）'), 1, '同一任务只应占一行');
+      assert.ok(read().includes('[运行中]'), 'worktree 就绪后状态应是运行中');
+      // pause 卡在提问私信上：此刻活表条目已隐去、awaiting 还没落盘
+      send(dmLine({ message_id: 'om_dm_onlivep1', content: '/pause aa1111' }));
+      assert.ok(await poll(() => read().includes('人工暂停')), 'pause 应已发出提问私信');
+      send(dmLine({ message_id: 'om_dm_onlive22', content: '/tasks' }));
+      return poll(() => hits(read(), '没有在册任务') === 1);
+    },
+  });
+  assert.ok(ok, 'pause 往返期间的 /tasks 不该把在跑的任务报成启动中');
+  assert.equal(read().includes('[启动中]'), false, `启动窗口条目应在 worktree 就绪时清掉，实际：${read()}`);
+  rmFixture(root);
+});
+
+// 启动窗口的另一半：worktree 建不起来时没有 startTurnLoop 可登记，条目必须由失败路径清掉——
+// 漏清则该 messageId 永远显示「启动中」，/stop 永远回「稍候重试」，一条死任务把在册视图钉死。
+test('端到端（stub）：worktree 创建失败后启动窗口条目清除，/stop 回「没有在册任务」', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-startfail-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const { ok } = await runFedListener({
+    cfgPath, root, turns: 'hang', env: { PATH: `${gitShim(root, 'fail')}:${process.env.PATH}` },
+    feed: async (send) => {
+      send(evLine({ message_id: 'om_wtfail_1111', message_type: 'post', thread_id: 'omt_wtfail' }));
+      assert.ok(await poll(() => existsSync(larkLogPath) && readFileSync(larkLogPath, 'utf8').includes('任务未启动')),
+        'worktree 建不起来应走 fail 通道');
+      // 日志由 lark stub 在调用之初写下，此刻那条私信还没发完、runTask 也就还没落地；
+      // 清理挂在它 resolve 之后，故这里让出足够时间再问，测的才是清理本身而不是竞速。
+      await new Promise((r) => setTimeout(r, 800));
+      send(dmLine({ message_id: 'om_dm_wtf1111', content: '/stop' }));
+      return poll(() => readFileSync(larkLogPath, 'utf8').includes('没有在册任务'));
+    },
+  });
+  assert.ok(ok, '启动失败的任务不得永久占着「启动中」这一格');
+  rmFixture(root);
+});
+
+// spec §6 点名的分支：多个任务在册时无参 /stop 必须拒绝执行——猜一个停掉就是停错人的现场。
+test('端到端（stub）：多任务在册时无参 /stop 不猜目标，回执列出全部候选', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-many-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const threadsPath = join(root, 'state', 'threads.jsonl');
+  const queuePath = join(root, 'state', 'queue.jsonl');
+  const { ok } = await runFedListener({
+    cfgPath, root, turns: 'hang',
+    feed: async (send) => {
+      // concurrency=1：第一个 hang 占住槽位跑着，第二个留在队列里，凑出两个在册任务
+      send(evLine({ message_id: 'om_manya_aaa111', message_type: 'post', thread_id: 'omt_manya' }));
+      assert.ok(await poll(() => existsSync(threadsPath) && readFileSync(threadsPath, 'utf8').includes('omt_manya')));
+      send(evLine({ message_id: 'om_manyb_bbb222', message_type: 'post', thread_id: 'omt_manyb' }));
+      assert.ok(await poll(() => existsSync(queuePath) && readFileSync(queuePath, 'utf8').includes('om_manyb_bbb222')));
+      send(dmLine({ message_id: 'om_dm_many111', content: '/stop' }));
+      return poll(() => existsSync(larkLogPath) && readFileSync(larkLogPath, 'utf8').includes('有 2 个任务在册'));
+    },
+  });
+  assert.ok(ok, '两个任务在册时无参 /stop 应回「有 2 个任务在册」');
+  const calls = readFileSync(larkLogPath, 'utf8');
+  assert.ok(calls.includes('请带序号或 short'), '回执须给出下一步怎么指名');
+  assert.ok(calls.includes('aaa111') && calls.includes('bbb222'), `回执须列全两个候选，实际：${calls}`);
+  assert.equal(calls.includes('MUTE'), false, '拒绝执行意味着谁都没被停');
+  rmFixture(root);
+});
+
+test('端到端（stub）：私信 /tasks 列出在册任务，/stop 停掉唯一一个', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-dmstop-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const threadsPath = join(root, 'state', 'threads.jsonl');
+  const { ok } = await runFedListener({
+    cfgPath, root, turns: 'hang',
+    feed: async (send) => {
+      send(evLine({ message_id: 'om_dmstop_1111', message_type: 'post', thread_id: 'omt_dmstop' }));
+      assert.ok(await poll(() => existsSync(threadsPath) && readFileSync(threadsPath, 'utf8').includes('omt_dmstop')));
+      send(dmLine({ message_id: 'om_dm_tasks11', content: '/tasks' }));
+      assert.ok(await poll(() => existsSync(larkLogPath) && readFileSync(larkLogPath, 'utf8').includes('运行中')),
+        '/tasks 应把运行中的任务列出来');
+      send(dmLine({ message_id: 'om_dm_stop111', content: '/stop' }));
+      return poll(() => existsSync(larkLogPath) && readFileSync(larkLogPath, 'utf8').includes('在册任务')
+        && readFileSync(larkLogPath, 'utf8').includes('MUTE'));
+    },
+  });
+  assert.ok(ok, '/tasks 应回列表且 /stop 应生效');
+  // 已跑时长（spec §2.3）：判断任务是不是卡住了的唯一现成依据，缺了它列表只剩「它还在」。
+  assert.ok(/已跑 \d+[smh]/.test(readFileSync(larkLogPath, 'utf8')), '/tasks 每行应带已跑时长');
+  rmFixture(root);
+});
+
+test('控制端口被占用：listener 响亮失败退出 1，不带病常驻', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-portdup-')));
+  const port = Math.floor(Math.random() * 8000) + 40000;
+  const cfgPath = writeConfig(root, makeRepo(root), { controlPort: port });
+  const blocker = createServer(() => {});
+  await new Promise((r) => blocker.listen(port, '127.0.0.1', r));
+  const out = await new Promise((res) => {
+    const child = spawn(process.execPath, [SRC, cfgPath], {
+      env: { ...process.env, STUB_LOG: join(root, 'lark.log'), STUB_EVENTS_FILE: '/dev/null', STUB_VERDICT: 'pass' },
+    });
+    let err = '';
+    child.stderr.on('data', (b) => { err += b.toString(); });
+    child.on('close', (code) => res({ code, err }));
+  });
+  blocker.close();
+  assert.equal(out.code, 1);
+  assert.ok(out.err.includes('控制端口'), `stderr 应点名控制端口，实际：${out.err}`);
+  rmFixture(root);
+});
+
+test('端到端（stub）：无任务在册时 /stop 回执提示，不炸进程', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-noctl-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const { ok } = await runListener({
+    cfgPath, root, verdict: 'pass',
+    events: [dmLine({ message_id: 'om_dm_none111', content: '/stop' })],
+    until: () => existsSync(larkLogPath) && readFileSync(larkLogPath, 'utf8').includes('没有在册任务'),
+  });
+  assert.ok(ok);
+  rmFixture(root);
+});
+
+test('端到端（stub）：控制端口提供 tasks 与 stop', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-port-')));
+  const port = Math.floor(Math.random() * 8000) + 40000;
+  const cfgPath = writeConfig(root, makeRepo(root), { controlPort: port });
+  const threadsPath = join(root, 'state', 'threads.jsonl');
+  const eventsFile = join(root, 'events.ndjson');
+  writeFileSync(eventsFile, evLine({ message_id: 'om_port_111111', message_type: 'post', thread_id: 'omt_port' }) + '\n');
+  const child = spawn(process.execPath, [SRC, cfgPath], {
+    env: { ...process.env, STUB_LOG: join(root, 'lark-calls.log'), STUB_EVENTS_FILE: eventsFile, STUB_TURNS: 'hang' },
+  });
+  const closed = new Promise((res) => child.on('close', res));
+  const stderr = tapStderr(child);
+  const started = await poll(() => existsSync(threadsPath) && readFileSync(threadsPath, 'utf8').includes('omt_port'));
+  assert.ok(started, `任务未起来，listener stderr：\n${stderr().slice(-2000)}`);
+  // fetch 默认无限等：控制端口一旦不答（本用例 2026-08-05 观测到过一次），整个套件会静默挂死
+  // 而不是失败，人看到的只是一个永不结束的命令。上限把它变成一次可读的失败。
+  const ask = (path, init) => fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(10_000), ...init });
+  const list = await (await ask('/api/tasks')).json();
+  assert.equal(list.tasks.length, 1);
+  assert.equal(list.tasks[0].state, 'active');
+  const worktree = list.tasks[0].worktree;
+  const stopped = await ask('/api/stop', { method: 'POST', body: JSON.stringify({ worktree }) });
+  assert.equal(stopped.status, 200);
+  assert.equal((await stopped.json()).was, 'active');
+  await poll(async () => (await (await ask('/api/tasks')).json()).tasks.length === 0);
+  child.kill('SIGTERM');
+  await closed;
+  rmFixture(root);
+});
+
 // 单元级：这两条覆盖「首帖 worktree 就绪前回复就到」的 in-flight 形态——该形态下回复必然退化成
 // 第二个任务，而端到端用例（分两程投递）按设计跳过了它，只能在此钉住。
 test('线程登记归属：退化任务抢不走登记，也注销不了别人的登记', async () => {
@@ -362,8 +756,37 @@ test('启动校验：缺键/坏键一次性全列并退出 1，不 spawn 任何�
     child.on('close', (code) => res({ code, err }));
   });
   assert.equal(out.code, 1);
-  for (const key of ['chatId', 'profile', 'larkBin', 'concurrency', 'taskTimeoutMs', 'reactions.done', 'reactions.skipped', 'reactions.context']) {
+  for (const key of ['chatId', 'profile', 'larkBin', 'concurrency', 'taskTimeoutMs', 'reactions.done', 'reactions.skipped', 'reactions.context', 'reactions.stopped']) {
     assert.ok(out.err.includes(key), `stderr 应列出 ${key}，实际：${out.err}`);
+  }
+  // controlPort 是可省略键：这份 config 没写它，不该被算成缺键
+  assert.equal(out.err.includes('controlPort'), false, `controlPort 可省略，不该进错误清单，实际：${out.err}`);
+  rmFixture(root);
+});
+
+test('控制端口出厂值：config 省略即用 7659（spec 与 runbook 的口径）', async () => {
+  const { DEFAULT_CONTROL_PORT } = await import('../src/listener.mjs');
+  assert.equal(DEFAULT_CONTROL_PORT, 7659);
+});
+
+test('启动校验：controlPort 可省略，但给了坏值仍响亮失败', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-badport-')));
+  const repo = makeRepo(root);
+  // 0 漂成随机端口、非数字/小数/越界要等到 listen 才抛裸栈——都必须在 boot 一次性拦下；
+  // 校验先于监听，故这几次启动都不会去绑任何端口。
+  for (const bad of [0, 'x', 3.5, 70000]) {
+    const cfgPath = writeConfig(root, repo, { controlPort: bad });
+    const out = await new Promise((res) => {
+      const child = spawn(process.execPath, [SRC, cfgPath], { env: { ...process.env } });
+      let err = '';
+      child.stderr.on('data', (b) => { err += b.toString(); });
+      // 校验一旦漏掉这个键，`listen(0)` 会让 OS 随便派个端口、listener 就此正常常驻，
+      // 本用例会挂死而不是失败。设上限把「不退出」变成一次可读的失败。
+      const guard = setTimeout(() => child.kill('SIGKILL'), 5000);
+      child.on('close', (code) => { clearTimeout(guard); res({ code, err }); });
+    });
+    assert.equal(out.code, 1, `controlPort=${JSON.stringify(bad)} 应退出 1，实际 stderr：${out.err}`);
+    assert.ok(out.err.includes('controlPort'), `stderr 应点名 controlPort，实际：${out.err}`);
   }
   rmFixture(root);
 });

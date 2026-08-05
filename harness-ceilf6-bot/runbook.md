@@ -17,6 +17,26 @@ install 脚本会逐项机械检查，缺一项即拒装（不再靠人肉核对
 
 另需 macOS launchd（用户级 LaunchAgent，登录后常驻）。
 
+## 控制命令（刹车）
+
+bot 跑起来后随时可用，**控制命令由 listener 直接执行、不进会话**，所以长轮次（跑全量测试、机审 CR）里按下的停立刻生效。
+
+| 命令 | 发在哪 | 作用 |
+|---|---|---|
+| `/tasks` | 私信或话题内回复 | 列出在册任务（运行中 / 等回复 / 启动中 / 排队中），带序号、short（消息 id 后 6 位）与时长（运行中、等回复计已跑，启动中、排队中尚未起进程，计已等）；列表一律私信投递 |
+| `/stop` | 话题内回复 | 停掉该话题的任务 |
+| `/stop` / `/stop <序号\|short>` | 私信 | 在册只有一个时免参；多个时先 `/tasks` 再带序号 |
+| `/pause` | 话题或私信 | 只杀进程、保留可续跑的等待态，之后私信回一句即懒续跑 |
+
+- **停止**：杀进程组（连同会话自布的后台任务，如 pre-commit 钩子、traex 机审），群消息表情落 🛑（`reactions.stopped`），私信回执带 worktree 与接管命令。**现场（worktree / 分支 / 提交）一律保留**。排队中还没起进程的任务只是出队，🛑 之外只回一句「已出队（未起进程）」——它还没有 worktree，也就没有接管命令与可保留的现场。
+- 收割姿势是 SIGTERM 起手、宽限期（`killGraceMs`，出厂 10s）内没退就对整个进程组补 SIGKILL，覆盖组里捕获 SIGTERM 却赖着不退的成员（机审、测试 runner、pre-commit 钩子）。会话组长先退时补刀即刻发出，不等到宽限期末。
+- **启动中**（已出队、`git worktree add` 还没回来；巨型 monorepo 上是分钟级）的任务在 `/tasks` 里列为「启动中」，此时 `/stop`、`/pause` 都还没有进程可作用，回执会告诉你稍候数十秒重试。
+- **暂停**：表情落 ⚠️，回执说明回复即续跑。排队中的任务不能暂停（还没起进程），用 `/stop`。
+- 控制命令只认**消息首行**：正文里出现的 `/stop` 是普通文本，不会误杀任务。
+- 首行开头的 `@机器人` 会被忽略：`@harness-ceilf6 /stop` 与 `/stop` 等效。**仅在话题回复与私信里生效**——发在群里非话题的顶层消息不是控制命令，够长还会被当成新任务起跑。注意机器人显示名不能含空格，否则 mention 剥离按空白切 token 会失效（`@John Smith /stop` 退化成普通话题回复，够长则落 📝 进 `context/`）。
+- **自然语言不生效**：话题里说「这个需求先在计划门节点暂停」只会被存进 `context/` 供下次续入用（📝），正在跑的会话读不到；短于 `minTextLength`（出厂 10 字）的句子连 📝 都不会有，被预滤直接丢弃。要停就发 `/stop`。
+- 控制端口：`config.json` 的 `controlPort`，出厂值 7659（可省略，省略即用 7659）；绑 127.0.0.1，端口被占时 bot 启动即响亮失败退出。看板的停止按钮走它。
+
 ## 一次性：创建飞书应用（约 5 分钟，人工）
 
 1. 开发者后台（open.larkoffice.com）新建自建应用，命名如 `harness-ceilf6-bot`。
@@ -68,6 +88,7 @@ install 脚本会逐项机械检查，缺一项即拒装（不再靠人肉核对
 > | 等待你回复（ask / API 错误挂起） | ⚠️ | `escalate` | `OnIt` |
 > | 收到但非任务 | 🈁 | `skipped` | `Get` |
 > | 已存入上下文 | 📝 | `context` | `Pin` |
+> | 人工叫停 | 🛑 | `stopped` | `MUTE` |
 >
 > **状态表情恒为一个**（用户裁定）：进行中挂接单表情，转为等你回复时换成 ⚠️、回复到达再换回 👀（可来回多次），到终态则换成该终态的专属表情——一律先打新表情、再撤旧表情，中途不会出现「没有表情」。所以 skip 也留一个 🈁，而不是撤成零表情。`context` 打在话题回复上、不属于状态机，不参与这条不变量。
 
@@ -76,7 +97,7 @@ install 脚本会逐项机械检查，缺一项即拒装（不再靠人肉核对
 - 状态：`launchctl list | grep harness-ceilf6-bot`；事件流日志 `tail -f harness-ceilf6-bot/logs/launchd.err.log`。
 - 单任务日志：`harness-ceilf6-bot/logs/task-<message_id>.log`（headless claude 全量输出，排查「它为什么这么干」的唯一依据）。
 - 停止：`launchctl unload ~/Library/LaunchAgents/com.ceilf6.harness-ceilf6-bot.plist`；重新启用：重跑 `bash harness-ceilf6-bot/install.sh`（幂等，即重装重启）。
-- **有 PID 却毫无反应**（`launchctl list` 看得到进程，群里发消息没任何表情）：先核对 `config.json` 的 `chatId` 与目标群是否一致。chat 不匹配的消息是被**刻意静音**忽略的（否则机器人在的每个群都会刷屏日志），所以日志里连一行线索都不会有。群 id 用 `lark-cli` 的群列表查（`im +chat-list` / `im +chat-search`）。
+- **有 PID 却毫无反应**（`launchctl list` 看得到进程，群里发消息没任何表情）：先核对 `config.json` 的 `chatId` 与目标群是否一致。chat 不匹配的消息是被**刻意静音**忽略的（否则机器人在的每个群都会刷屏日志），所以日志里连一行线索都不会有。群 id 用 `lark-cli` 的群列表查（`im +chat-list` / `im +chat-search`）。控制端口被别的进程占住时症状相同（launchd 反复重启一个起不来的实例），但那一类在 `logs/launchd.err.log` 里有明确的「控制端口 … 启动失败」，先看日志再查 chatId。
 - 重置某条消息重新处理：从 `state/processed.jsonl` 删除该行后重启。**注意**：这只在事件流会再次投递同一 `message_id` 时才有效（平台重投）；日常想重跑一条任务，最可靠的做法是在群里重新发一条消息——那是新的 `message_id`，根本不必动 `processed.jsonl`。
 - 话题登记表 `state/threads.jsonl`（`thread_id → {branch, worktree, messageId}`）：话题内回复靠它找到归属任务。想让某话题的后续回复重新按新任务处理：删掉对应那一行后**重启** bot（该文件只在启动时读进内存）。
 - 升级：仓库拉最新后重跑 `install.sh`；升级前在仓库根跑一遍测试：
@@ -134,3 +155,4 @@ worktree 存在、日志尾无 RESULT、消息还挂着 👀 —— 三者同时
 - 测试 stub（`tests/stubs/lark-cli`）在 `event consume` 分支之前就记账，所以 listener 类测试里 **consume 占掉第 1 次调用**；将来若给 listener 测试加 `STUB_FAIL_FIRST=1`，失败的会是事件流而不是第一次 reaction。
 - 等待回复期间任务无超时：`taskTimeoutMs` 是**每轮**墙钟（写入 stdin 起计、收到该轮 RESULT 停表），挂起可无限期等待，靠 awaiting.jsonl 与 ⚠️ 表情可见。
 - 挂起进程数不设上限（用户裁定）：每个等待中的任务保有一个常驻 claude 进程（只耗内存不耗 API）；进程意外死亡无损，回复时懒续跑。
+- 准入规则是「群里发消息即任务」：讨论补充也可能被判成新任务（尤其在首帖 worktree 就绪前到达的话题回复会退化成独立任务）。误起的任务用 `/stop` 收拾，bot 不做 @ 点名才跑的过滤。

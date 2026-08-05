@@ -9,6 +9,21 @@ export const COMMANDS = {
 // 由 COMMANDS 派生：不存在第二份需要人工同步的命令清单。
 export const SUPPORTED_HINT = `当前支持：${Object.entries(COMMANDS).map(([name, c]) => `/${name} ${c.argLabel}`).join('、')}`;
 
+// 控制命令：由 listener 直接执行（杀进程 / 置终态 / 列表），不进会话也不转 spawn 参数。
+// 与 COMMANDS 分属两类——刹车必须在 listener 层立即生效，等会话读到就晚了。
+export const CONTROL = new Set(['stop', 'pause', 'tasks']);
+
+// 只认首行：正文里出现的斜杠行是普通文本，误判会凭空杀掉一个任务。
+export function parseControl(text) {
+  // 飞书 mention 在 content 里就是字面文本（`@名字 ` 原样留在正文），而群里的人习惯
+  // 先 @ 机器人再发命令；只剥首行开头的连续 mention，中段的 @ 属正文。
+  const first = String(text ?? '').split('\n')[0].trim().replace(/^(?:@\S+\s+)+/, '');
+  if (!first.startsWith('/')) return null;
+  const [name, ...rest] = first.slice(1).split(/\s+/);
+  if (!CONTROL.has(name)) return null;
+  return { name, arg: rest.join(' ').trim() };
+}
+
 export function parseDmReply(text) {
   const lines = String(text ?? '').split('\n');
   const flags = [];

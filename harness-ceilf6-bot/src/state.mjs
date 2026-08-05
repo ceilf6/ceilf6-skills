@@ -99,4 +99,15 @@ export class Store {
     this.#flushAwaiting();
     return true;
   }
+  // 在册全量：含已不在等待态的条目（会话仍活着，只是没在等回复）；只要等待中的用 listWaiting。
+  listAwaiting() { return [...this.awaiting.values()]; }
+  listQueued() { return [...this.queue]; }
+  // 控制面停止排队中任务：按 id 精确出队，避免 dequeue 的 FIFO 语义误伤队首。
+  removeQueued(messageId) {
+    const i = this.queue.findIndex((t) => t.messageId === messageId);
+    if (i < 0) return null;
+    const [t] = this.queue.splice(i, 1);
+    this.#flushQueue();
+    return t;
+  }
 }

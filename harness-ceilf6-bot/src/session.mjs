@@ -32,7 +32,19 @@ export function startSession({ bin, cwd, name, logPath, timeoutMs, killGraceMs, 
   child.stdin.on('error', (e) => log.write(`[session] stdin 写入失败：${e.message}\n`));
   let killer = null;
   let sigkill = null;
-  const disarm = () => { clearTimeout(killer); clearTimeout(sigkill); killer = sigkill = null; };
+  const disarm = () => { clearTimeout(killer); killer = null; };
+  // 收割进程组的唯一姿势：SIGTERM 起手，宽限期后补 SIGKILL。组内可能有捕获 SIGTERM 却不退的
+  // 子进程（机审、测试 runner、pre-commit 钩子），只发 TERM 会让「已停止」的回执落在仍在跑的
+  // 现场上。收割意图一旦发出即不可撤回：轮次事件不撤销补刀。
+  // 句柄已死时不再发信号：pause 在置 stopping 与 kill() 之间要等飞书往返（最坏数十秒），
+  // 期间进程可能自死，此时 pgid 可能已属于别的进程。
+  const reap = () => {
+    if (!handle.alive) return;
+    killGroup('SIGTERM');
+    clearTimeout(sigkill);
+    sigkill = setTimeout(() => killGroup('SIGKILL'), killGraceMs ?? 10_000);
+    sigkill.unref();
+  };
   const handle = {
     alive: true,
     sessionId: resumeSessionId ?? '',
@@ -41,14 +53,12 @@ export function startSession({ bin, cwd, name, logPath, timeoutMs, killGraceMs, 
       try { child.stdin.write(JSON.stringify({ type: 'user', message: { role: 'user', content: text } }) + '\n'); } catch { /* 进程已死：close 事件走分发 */ }
       disarm();
       killer = setTimeout(() => {
-        killGroup('SIGTERM');
-        sigkill = setTimeout(() => killGroup('SIGKILL'), killGraceMs ?? 10_000);
-        sigkill.unref();
+        reap();
         onEvent({ kind: 'timeout' });
       }, timeoutMs);
     },
     endInput() { try { child.stdin.end(); } catch { /* 已关闭 */ } },
-    kill() { killGroup('SIGTERM'); },
+    kill() { reap(); },
   };
   // chunk 边界可能落在多字节 UTF-8 字符中间，直接 toString 会在两侧产生 U+FFFD；
   // StringDecoder 缓冲残字节到下一个 chunk。日志仍写原始 buffer，字节级保真。
@@ -77,6 +87,9 @@ export function startSession({ bin, cwd, name, logPath, timeoutMs, killGraceMs, 
     activePids.delete(child.pid);
     handle.alive = false;
     disarm();
+    // 组长退了不等于组空了：捕获 SIGTERM 的组员还在跑，而它一旦不占着会话管道，close 就毫秒级
+    // 到达。已发出的收割意图在此刻兑现，而不是留着定时器等到宽限期末——那时 pgid 可能已被复用。
+    if (sigkill) { clearTimeout(sigkill); sigkill = null; killGroup('SIGKILL'); }
     log.end();
     onEvent({ kind: 'close', code });
   });

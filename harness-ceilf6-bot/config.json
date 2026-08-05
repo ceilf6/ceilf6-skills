@@ -9,6 +9,7 @@
   "taskTimeoutMs": 7200000,
   "killGraceMs": 10000,
   "minTextLength": 10,
+  "controlPort": 7659,
   "dmOpenId": "填你的 open_id（lark-cli auth status --json 的 identities.user.openId）",
   "claudeBin": "claude",
   "larkBin": "lark-cli",
@@ -18,6 +19,7 @@
     "failed": "CrossMark",
     "escalate": "OnIt",
     "skipped": "Get",
-    "context": "Pin"
+    "context": "Pin",
+    "stopped": "MUTE"
   }
 }

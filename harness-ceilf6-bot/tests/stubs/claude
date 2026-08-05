@@ -5,8 +5,30 @@
 // 且不回 result，用于活跃轮次进程死亡分支。ask 的参数以 | 分隔 question 与 summary。
 // STUB_SELF_TURN（{"afterMs":N,"directive":"…"}）：回完一轮后无需输入自发再出一轮 result，
 // 模拟会话自布后台任务完成触发的自唤醒轮，只触发一次。STUB_VERDICT 是单指令旧名。
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, openSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+
+// STUB_IGNORE_SIGTERM：装一个空 SIGTERM 处理器后照常挂着，模拟组内捕获 SIGTERM 却不退的
+// 子进程（机审、测试 runner、pre-commit 钩子），用于验证宽限期后的 SIGKILL 升级。
+if (process.env.STUB_IGNORE_SIGTERM) process.on('SIGTERM', () => {});
+
+// STUB_GRANDCHILD=<心跳文件>：起一个留在同一进程组、忽略 SIGTERM、stdio 重定向到文件的孙进程
+// （后台化的机审 / 测试 runner / pre-commit 钩子的形态），每 200ms 往心跳文件追加一个字节，pid 记在
+// <心跳文件>.pid。它不占着会话管道，故本进程一退 close 立刻到达；只有真发出的 SIGKILL 能让它消失。
+// 30s 保险丝：用例失败时不至于把它留在机器上。
+if (process.env.STUB_GRANDCHILD) {
+  const beat = process.env.STUB_GRANDCHILD;
+  const out = openSync(`${beat}.out`, 'a');
+  const gc = spawn(process.execPath, ['-e', `
+    process.on('SIGTERM', () => {});
+    const { appendFileSync } = require('node:fs');
+    setInterval(() => appendFileSync(process.argv[1], 'x'), 200);
+    setTimeout(() => process.exit(0), 30000);
+  `, beat], { stdio: ['ignore', out, out] });
+  writeFileSync(`${beat}.pid`, String(gc.pid));
+  gc.unref();
+}
 
 const args = process.argv.slice(2);
 if (process.env.STUB_ARGS_OUT) writeFileSync(process.env.STUB_ARGS_OUT, args.join('\n') + '\n');

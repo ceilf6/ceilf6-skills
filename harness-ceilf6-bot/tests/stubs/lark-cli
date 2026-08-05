@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # 假 lark-cli：把完整 argv 记到 ${STUB_LOG}，按首个子命令输出录制响应。
 # STUB_FAIL_FIRST=1 时首次调用失败（测重试）。
+# STUB_SLOW_IM_S=<秒> 让私信调用挂住指定时长（日志行在挂起前已写下），用来把「控制面动作
+# 卡在飞书往返里」的窗口撑到可观测。
 set -euo pipefail
 log="${STUB_LOG:?需要 STUB_LOG}"
 printf '%s\n' "$*" >> "$log"
@@ -12,6 +14,9 @@ echo "$calls" > "$count_file"
 if [ "${STUB_FAIL_FIRST:-0}" = "1" ] && [ "$calls" -eq 1 ]; then
   echo '{"ok":false,"error":"stub 注入的首次失败"}' >&2
   exit 1
+fi
+if [ -n "${STUB_SLOW_IM_S:-}" ] && [ "$1" = "im" ]; then
+  sleep "$STUB_SLOW_IM_S"
 fi
 if [ "$1" = "event" ] && [ "${2:-}" = "consume" ]; then
   echo "[event] ready event_key=im.message.receive_v1" >&2

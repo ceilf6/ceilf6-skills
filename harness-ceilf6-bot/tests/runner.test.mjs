@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, existsSync, realpathSync, rmSync 
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { runTask, resumeTask, killActiveChildren, injectReply, killSession } from '../src/runner.mjs';
+import { runTask, resumeTask, killActiveChildren, injectReply, killSession, taskSnapshot, stopLive } from '../src/runner.mjs';
 
 const CLAUDE_STUB = resolve(import.meta.dirname, 'stubs/claude');
 
@@ -19,7 +19,7 @@ function makeConfig(root, repo, over = {}) {
   return {
     repoPath: repo, worktreesDir: join(root, 'wt'), logsDir: join(root, 'logs'),
     taskTimeoutMs: 60_000, killGraceMs: 500, claudeBin: CLAUDE_STUB, dmOpenId: 'ou_me',
-    reactions: { claimed: 'THUMBSUP', done: 'DONE', failed: 'CROSS', escalate: 'WARN', skipped: 'GET' }, ...over,
+    reactions: { claimed: 'THUMBSUP', done: 'DONE', failed: 'CROSS', escalate: 'WARN', skipped: 'GET', stopped: 'MUTE' }, ...over,
   };
 }
 function fakeLark(calls) {
@@ -528,6 +528,132 @@ test('killSession：只收割挂起会话，等待态不终态；活跃轮次拒
   assert.equal(raced, 'pending');
   assert.equal(await injectReply(TASK.messageId, '来晚了'), false); // 进程已死 → 走懒续跑
   assert.equal(killSession('om_nope'), false);
+  delete process.env.STUB_TURNS;
+  rmFixture(root);
+});
+
+test('stopLive stop：活跃轮次立即停，🛑 终态、私信含 worktree、verdict=stopped', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  delete process.env.STUB_VERDICT;
+  process.env.STUB_TURNS = 'hang'; // 长轮次：刹车不得等这轮跑完
+  const p = runTask(TASK, makeConfig(root, repo, { taskTimeoutMs: 60_000 }), fakeLark(calls));
+  // 按 messageId 取而非 [0]：同文件内先前用例的残留（若有）不该让断言变成偶然通过或偶然失败
+  const mine = () => taskSnapshot().find((t) => t.messageId === TASK.messageId);
+  await poll(() => !!mine());
+  const snap = mine();
+  assert.equal(snap.state, 'active');
+  assert.equal(snap.short, '654321');
+  assert.equal(snap.title, '修一个真实任务 $&原样');
+  assert.ok(snap.worktree.includes('bot__'));
+  assert.equal(await stopLive(TASK.messageId, 'stop'), 'active');
+  const out = await p;
+  assert.equal(out.verdict, 'stopped');
+  assert.ok(existsSync(out.worktree)); // 现场保留
+  const rx = calls.filter((c) => c[0] !== 'dm');
+  assert.deepEqual(rx.map((c) => [c[0], c[2]]), [['add', 'THUMBSUP'], ['add', 'MUTE'], ['del', 'rid_1']]);
+  const dm = calls.find((c) => c[0] === 'dm')[2];
+  assert.ok(dm.includes('已停止'));
+  assert.ok(dm.includes(out.worktree));
+  assert.equal(mine(), undefined); // 已移出活表
+  delete process.env.STUB_TURNS;
+  rmFixture(root);
+});
+
+test('stopLive stop：挂起态停止走 ⚠️→🛑，同样 verdict=stopped', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  const asks = [];
+  process.env.STUB_TURNS = 'ask:等指示';
+  const p = runTask(TASK, makeConfig(root, repo), fakeLark(calls), { onAsk: (i) => asks.push(i) });
+  await poll(() => asks.length === 1);
+  assert.equal(taskSnapshot().find((t) => t.messageId === TASK.messageId).state, 'waiting');
+  assert.equal(await stopLive(TASK.messageId, 'stop'), 'waiting');
+  assert.equal((await p).verdict, 'stopped');
+  const rx = calls.filter((c) => c[0] !== 'dm');
+  assert.deepEqual(rx.map((c) => [c[0], c[2]]), [
+    ['add', 'THUMBSUP'], ['add', 'WARN'], ['del', 'rid_1'], ['add', 'MUTE'], ['del', 'rid_2'],
+  ]);
+  delete process.env.STUB_TURNS;
+  rmFixture(root);
+});
+
+test('stopLive pause：活跃轮次转挂起态、进程被杀、任务不终态（可懒续跑）', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  const asks = [];
+  process.env.STUB_TURNS = 'hang';
+  const p = runTask(TASK, makeConfig(root, repo, { taskTimeoutMs: 60_000 }), fakeLark(calls), { onAsk: (i) => asks.push(i) });
+  await poll(() => taskSnapshot().some((t) => t.messageId === TASK.messageId));
+  assert.equal(await stopLive(TASK.messageId, 'pause'), 'active');
+  await poll(() => asks.length === 1);
+  assert.ok(asks[0].question.includes('人工暂停')); // 登记成可续跑的等待态
+  assert.equal(calls.filter((c) => c[0] !== 'dm')[1][2], 'WARN');
+  // 不终态：promise 保持 pending，等用户回复走懒续跑
+  const raced = await Promise.race([p, new Promise((r) => setTimeout(() => r('pending'), 800))]);
+  assert.equal(raced, 'pending');
+  assert.equal(await injectReply(TASK.messageId, '来晚了'), false); // 进程已死 → 交给懒续跑
+  delete process.env.STUB_TURNS;
+  rmFixture(root);
+});
+
+test('stopLive pause：等待条目带 sessionId，回复能真的懒续跑（首轮未收轮次时取自会话句柄）', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  const asks = [];
+  process.env.STUB_TURNS = 'hang'; // 人工暂停的典型现场：首个长轮次还没回过 result
+  const p = runTask(TASK, makeConfig(root, repo, { taskTimeoutMs: 60_000 }), fakeLark(calls), { onAsk: (i) => asks.push(i) });
+  const logPath = join(root, 'logs', `task-${TASK.messageId}.log`);
+  // 等 init 事件落进日志：同一个 data 回调里既写日志又回填会话句柄的 sessionId
+  await poll(() => existsSync(logPath) && readFileSync(logPath, 'utf8').includes('sess_stub_1'));
+  // 快照与 stopLive 同一份内存真源，兜底口径必须一致：控制面看板/列表拼的接管命令直接取这个字段
+  assert.equal(taskSnapshot().find((t) => t.messageId === TASK.messageId).sessionId, 'sess_stub_1');
+  assert.equal(await stopLive(TASK.messageId, 'pause'), 'active');
+  await poll(() => asks.length === 1);
+  assert.equal(asks[0].sessionId, 'sess_stub_1'); // 空 sessionId 的等待条目在懒续跑里只会换来一条 ❌
+  await Promise.race([p, new Promise((r) => setTimeout(r, 300))]); // 等 close 落定
+  process.env.STUB_TURNS = 'pass';
+  process.env.STUB_ARGS_OUT = join(root, 'args-pause.txt');
+  const out = await resumeTask({ ...asks[0], resumeFlags: [] }, '继续', makeConfig(root, repo), fakeLark([]), {});
+  assert.equal(out.verdict, 'pass');
+  const args = readFileSync(join(root, 'args-pause.txt'), 'utf8').split('\n');
+  assert.equal(args[args.indexOf('--resume') + 1], 'sess_stub_1');
+  delete process.env.STUB_TURNS; delete process.env.STUB_ARGS_OUT;
+  rmFixture(root);
+});
+
+test('stopLive pause：已挂起任务只杀进程，不重发提问私信、不重复登记', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  const asks = [];
+  process.env.STUB_TURNS = 'ask:等指示';
+  const p = runTask(TASK, makeConfig(root, repo), fakeLark(calls), { onAsk: (i) => asks.push(i) });
+  await poll(() => asks.length === 1);
+  const dmsBefore = calls.filter((c) => c[0] === 'dm').length;
+  const rxBefore = calls.filter((c) => c[0] !== 'dm').length;
+  assert.equal(await stopLive(TASK.messageId, 'pause'), 'waiting');
+  // 不终态：promise 保持 pending 等懒续跑。这段等待同时给「进程死亡后才冒出的重复登记」留暴露窗口。
+  const raced = await Promise.race([p, new Promise((r) => setTimeout(() => r('pending'), 800))]);
+  assert.equal(raced, 'pending');
+  assert.equal(asks.length, 1); // 重复登记会让懒续跑拿到两份等待条目
+  assert.equal(calls.filter((c) => c[0] === 'dm').length, dmsBefore); // 用户已收到过提问，不该再收一条
+  assert.equal(calls.filter((c) => c[0] !== 'dm').length, rxBefore); // 表情链不动：已是 ⚠️ 挂起态
+  assert.equal(await injectReply(TASK.messageId, '来晚了'), false); // 进程已死 → 交给懒续跑
+  delete process.env.STUB_TURNS;
+  rmFixture(root);
+});
+
+test('stopLive：未知任务与重复调用返回 null，不重复处置', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  process.env.STUB_TURNS = 'hang';
+  const p = runTask(TASK, makeConfig(root, repo, { taskTimeoutMs: 60_000 }), fakeLark(calls));
+  await poll(() => taskSnapshot().some((t) => t.messageId === TASK.messageId));
+  assert.equal(await stopLive('om_nope', 'stop'), null);
+  assert.equal(await stopLive(TASK.messageId, 'stop'), 'active');
+  assert.equal(await stopLive(TASK.messageId, 'stop'), null); // 二次调用无副作用
+  assert.equal((await p).verdict, 'stopped');
+  assert.equal(calls.filter((c) => c[2] === 'MUTE').length, 1);
   delete process.env.STUB_TURNS;
   rmFixture(root);
 });

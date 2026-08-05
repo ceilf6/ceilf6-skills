@@ -112,11 +112,19 @@ async function settle(rt, verdict, { why, result } = {}) {
   rt.settled = true;
   // 只删指向自己的登记：懒续跑可能已用新运行时覆盖同 key，误删会让后续回复重复起会话。
   if (liveTasks.get(rt.task.messageId) === rt) liveTasks.delete(rt.task.messageId);
-  rt.session?.endInput();
+  // stopped 是人工叫停：必须立刻断掉进程组，不能等它把当前轮跑完。
+  if (verdict === 'stopped') rt.session?.kill(); else rt.session?.endInput();
   const { config, lark, task } = rt;
   if (verdict === 'skip') {
     await cleanupWorktree(config, rt.worktree, rt.branch);
     rt.statusRid = await swapReaction(lark, task.messageId, config.reactions.skipped, rt.statusRid);
+  } else if (verdict === 'stopped') {
+    rt.statusRid = await swapReaction(lark, task.messageId, config.reactions.stopped, rt.statusRid);
+    const takeover = rt.sessionId
+      ? `cd ${rt.worktree} && claude --resume ${rt.sessionId}`
+      : `cd ${rt.worktree} && claude`;
+    await lark.sendDm(config.dmOpenId,
+      `🛑 任务已停止（${why}）\n${rt.title}\n分支：${rt.branch}\nworktree：${rt.worktree}\n如需接管：${takeover}`);
   } else if (verdict === 'pass') {
     rt.statusRid = await swapReaction(lark, task.messageId, config.reactions.done, rt.statusRid);
     await lark.sendDm(config.dmOpenId,
@@ -131,6 +139,12 @@ async function settle(rt, verdict, { why, result } = {}) {
 
 async function handleEvent(rt, ev) {
   if (rt.settled) return;
+  // 控制面动作期间到达的事件不得再驱动状态机：pause 的「补挂起态 → 杀进程」之间若放行
+  // 一个带 RESULT 的 turn，会把刚建立的等待态又推回活跃。close 仍需把自己移出活表。
+  if (rt.stopping) {
+    if (ev.kind === 'close' && liveTasks.get(rt.task.messageId) === rt) liveTasks.delete(rt.task.messageId);
+    return;
+  }
   if (ev.kind === 'timeout') return settle(rt, 'fail', { why: '超时强杀' });
   if (ev.kind === 'close') {
     // 挂起进程死亡/被收割：等待态不动（懒续跑兜底），仅移出活表。
@@ -176,8 +190,15 @@ async function handleEvent(rt, ev) {
 }
 
 function startTurnLoop(init) {
-  const rt = { ...init, state: 'active', settled: false, correctionUsed: false, session: null };
+  const rt = { ...init, state: 'active', settled: false, stopping: false, correctionUsed: false, session: null, startedAt: new Date().toISOString() };
   liveTasks.set(rt.task.messageId, rt);
+  // 登记完成即离开启动窗口：调用方的在册视图据此把「启动中」交棒给活表实态，
+  // 两边同时列出会让同一个任务在 /tasks 里出现两行。
+  try {
+    init.hooks?.onLive?.({ messageId: rt.task.messageId });
+  } catch (e) {
+    console.error(`[runner] onLive 回调失败：${e.message}`);
+  }
   const done = new Promise((res) => { rt.finish = res; });
   rt.session = startSession({
     bin: rt.config.claudeBin, cwd: rt.worktree, name: rt.title, logPath: rt.logPath,
@@ -189,13 +210,44 @@ function startTurnLoop(init) {
   return done;
 }
 
+// 控制面只读视图：状态取内存真源（store 的 waiting 标志在自唤醒后不更新，不可作为运行态依据）。
+// sessionId 与 stopLive 同一套兜底——rt.sessionId 要等首轮 result 才回填，而看板与列表拼的接管/
+// 续跑命令没了它就是一条无 --resume 的裸命令。
+export function taskSnapshot() {
+  return [...liveTasks.values()].filter((rt) => !rt.settled && !rt.stopping).map((rt) => ({
+    messageId: rt.task.messageId, short: rt.task.messageId.slice(-6), title: rt.title,
+    branch: rt.branch, worktree: rt.worktree, state: rt.state,
+    startedAt: rt.startedAt, sessionId: rt.sessionId || rt.session?.sessionId || '',
+  }));
+}
+
+// stop：走 stopped 终态（杀进程组、终态表情、私信回执、promise resolve）。
+// pause：补一个等待态再杀进程——顺序反了会让 close 先到并按活跃轮次判 fail 终态。
+// 返回处置前的状态；活表未命中返回 null（调用方据此转去处理无进程的残留态）。
+export async function stopLive(messageId, mode) {
+  const rt = liveTasks.get(messageId);
+  if (!rt || rt.settled || rt.stopping) return null;
+  const was = rt.state;
+  // rt.sessionId 靠轮次事件回填，而人工叫停多半落在首个长轮次里，此刻会话 id 只在进程句柄上。
+  // 少了这一步：pause 登记的等待条目缺 sessionId，懒续跑只会回一条 ❌；stop 的接管命令也丢 --resume。
+  rt.sessionId ||= rt.session?.sessionId || '';
+  if (mode === 'pause') {
+    rt.stopping = true;
+    if (was !== 'waiting') await goWaiting(rt, '人工暂停，回复任意内容即续跑。');
+    rt.session?.kill();
+    return was;
+  }
+  await settle(rt, 'stopped', { why: was === 'waiting' ? '挂起中人工停止' : '活跃轮次人工停止' });
+  return was;
+}
+
 // 私信回复注入活会话：仅挂起态可注入；返回 false 表示需走懒续跑（进程已死或任务不在活表）。
 // swap 必须先于 send：send 后的极速 turn（is_error 重试环：回复即触发 429 秒退）会与本次 swap
 // 竞争 statusRid——下一次 goWaiting 读到未回写的旧 rid，双删同一枚 WARN、残留双表情。
 // state 同步置位于 swap 之前：此窗口内进程死亡要走 close 的 active 分流（可见 fail），不得被 waiting 分支吞掉。
 export async function injectReply(messageId, replyText) {
   const rt = liveTasks.get(messageId);
-  if (!rt || !rt.session?.alive) return false;
+  if (!rt || rt.stopping || !rt.session?.alive) return false;
   if (rt.state === 'waiting') {
     rt.state = 'active';
     rt.statusRid = await swapReaction(rt.lark, rt.task.messageId, rt.config.reactions.claimed, rt.statusRid);
