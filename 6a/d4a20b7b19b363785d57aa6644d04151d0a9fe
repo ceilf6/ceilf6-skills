@@ -1,0 +1,31 @@
+harness-ceilf6-bot/src/listener.mjs
+  s_dd80260e87a4cd::t_78b05f7abc9b51 89-91,94,113,118-120,152-153,155-159,173-180,185,192-210,212-216,243-247,280-287,307,398-399,402-404
+harness-ceilf6-bot/src/runner.mjs
+  s_dd80260e87a4cd::t_b6cc066516911f 195-201
+harness-ceilf6-bot/src/session.mjs
+  s_dd80260e87a4cd::t_3ccdb0f0b557ab 35-44,53,58,87-88
+harness-ceilf6-bot/tests/listener.test.mjs
+  s_dd80260e87a4cd::t_5ec7a2de696352 92,97,114-125,344,356-362,365,470-557,577-578,629-632,636,639
+harness-ceilf6-bot/tests/session.test.mjs
+  s_dd80260e87a4cd::t_0241a1d0bea96c 141-159
+harness-ceilf6-bot/tests/stubs/claude
+  s_dd80260e87a4cd::t_9e15c8bac422a9 11-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "6ad4a20b7b19b363785d57aa6644d04151d0a9fe",
+  "prompts": {},
+  "sessions": {
+    "s_dd80260e87a4cd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a6731e2ca76e944b8",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
