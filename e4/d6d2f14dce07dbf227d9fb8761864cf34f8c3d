@@ -1,0 +1,72 @@
+harness-ceilf6-bot/tests/commands.test.mjs
+  s_427b930e8aafc2::t_45b1a075034763 60-62,74
+harness-ceilf6-bot/runbook.md
+  s_58f466b48ecbd2::t_85d30109a99da3 26
+  s_6a7e55f71599f0::t_317ca152e96be2 30,39
+  s_427b930e8aafc2::t_4c1a0d682ad62e 143,151
+  s_58f466b48ecbd2::t_a643485a2b0704 29,149-150
+harness-ceilf6-bot/src/listener.mjs
+  s_427b930e8aafc2::t_64cf537cddf681 88-90,104-105,176-181,188,195,203,232-238,244-245,249-251,255-257,261-264,308-309,323,327-331,333-335,337-343,345-349,351-352,355-372,377,383-385,401,415-418,432-440,459
+  s_58f466b48ecbd2::t_41de47177e928d 165,187,230
+  s_6a7e55f71599f0::t_9259d5db1b306e 91-95,106,108-110,133,252-254,258-260,307,324-326,332,336,344,350,353-354,373-376,378-382,429-431
+  s_6a7e55f71599f0::t_c0d7f29622f8bd 231
+harness-ceilf6-bot/src/commands.mjs
+  s_427b930e8aafc2::t_49dece0891df44 14
+harness-ceilf6-bot/bootstrap-prompt.md
+  s_58f466b48ecbd2::t_69ad1b913ae5e0 16,19,21
+harness-ceilf6/SKILL.md
+  s_427b930e8aafc2::t_930ff4b3a77ca4 14
+harness-ceilf6-bot/src/runner.mjs
+  s_427b930e8aafc2::t_e319e2f4eb3d41 243-246,264,315-320
+  s_58f466b48ecbd2::t_5a14c482bd14f3 17,93-97,99-103,108,176,197-200,259,278-279,290
+  s_6a7e55f71599f0::t_28732f483f54e4 146-159,163,165,170,321-327
+harness-ceilf6-bot/tests/stubs/claude
+  s_58f466b48ecbd2::t_c6c7154ef0d329 51,53-54
+harness-ceilf6-bot/tests/runner.test.mjs
+  s_427b930e8aafc2::t_8bfe26c283005e 506-531,557-598
+  s_6a7e55f71599f0::t_8756f0bc1ccd6c 36-38,532-556,622,625,631-632,641,646,648
+  s_58f466b48ecbd2::t_97225174a14892 388-427
+harness-ceilf6-bot/tests/listener.test.mjs
+  s_6a7e55f71599f0::t_4f815f2981c67d 31-34,42-49,432-433,546,663-665,735-736,738-824
+  s_58f466b48ecbd2::t_258e30bea51634 613-634
+  s_427b930e8aafc2::t_c36f70422af585 635-662,666-734
+  s_6a7e55f71599f0::t_381caefc78e832 737
+harness-ceilf6-bot/src/result.mjs
+  s_58f466b48ecbd2::t_a2d34c37562a77 2-4
+harness-ceilf6/scripts/web.py
+  s_58f466b48ecbd2::t_28a79ecad1e0ad 124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e4d6d2f14dce07dbf227d9fb8761864cf34f8c3d",
+  "prompts": {},
+  "sessions": {
+    "s_427b930e8aafc2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ae14792d692a622a0",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_58f466b48ecbd2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0eef3d97-d8b1-4c2d-9a2b-5a142a082263",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_6a7e55f71599f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ac1a78efa23cc2ddf",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
