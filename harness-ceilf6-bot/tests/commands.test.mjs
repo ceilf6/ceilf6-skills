@@ -57,6 +57,9 @@ test('parseControl 识别首行控制命令与参数', () => {
   assert.deepEqual(parseControl('/stop 924955'), { name: 'stop', arg: '924955' });
   assert.deepEqual(parseControl('/pause'), { name: 'pause', arg: '' });
   assert.deepEqual(parseControl('/tasks'), { name: 'tasks', arg: '' });
+  assert.deepEqual(parseControl('/resume'), { name: 'resume', arg: '' });
+  // /resume 的参数一段扛两件事：选择子与正文同在首行，拆分在 listener（要对着在册列表才判得准）
+  assert.deepEqual(parseControl('/resume 2 用方案 A 继续'), { name: 'resume', arg: '2 用方案 A 继续' });
 });
 test('parseControl 剥掉首行开头的 @mention：飞书 mention 在正文里是字面文本', () => {
   assert.deepEqual(parseControl('@harness-ceilf6 /stop'), { name: 'stop', arg: '' });
@@ -68,7 +71,7 @@ test('parseControl 只取首行：命令行之后的正文被丢弃', () => {
   assert.deepEqual(parseControl('/stop\n多余的话'), { name: 'stop', arg: '' });
 });
 test('CONTROL 钉住控制命令集合：新增/删改控制通道成员即红', () => {
-  assert.deepEqual([...CONTROL].sort(), ['pause', 'stop', 'tasks']);
+  assert.deepEqual([...CONTROL].sort(), ['pause', 'resume', 'stop', 'tasks']);
 });
 test('parseControl 拒绝：参数命令、非首行、纯文本、原型链名、空', () => {
   assert.equal(parseControl('/model opus'), null); // 参数命令不归控制通道

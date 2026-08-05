@@ -33,7 +33,9 @@ function fakeLark(calls) {
     async sendDm(openId, text) { calls.push(['dm', openId, text]); return `om_dm_${++m}`; },
   };
 }
-async function poll(fn, ms = 8000) {
+// 预算给到 20s：判据一成立即返回，budget 只决定「真失败要等多久才现形」（poll 从不用来做
+// 否定判断）。node --test 并行跑各测试文件，8s 在忙机器上会把 spawn 编排判成假红。
+async function poll(fn, ms = 20_000) {
   const until = Date.now() + ms;
   while (Date.now() < until) { if (fn()) return true; await new Promise((r) => setTimeout(r, 50)); }
   return false;
@@ -383,6 +385,46 @@ test('自唤醒守卫：无有效 RESULT 的自发轮仍被忽略，等待态不
   rmFixture(root);
 });
 
+test('working：等自己的后台工作时零私信、群里保持 👍，快照与登记标 background', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  const asks = [];
+  process.env.STUB_TURNS = 'working:等钩子|开发完成，pre-commit 全仓测试后台跑着;pass';
+  const p = runTask(TASK, makeConfig(root, repo), fakeLark(calls), { onAsk: (i) => asks.push(i) });
+  await poll(() => asks.length === 1);
+  // 播报态不打扰用户：私信零条、表情仍是接单那枚（它其实还在干活）
+  assert.equal(calls.filter((c) => c[0] === 'dm').length, 0);
+  assert.deepEqual(calls.map((c) => [c[0], c[2]]), [['add', 'THUMBSUP']]);
+  assert.equal(asks[0].kind, 'background');
+  assert.equal(asks[0].questionMsgId, ''); // 没发私信就没有可引用的提问消息
+  assert.ok(asks[0].question.includes('pre-commit')); // 进展进 question 供 /tasks 与懒续跑读
+  const snap = taskSnapshot().find((t) => t.messageId === TASK.messageId);
+  assert.equal(snap.state, 'background');
+  // 仍可被回复推动（后台工作被杀时的人工兜底）
+  assert.equal(await injectReply(TASK.messageId, '继续'), true);
+  assert.equal((await p).verdict, 'pass');
+  delete process.env.STUB_TURNS;
+  rmFixture(root);
+});
+
+test('working 自唤醒：后台跑完的轮次照常续上，全程零私信直到终态', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  process.env.STUB_TURNS = 'working:等机审|CR 第 1 轮后台运行';
+  process.env.STUB_SELF_TURN = '{"afterMs":300,"directive":"pass"}';
+  const out = await runTask(TASK, makeConfig(root, repo), fakeLark(calls));
+  assert.equal(out.verdict, 'pass');
+  const dms = calls.filter((c) => c[0] === 'dm');
+  assert.equal(dms.length, 1); // 只有终态那条 ✅，播报态没发
+  assert.ok(dms[0][2].includes('任务完成'));
+  // 表情链：claimed → DONE（撤 claimed）——中间没有 ⚠️ 往返
+  assert.deepEqual(calls.filter((c) => c[0] !== 'dm').map((c) => [c[0], c[2]]),
+    [['add', 'THUMBSUP'], ['add', 'DONE'], ['del', 'rid_1']]);
+  delete process.env.STUB_TURNS;
+  delete process.env.STUB_SELF_TURN;
+  rmFixture(root);
+});
+
 test('多轮 ask：每轮各发一条提问私信、注入后可再 ask', async () => {
   const { root, repo } = makeFixture();
   const calls = [];
@@ -461,6 +503,99 @@ test('resumeTask：--resume + resumeFlags 重建会话、⚠️→👍、续跑�
   rmFixture(root);
 });
 
+// background 条目的 statusRid 就是群里那枚接单表情（working 态从不换表情）。飞书 reaction 按
+// (user, emoji) 唯一，再 add 一次拿不到第二枚，随后的 del 撤掉的正是它自己——从懒续跑到终态
+// （可能数小时）群消息上零表情，而「没表情」等于「bot 没看见」。
+test('resumeTask（background 条目）：不换表情，群里那枚接单表情原样留到终态', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  const asks = [];
+  const lark = fakeLark(calls); // 两程共用一份 rid 计数器：续跑撤错的是哪一枚才看得出来
+  process.env.STUB_TURNS = 'working:等钩子|全仓测试后台跑着';
+  const p1 = runTask(TASK, makeConfig(root, repo), lark, { onAsk: (i) => asks.push(i) });
+  await poll(() => asks.length === 1);
+  assert.equal(asks[0].kind, 'background');
+  assert.equal(asks[0].statusRid, 'rid_1'); // 登记里存的就是群里那枚接单表情
+  killSession(TASK.messageId); // 模拟 bot 重启收割挂起进程
+  await Promise.race([p1, new Promise((r) => setTimeout(r, 300))]);
+  process.env.STUB_TURNS = 'pass';
+  const out = await resumeTask({ ...asks[0], resumeFlags: [] }, '继续', makeConfig(root, repo), lark, {});
+  assert.equal(out.verdict, 'pass');
+  // 全程恰好三次表情动作：接单 → 终态 → 撤接单。续跑不得插入「加同枚 → 删同枚」那一对。
+  assert.deepEqual(calls.filter((c) => c[0] !== 'dm').map((c) => [c[0], c[2]]), [
+    ['add', 'THUMBSUP'], ['add', 'DONE'], ['del', 'rid_1'],
+  ]);
+  delete process.env.STUB_TURNS;
+  rmFixture(root);
+});
+
+// 挂起中的进程死亡（崩溃 / OOM / 被外部 kill / 换参数收割）不终态——等待态交懒续跑接管——
+// 于是 runTask 的 promise 永不 resolve。调用方的 concurrency 记账只能挂在这个回调上：
+// 绑在 promise 上等于「没有进程在烧 CPU 却一直占着槽」。
+test('挂起中进程死亡：不终态，onSuspendClose 通告调用方（槽位归还的唯一时机）', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  const asks = [];
+  const suspended = [];
+  process.env.STUB_TURNS = 'working:等钩子|全仓测试后台跑着';
+  const p = runTask(TASK, makeConfig(root, repo), fakeLark(calls), {
+    onAsk: (i) => asks.push(i), onSuspendClose: (i) => suspended.push(i),
+  });
+  await poll(() => asks.length === 1);
+  assert.equal(asks[0].kind, 'background');
+  killSession(TASK.messageId); // 后台运行中的会话进程死亡
+  assert.ok(await poll(() => suspended.length === 1), 'close 到达时必须通告调用方');
+  assert.equal(suspended[0].messageId, TASK.messageId);
+  assert.equal(taskSnapshot().find((t) => t.messageId === TASK.messageId), undefined); // 已移出活表
+  assert.equal(calls.filter((c) => c[0] === 'dm').length, 0); // 不终态：没有 ❌ 私信
+  const raced = await Promise.race([p, new Promise((r) => setTimeout(() => r('pending'), 300))]);
+  assert.equal(raced, 'pending');
+  delete process.env.STUB_TURNS;
+  rmFixture(root);
+});
+
+test('stopLive pause（后台运行中）：补发提问私信、换 ⚠️、登记翻回等人回复', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  const asks = [];
+  process.env.STUB_TURNS = 'working:等钩子|全仓测试后台跑着';
+  const p = runTask(TASK, makeConfig(root, repo), fakeLark(calls), { onAsk: (i) => asks.push(i) });
+  await poll(() => asks.length === 1);
+  assert.equal(asks[0].kind, 'background');
+  assert.equal(calls.filter((c) => c[0] === 'dm').length, 0); // 后台运行中零私信
+  assert.equal(await stopLive(TASK.messageId, 'pause'), 'background');
+  await poll(() => asks.length === 2);
+  assert.equal(asks[1].kind, 'user'); // 翻回等人：此后直发私信回复可路由到它
+  assert.ok(asks[1].questionMsgId, '须有可引用的提问私信');
+  assert.ok(calls.find((c) => c[0] === 'dm')[2].includes('人工暂停'));
+  // 表情从接单换成等回复：暂停后它确实在等人了
+  assert.deepEqual(calls.filter((c) => c[0] !== 'dm').map((c) => [c[0], c[2]]), [
+    ['add', 'THUMBSUP'], ['add', 'WARN'], ['del', 'rid_1'],
+  ]);
+  const raced = await Promise.race([p, new Promise((r) => setTimeout(() => r('pending'), 800))]);
+  assert.equal(raced, 'pending'); // 不终态，等懒续跑
+  delete process.env.STUB_TURNS;
+  rmFixture(root);
+});
+
+test('stopLive stop（后台运行中）：🛑 终态，回执按后台运行中措辞', async () => {
+  const { root, repo } = makeFixture();
+  const calls = [];
+  const asks = [];
+  process.env.STUB_TURNS = 'working:等机审|CR 第 1 轮后台运行';
+  const p = runTask(TASK, makeConfig(root, repo), fakeLark(calls), { onAsk: (i) => asks.push(i) });
+  await poll(() => asks.length === 1);
+  assert.equal(await stopLive(TASK.messageId, 'stop'), 'background');
+  assert.equal((await p).verdict, 'stopped');
+  // 三态各自成词：列表说「后台运行中」，停止回执不得说成「挂起中」
+  assert.ok(calls.find((c) => c[0] === 'dm')[2].includes('后台运行中人工停止'));
+  assert.deepEqual(calls.filter((c) => c[0] !== 'dm').map((c) => [c[0], c[2]]), [
+    ['add', 'THUMBSUP'], ['add', 'MUTE'], ['del', 'rid_1'],
+  ]);
+  delete process.env.STUB_TURNS;
+  rmFixture(root);
+});
+
 test('resumeTask：续跑中再 ask 触发 onAsk（可多轮往复）', async () => {
   const { root, repo } = makeFixture();
   const calls = [];
@@ -484,14 +619,17 @@ test('resumeTask：续跑中再 ask 触发 onAsk（可多轮往复）', async ()
 test('resumeTask：worktree 已删 → ❌ 私信、fail、不 spawn', async () => {
   const { root, repo } = makeFixture();
   const calls = [];
+  const resumed = [];
   const out = await resumeTask(
     { messageId: 'om_x_654321', threadId: '', branch: 'bot/gone', worktree: join(root, 'wt', 'bot__gone'), sessionId: 'sess_1', resumeFlags: [], statusRid: 'rid_old', title: '短题' },
-    '回复', makeConfig(root, repo), fakeLark(calls), {});
+    '回复', makeConfig(root, repo), fakeLark(calls), { onResumed: (i) => resumed.push(i) });
   assert.equal(out.verdict, 'fail');
   assert.deepEqual(calls.map((c) => c[0]), ['add', 'del', 'dm']);
   assert.equal(calls[0][2], 'CROSS');
   assert.equal(calls[1][2], 'rid_old');
   assert.ok(calls[2][2].includes('worktree 已不存在'));
+  // 这条路径发的是 ❌，调用方的「已续跑」回执不得被触发——同一动作两条相互矛盾的私信。
+  assert.deepEqual(resumed, []);
   rmFixture(root);
 });
 
@@ -500,12 +638,14 @@ test('resumeTask：sessionId 缺失 → ❌ 私信、fail、不 spawn（不得�
   const wt = join(root, 'wt', 'bot__nosess');
   mkdirSync(wt, { recursive: true }); // worktree 在场：拒绝理由必须是 sessionId 而非 worktree
   const calls = [];
+  const resumed = [];
   process.env.STUB_VERDICT = 'pass'; // 无论 stub 想说什么，claude 根本不该被启动
   process.env.STUB_ARGS_OUT = join(root, 'args-nosess.txt');
   const out = await resumeTask(
     { messageId: 'om_x_654321', threadId: '', branch: 'bot/nosess', worktree: wt, sessionId: '', resumeFlags: [], statusRid: 'rid_old', title: '短题' },
-    '回复', makeConfig(root, repo), fakeLark(calls), {});
+    '回复', makeConfig(root, repo), fakeLark(calls), { onResumed: (i) => resumed.push(i) });
   assert.equal(out.verdict, 'fail');
+  assert.deepEqual(resumed, []); // 同上：这条路径发的是 ❌
   assert.equal(existsSync(join(root, 'args-nosess.txt')), false, '不得 spawn 会话进程');
   assert.deepEqual(calls.map((c) => c[0]), ['add', 'del', 'dm']);
   assert.equal(calls[0][2], 'CROSS');

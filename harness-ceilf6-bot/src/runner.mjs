@@ -14,7 +14,7 @@ const TPL_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', 'bootstrap-
 // messageId → 运行时。挂起（等私信回复）的会话也在此登记，injectReply/killSession 按它寻址。
 const liveTasks = new Map();
 
-const REPLY_FRAME = (text) => `用户对上一轮问题的私信回复如下（原文）：\n${text}\n——继续按无人值守契约执行，本轮结束仍以 RESULT 行收尾；后续拿不准的点用 verdict=ask + question 收轮提问（不要用 escalate/fused）。`;
+const REPLY_FRAME = (text) => `用户对上一轮问题的私信回复如下（原文）：\n${text}\n——继续按无人值守契约执行，本轮结束仍以 RESULT 行收尾；后续拿不准的点用 verdict=ask + question 收轮提问（不要用 escalate/fused），等自己布的后台工作用 verdict=working。若上一轮的后台工作已被中断（如 cr/round-N/ 有 instructions 却无 verdict.json、后台进程已不在），先重跑该轮再继续。`;
 const CORRECTION_MSG = '上一轮输出未以 RESULT 行收尾，违反无人值守契约。立即单独补发一行结果行（RESULT + 单行 JSON），不要其他内容。';
 
 function git(repo, args) {
@@ -90,16 +90,22 @@ function askDmText(rt, question, progress) {
   return `⏳ ${rt.title} 需要你拍板\n问题：${question}${progressLine}\n分支：${rt.branch}\nworktree：${rt.worktree}\n直接回复本消息即可续跑；多任务在等时请引用本条回复。`;
 }
 
-async function goWaiting(rt, question, progress) {
-  rt.state = 'waiting';
+// kind='background'：会话在等自己布的后台工作（钩子、机审 CR），不是在等人——
+// 不发私信、不换表情（群里保持接单态：它确实还在干活）。登记照落：后台工作随 bot 重启
+// 一并被杀时，自唤醒信号永不到来，这条登记是回复「继续」能把它捞回来的唯一凭据。
+async function goWaiting(rt, question, progress, kind = 'user') {
+  rt.state = kind === 'background' ? 'background' : 'waiting';
   rt.correctionUsed = false;
-  const qMsgId = await rt.lark.sendDm(rt.config.dmOpenId, askDmText(rt, question, progress));
-  rt.statusRid = await swapReaction(rt.lark, rt.task.messageId, rt.config.reactions.escalate, rt.statusRid);
+  let qMsgId = '';
+  if (kind !== 'background') {
+    qMsgId = await rt.lark.sendDm(rt.config.dmOpenId, askDmText(rt, question, progress));
+    rt.statusRid = await swapReaction(rt.lark, rt.task.messageId, rt.config.reactions.escalate, rt.statusRid);
+  }
   try {
     rt.hooks.onAsk?.({
       messageId: rt.task.messageId, threadId: rt.task.threadId ?? '', branch: rt.branch,
       worktree: rt.worktree, sessionId: rt.sessionId, question,
-      questionMsgId: qMsgId || '', statusRid: rt.statusRid, title: rt.title,
+      questionMsgId: qMsgId || '', statusRid: rt.statusRid, title: rt.title, kind,
     });
   } catch (e) {
     // 登记只决定「回复能否路由回来」，不该连带杀掉活着的会话。
@@ -137,28 +143,37 @@ async function settle(rt, verdict, { why, result } = {}) {
   rt.finish({ verdict, branch: rt.branch, worktree: rt.worktree, logPath: rt.logPath });
 }
 
+// 挂起中的会话进程退出（被收割 / 崩溃 / OOM / 被外部 kill）：任务不终态——等待态留给懒续跑
+// 接管——只移出活表并通告调用方。通告是必需的：此刻没有任何进程在烧 CPU，而 startTurnLoop 的
+// promise 在这条分支永不 resolve，调用方若把 concurrency 记账绑在它的生命周期上，槽位就随进程
+// 死亡永久泄漏。槽位记账跟的是「有没有进程在烧 CPU」，不是 promise 的生命周期。
+function suspendClose(rt) {
+  // 只删指向自己的登记：懒续跑可能已抢先用新运行时覆盖同 key。
+  if (liveTasks.get(rt.task.messageId) === rt) liveTasks.delete(rt.task.messageId);
+  try {
+    rt.hooks?.onSuspendClose?.({ messageId: rt.task.messageId });
+  } catch (e) {
+    console.error(`[runner] onSuspendClose 回调失败：${e.message}`);
+  }
+}
+
 async function handleEvent(rt, ev) {
   if (rt.settled) return;
   // 控制面动作期间到达的事件不得再驱动状态机：pause 的「补挂起态 → 杀进程」之间若放行
-  // 一个带 RESULT 的 turn，会把刚建立的等待态又推回活跃。close 仍需把自己移出活表。
+  // 一个带 RESULT 的 turn，会把刚建立的等待态又推回活跃。close 仍走挂起收尾。
   if (rt.stopping) {
-    if (ev.kind === 'close' && liveTasks.get(rt.task.messageId) === rt) liveTasks.delete(rt.task.messageId);
+    if (ev.kind === 'close') suspendClose(rt);
     return;
   }
   if (ev.kind === 'timeout') return settle(rt, 'fail', { why: '超时强杀' });
   if (ev.kind === 'close') {
-    // 挂起进程死亡/被收割：等待态不动（懒续跑兜底），仅移出活表。
-    // 只删指向自己的登记：懒续跑可能已抢先用新运行时覆盖同 key。
-    if (rt.state === 'waiting') {
-      if (liveTasks.get(rt.task.messageId) === rt) liveTasks.delete(rt.task.messageId);
-      return;
-    }
+    if (rt.state === 'waiting' || rt.state === 'background') return suspendClose(rt);
     return settle(rt, 'fail', { why: '会话进程退出且无有效 RESULT 行' });
   }
   // 挂起中会话可自唤醒：它自己布的后台任务（pre-commit 钩子、机审 CR）完成通知会触发新轮次，
   // 带有效 RESULT 的轮是真实续跑，必须照常分发——吞掉会让最终 ✅ 永远到不了用户。
   // 无有效 RESULT / API 错误的 turn 仍按杂音忽略：纠偏与终态化在等人拍板时误动状态。
-  if (rt.state === 'waiting') {
+  if (rt.state === 'waiting' || rt.state === 'background') {
     if (ev.isError || !parseResult(ev.text)) {
       console.error(`[runner] 挂起中收到无有效 RESULT 的 turn 事件，忽略：${truncate(ev.text, 120)}`);
       return;
@@ -178,6 +193,10 @@ async function handleEvent(rt, ev) {
   rt.correctionUsed = false;
   if (result.verdict === 'ask') {
     return goWaiting(rt, result.question || result.reason || '（会话未给出具体问题，请回复指示）', result.summary || '');
+  }
+  // working：会话在等自己布的后台工作，不需要人。进展写进登记的 question 供 /tasks 与懒续跑读取。
+  if (result.verdict === 'working') {
+    return goWaiting(rt, result.summary || result.reason || '（会话未给出进展）', '', 'background');
   }
   // 旧会话（ask 契约之前启动、经懒续跑续起的）仍会产出 escalate/fused：一律映射为挂起等回复——
   // 终态化会把 RESULT 里的真实阻塞原因丢成固定文案，用户无从作答；接管命令保留在问题文本里作逃生口。
@@ -221,6 +240,10 @@ export function taskSnapshot() {
   }));
 }
 
+// 停止回执里的原状态：与 /tasks、看板的状态标签同一套三分（运行中 / 等回复 / 后台运行中），
+// 各自成词——同一个状态在列表里叫「后台运行中」、在回执里叫「挂起中」会读成两回事。
+const STOPPED_FROM = { active: '活跃轮次人工停止', waiting: '挂起中人工停止', background: '后台运行中人工停止' };
+
 // stop：走 stopped 终态（杀进程组、终态表情、私信回执、promise resolve）。
 // pause：补一个等待态再杀进程——顺序反了会让 close 先到并按活跃轮次判 fail 终态。
 // 返回处置前的状态；活表未命中返回 null（调用方据此转去处理无进程的残留态）。
@@ -233,11 +256,12 @@ export async function stopLive(messageId, mode) {
   rt.sessionId ||= rt.session?.sessionId || '';
   if (mode === 'pause') {
     rt.stopping = true;
+    // background 已有登记，只是没发过私信；补一次 user 态 goWaiting 让你拿到「回复即续跑」的凭据。
     if (was !== 'waiting') await goWaiting(rt, '人工暂停，回复任意内容即续跑。');
     rt.session?.kill();
     return was;
   }
-  await settle(rt, 'stopped', { why: was === 'waiting' ? '挂起中人工停止' : '活跃轮次人工停止' });
+  await settle(rt, 'stopped', { why: STOPPED_FROM[was] ?? '人工停止' });
   return was;
 }
 
@@ -251,6 +275,8 @@ export async function injectReply(messageId, replyText) {
   if (rt.state === 'waiting') {
     rt.state = 'active';
     rt.statusRid = await swapReaction(rt.lark, rt.task.messageId, rt.config.reactions.claimed, rt.statusRid);
+  } else if (rt.state === 'background') {
+    rt.state = 'active'; // 群里一直是接单态，无表情可换
   }
   // 活跃态注入直接进 stdin（stream-json 输入按序排队，成为下一轮输入）：自唤醒转活跃与
   // 用户回复并发的窗口里若退回懒续跑，会对同一 worktree 起第二个进程。
@@ -261,7 +287,7 @@ export async function injectReply(messageId, replyText) {
 // 斜杠命令改参数后收割挂起进程：等待态不动（close 分流对 waiting 不终态），后续回复走懒续跑。
 export function killSession(messageId) {
   const rt = liveTasks.get(messageId);
-  if (!rt || rt.state !== 'waiting') return false;
+  if (!rt || (rt.state !== 'waiting' && rt.state !== 'background')) return false;
   rt.session?.kill();
   return true;
 }
@@ -286,7 +312,19 @@ export async function resumeTask(info, replyText, config, lark, hooks = {}) {
   }
   const task = { messageId: info.messageId, threadId: info.threadId ?? '', text: info.title ?? '' };
   const logPath = join(config.logsDir, `task-${info.messageId}.log`);
-  const claimedRid = await swapReaction(lark, info.messageId, config.reactions.claimed, info.statusRid);
+  // background 条目的 statusRid 就是群里那枚接单表情（后台运行中从不换表情），此时无表情可换：
+  // 飞书 reaction 按 (user, emoji) 唯一，再 add 一次拿不到第二枚，随后的 del 撤掉的正是它自己，
+  // 于是从续跑到终态（可能数小时）群消息上零表情——而「没表情」等于「bot 没看见」。
+  const claimedRid = info.kind === 'background'
+    ? info.statusRid
+    : await swapReaction(lark, info.messageId, config.reactions.claimed, info.statusRid);
+  // 回执时机落在上面两道关之后：worktree 或 sessionId 缺一，这条路径发的就是 ❌，
+  // 调用方若在调用之初先乐观报一句「已续跑」，同一个动作会变成两条相互矛盾的私信。
+  try {
+    hooks.onResumed?.({ messageId: info.messageId });
+  } catch (e) {
+    console.error(`[runner] onResumed 回调失败：${e.message}`);
+  }
   return startTurnLoop({
     task, config, lark, hooks, branch: info.branch, worktree: info.worktree, logPath,
     statusRid: claimedRid, sessionId: info.sessionId ?? '', title: info.title || 'harness 任务',

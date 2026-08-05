@@ -11,7 +11,7 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 
 机械层脚本（均在 `~/.claude/skills/harness-ceilf6/scripts/`，依赖 git、jq、traex CLI）：`cr-round.sh`（CR 轮次）、`squash-branch.sh`（收尾压单提交）、`rename-session.sh`（会话改名）、`threads.sh`（线程全局登记与唤回、里程碑 mark/progress，另经 `~/.local/bin/harness-threads` 与短别名 `ht` 暴露为全局命令）。
 
-**跨线程总览**：`harness-threads`（短别名 `ht`）列出本机所有 harness 线程（检出 / 需求分支 / 状态 / 唤回命令，并标注检出分支漂移与会话丢失）。**唤回只能由用户的 shell 执行**（`harness-threads resume <序号|关键词>`）——它要起一个新 claude 进程接管终端，会话内的 agent 做不到；在会话里能做的只是列表与给出命令。评审员默认 `traex -m gpt-5.6-sol`，env `CODEX_BIN` / `CR_MODEL` 可覆盖。本地看板：ht web（127.0.0.1:7657，读线程聚合；节点按完成绿/当前黄/未做红着色，点击可推进或回退——绝对定位走 threads.sh set-node；每线程附唤回命令与复制按钮；写入仍收敛在 threads.sh）。卡片另有三个动作：**停止**（转调 bot 控制端口，停掉在这棵工作树里跑的无人值守任务，现场保留可手工续跑；bot 未运行或该线程无任务在跑时置灰）、**归档**（从默认视图收起，勾选「显示已完成/已归档」可见，可取消，不删文件）、**清理**（删整棵工作树与需求分支，两道确认，不可撤销；该线程有任务在跑时置灰，须先停止）。有任务在跑的线程带运行态徽标（运行中 / 等回复；徽标按工作树路径匹配，尚无 worktree 的启动中、排队中任务不在看板上现身），数据来自 bot 控制端口，bot 未运行时看板照常渲染静态进度。命令行同源：`ht archive|unarchive --ctx-dir <路径>`、`ht clean --ctx-dir <路径>`（主检出拒绝清理）。
+**跨线程总览**：`harness-threads`（短别名 `ht`）列出本机所有 harness 线程（检出 / 需求分支 / 状态 / 唤回命令，并标注检出分支漂移与会话丢失）。**唤回只能由用户的 shell 执行**（`harness-threads resume <序号|关键词>`）——它要起一个新 claude 进程接管终端，会话内的 agent 做不到；在会话里能做的只是列表与给出命令。评审员默认 `traex -m gpt-5.6-sol`，env `CODEX_BIN` / `CR_MODEL` 可覆盖。本地看板：ht web（127.0.0.1:7657，读线程聚合；节点按完成绿/当前黄/未做红着色，点击可推进或回退——绝对定位走 threads.sh set-node；每线程附唤回命令与复制按钮；写入仍收敛在 threads.sh）。卡片另有三个动作：**停止**（转调 bot 控制端口，停掉在这棵工作树里跑的无人值守任务，现场保留可手工续跑；bot 未运行或该线程无任务在跑时置灰）、**归档**（从默认视图收起，勾选「显示已完成/已归档」可见，可取消，不删文件）、**清理**（删整棵工作树与需求分支，两道确认，不可撤销；该线程有任务在跑时置灰，须先停止）。有任务在跑的线程带运行态徽标（运行中 / 等回复 / 后台运行中；徽标按工作树路径匹配，尚无 worktree 的启动中、排队中任务不在看板上现身），数据来自 bot 控制端口，bot 未运行时看板照常渲染静态进度。命令行同源：`ht archive|unarchive --ctx-dir <路径>`、`ht clean --ctx-dir <路径>`（主检出拒绝清理）。
 
 ## 模式
 

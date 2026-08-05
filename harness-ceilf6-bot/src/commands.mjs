@@ -11,7 +11,7 @@ export const SUPPORTED_HINT = `当前支持：${Object.entries(COMMANDS).map(([n
 
 // 控制命令：由 listener 直接执行（杀进程 / 置终态 / 列表），不进会话也不转 spawn 参数。
 // 与 COMMANDS 分属两类——刹车必须在 listener 层立即生效，等会话读到就晚了。
-export const CONTROL = new Set(['stop', 'pause', 'tasks']);
+export const CONTROL = new Set(['stop', 'pause', 'tasks', 'resume']);
 
 // 只认首行：正文里出现的斜杠行是普通文本，误判会凭空杀掉一个任务。
 export function parseControl(text) {

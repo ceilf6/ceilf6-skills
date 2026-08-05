@@ -48,9 +48,10 @@ const emit = (o) => {
 };
 
 function resultLineFor(kind, arg) {
-  if (kind === 'ask') {
+  if (kind === 'ask' || kind === 'working') {
     const [q, s] = arg.split('|');
-    const obj = { verdict: 'ask', question: q || '缺信息' };
+    const obj = kind === 'ask' ? { verdict: 'ask', question: q || '缺信息' } : { verdict: 'working' };
+    if (kind === 'working' && q) obj.reason = q;
     if (s) obj.summary = s;
     return 'RESULT ' + JSON.stringify(obj);
   }

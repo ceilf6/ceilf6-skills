@@ -28,13 +28,24 @@ function dmLine(over = {}) {
 }
 // 判据可以是异步的（如查控制端口）：不 await 的话 Promise 恒真值，poll 首轮即假绿，
 // 且未决的请求会漏到用例之外变成 unhandledRejection。
-async function poll(fn, ms = 8000) {
+// 预算给到 20s：判据一成立即返回，budget 只决定「真失败要等多久才现形」。本套件每条用例都要
+// spawn 一串 listener / claude / lark 子进程，node --test 又并行跑各测试文件——8s 在忙机器上
+// 会把这些编排判成假红（无断言可放宽，poll 从不用来做否定判断）。
+async function poll(fn, ms = 20_000) {
   const until = Date.now() + ms;
   while (Date.now() < until) { if (await fn()) return true; await new Promise((r) => setTimeout(r, 150)); }
   return false;
 }
 // 本机 AI-IDE 守护进程会异步往新 git 仓库写 .git/ai/，清理撞上时 rmSync 抛 ENOTEMPTY；退避重试（机器怪癖，非缺陷）。
 const rmFixture = (root) => rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+
+// 「worktree 就绪」（threads.jsonl 落盘）早于「会话真的起来了」：中间隔着接单表情的飞书往返与
+// 一次进程 spawn，忙机器上是秒级。要对活跃轮次动手（取 sessionId、断言状态是运行中）就得等
+// init 事件落进任务日志——那一刻运行时已在活表里、sessionId 已回填。
+const sessionUp = (root, messageId) => {
+  const p = join(root, 'logs', `task-${messageId}.log`);
+  return existsSync(p) && readFileSync(p, 'utf8').includes('"subtype":"init"');
+};
 
 function makeRepo(root) {
   const repo = join(root, 'repo');
@@ -418,6 +429,8 @@ test('端到端（stub）：私信 /pause 把活跃任务转挂起态，不终�
     feed: async (send) => {
       send(evLine({ message_id: 'om_pause_1111', message_type: 'post', thread_id: 'omt_pause' }));
       assert.ok(await poll(() => existsSync(threadsPath) && readFileSync(threadsPath, 'utf8').includes('omt_pause')));
+      // 会话起来之后再按暂停：更早按下时 sessionId 尚未回填，条目会缺它（另有其事，非本例所测）
+      assert.ok(await poll(() => sessionUp(root, 'om_pause_1111')), '会话进程应已起来');
       send(dmLine({ message_id: 'om_dm_pause11', content: '/pause' }));
       return poll(() => existsSync(awaitingPath) && readFileSync(awaitingPath, 'utf8').includes('"waiting":true'));
     },
@@ -530,6 +543,7 @@ test('端到端（stub）：worktree 就绪即出启动窗口，pause 的飞书�
       send(evLine({ message_id: 'om_onlive_aa1111', message_type: 'post', thread_id: 'omt_onlive' }));
       assert.ok(await poll(() => existsSync(threadsPath) && readFileSync(threadsPath, 'utf8').includes('omt_onlive')),
         'worktree 应已就绪');
+      assert.ok(await poll(() => sessionUp(root, 'om_onlive_aa1111')), '会话进程应已起来');
       send(dmLine({ message_id: 'om_dm_onlive11', content: '/tasks' }));
       assert.ok(await poll(() => read().includes('在册任务')), '/tasks 应列出该任务');
       assert.equal(hits(read(), 'aa1111）'), 1, '同一任务只应占一行');
@@ -593,6 +607,218 @@ test('端到端（stub）：多任务在册时无参 /stop 不猜目标，回执
   assert.ok(calls.includes('请带序号或 short'), '回执须给出下一步怎么指名');
   assert.ok(calls.includes('aaa111') && calls.includes('bbb222'), `回执须列全两个候选，实际：${calls}`);
   assert.equal(calls.includes('MUTE'), false, '拒绝执行意味着谁都没被停');
+  rmFixture(root);
+});
+
+test('端到端（stub）：working 态零私信；bot 重启后 /tasks 仍显示后台运行中', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-bg-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const awaitingPath = join(root, 'state', 'awaiting.jsonl');
+  // 第一程：任务以 working 收轮 → 登记落盘，且全程零私信
+  const first = await runListener({
+    cfgPath, root, turns: 'working:等钩子|开发完成，全仓测试后台跑着',
+    events: [evLine({ message_id: 'om_bg_111111', message_type: 'post', thread_id: 'omt_bg1' })],
+    until: () => existsSync(awaitingPath) && readFileSync(awaitingPath, 'utf8').includes('"kind":"background"'),
+  });
+  assert.ok(first.ok, 'working 应落下 background 登记');
+  const calls1 = readFileSync(larkLogPath, 'utf8');
+  assert.ok(!calls1.includes('messages-send'), 'working 态不得发私信');
+  assert.ok(!calls1.includes('OnIt'), 'working 态不得换 ⚠️ 表情');
+  // 第二程（新进程 = bot 重启）：/tasks 应还原成「后台运行中」而非误报「等回复」
+  const second = await runListener({
+    cfgPath, root, turns: 'pass',
+    events: [dmLine({ message_id: 'om_dm_bgls11', content: '/tasks' })],
+    until: () => readFileSync(larkLogPath, 'utf8').includes('后台运行中'),
+  });
+  assert.ok(second.ok, '重启后在册视图应保留 background 态');
+  // 不发私信之后 /tasks 是进展的唯一出口：不打扰也不告知就成了纯黑盒
+  assert.ok(readFileSync(larkLogPath, 'utf8').includes('进展：开发完成，全仓测试后台跑着'),
+    `后台运行中的行须带进展，实际：${readFileSync(larkLogPath, 'utf8')}`);
+  rmFixture(root);
+});
+
+// background 条目从没发过私信，也就没有可引用的提问消息。它若参与「唯一在等的那个」这条隐式
+// 路由，多任务时直发一律被逼成「请引用」——而它恰恰无消息可引，到终态前不可达。
+test('端到端（stub）：background 不吃直发回复，/resume 显式把它捞回来', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-bgres-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const awaitingPath = join(root, 'state', 'awaiting.jsonl');
+  const read = () => (existsSync(larkLogPath) ? readFileSync(larkLogPath, 'utf8') : '');
+  // 第一程：A 以 working 收轮 → background 登记落盘
+  const first = await runListener({
+    cfgPath, root, turns: 'working:等钩子|全仓测试后台跑着',
+    events: [evLine({ message_id: 'om_bgr_aaa111', message_type: 'post', thread_id: 'omt_bgr_a' })],
+    until: () => existsSync(awaitingPath) && readFileSync(awaitingPath, 'utf8').includes('"kind":"background"'),
+  });
+  assert.ok(first.ok, 'working 应落下 background 登记');
+  // 第二程：B ask 挂起 → 直发回复。真的在等人的只有 B，直发必须落到它身上
+  const second = await runFedListener({
+    cfgPath, root, turns: 'ask:选 A 还是 B？;pass',
+    feed: async (send) => {
+      send(evLine({ message_id: 'om_bgr_bbb222', message_type: 'post', thread_id: 'omt_bgr_b' }));
+      assert.ok(await poll(() => readFileSync(awaitingPath, 'utf8').includes('om_bgr_bbb222')), 'B 应 ask 挂起');
+      send(dmLine({ message_id: 'om_dm_bgr111', content: '选 A' }));
+      // 等条目删除而非只等 ✅ 私信：lark stub 在调用之初就记账，而删条目挂在私信返回之后，
+      // 只等日志会在忙机器上抢在删除之前拆掉 listener（B 的条目留下 = 假红）。
+      return poll(() => read().includes('任务完成') && !readFileSync(awaitingPath, 'utf8').includes('om_bgr_bbb222'));
+    },
+  });
+  assert.ok(second.ok, '直发回复应路由给唯一在等人的任务');
+  assert.equal(read().includes('有 2 个任务在等回复'), false, 'background 不该把直发逼成「请引用」');
+  const left = readFileSync(awaitingPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.deepEqual(left.map((e) => e.messageId), ['om_bgr_aaa111'], '只有 B 该被推进到终态');
+  assert.equal(left[0].kind, 'background');
+  // 第三程（新进程 = bot 重启，后台工作已随之被杀）：/resume <short> 带正文 → 懒续跑至终态
+  const third = await runListener({
+    cfgPath, root, turns: 'pass',
+    events: [dmLine({ message_id: 'om_dm_bgr222', content: '/resume aaa111 继续' })],
+    until: () => readFileSync(awaitingPath, 'utf8').trim() === '',
+  });
+  assert.ok(third.ok, '/resume <short> 应把 background 任务续跑到终态');
+  assert.ok(read().includes('已续跑'), '显式命令须有回执，否则无从判断它有没有生效');
+  rmFixture(root);
+});
+
+// 无参 /resume 与无参 /stop 同一套纪律：在册多个时不猜，列候选。
+test('端到端（stub）：多任务在册时无参 /resume 不猜目标，回执列出候选', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-resmany-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const threadsPath = join(root, 'state', 'threads.jsonl');
+  const queuePath = join(root, 'state', 'queue.jsonl');
+  const { ok } = await runFedListener({
+    cfgPath, root, turns: 'hang',
+    feed: async (send) => {
+      send(evLine({ message_id: 'om_resa_aaa111', message_type: 'post', thread_id: 'omt_resa' }));
+      assert.ok(await poll(() => existsSync(threadsPath) && readFileSync(threadsPath, 'utf8').includes('omt_resa')));
+      send(evLine({ message_id: 'om_resb_bbb222', message_type: 'post', thread_id: 'omt_resb' }));
+      assert.ok(await poll(() => existsSync(queuePath) && readFileSync(queuePath, 'utf8').includes('om_resb_bbb222')));
+      send(dmLine({ message_id: 'om_dm_resmany', content: '/resume 继续' }));
+      return poll(() => existsSync(larkLogPath) && readFileSync(larkLogPath, 'utf8').includes('有 2 个任务在册'));
+    },
+  });
+  assert.ok(ok, '两个任务在册时无参 /resume 应回「有 2 个任务在册」');
+  const calls = readFileSync(larkLogPath, 'utf8');
+  assert.ok(calls.includes('/resume 2'), '回执须给出下一步怎么指名');
+  assert.ok(calls.includes('aaa111') && calls.includes('bbb222'), `回执须列全两个候选，实际：${calls}`);
+  rmFixture(root);
+});
+
+// background 恰是机器最忙的时刻（全仓测试 / 机审在烧 CPU）：放行下一个任务会让 concurrency:1
+// 变成两份重负载并行。
+test('端到端（stub）：后台运行中仍占 concurrency 槽，后来的任务留在队列', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-bgslot-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const awaitingPath = join(root, 'state', 'awaiting.jsonl');
+  const queuePath = join(root, 'state', 'queue.jsonl');
+  const read = () => (existsSync(larkLogPath) ? readFileSync(larkLogPath, 'utf8') : '');
+  const { ok } = await runFedListener({
+    cfgPath, root, turns: 'working:等钩子|全仓测试后台跑着',
+    feed: async (send) => {
+      send(evLine({ message_id: 'om_bgs_aaa111', message_type: 'post', thread_id: 'omt_bgs_a' }));
+      assert.ok(await poll(() => existsSync(awaitingPath) && readFileSync(awaitingPath, 'utf8').includes('"kind":"background"')),
+        'A 应以 working 收轮');
+      send(evLine({ message_id: 'om_bgs_bbb222', message_type: 'post', thread_id: 'omt_bgs_b' }));
+      assert.ok(await poll(() => existsSync(queuePath) && readFileSync(queuePath, 'utf8').includes('om_bgs_bbb222')),
+        'B 应入队');
+      send(dmLine({ message_id: 'om_dm_bgslot1', content: '/tasks' }));
+      return poll(() => read().includes('后台运行中') && read().includes('排队中'));
+    },
+  });
+  assert.ok(ok, '/tasks 应同时列出后台运行中的 A 与排队中的 B');
+  assert.ok(readFileSync(queuePath, 'utf8').includes('om_bgs_bbb222'), 'A 还占着槽位，B 不得出队开跑');
+  assert.equal(existsSync(join(root, 'logs', 'task-om_bgs_bbb222.log')), false, 'B 不得起进程');
+  assert.ok(read().includes('进展：全仓测试后台跑着'), '在跑的后台任务同样要在 /tasks 里给出进展');
+  rmFixture(root);
+});
+
+// 占槽的判据是「有没有进程在烧 CPU」，不是那条永不 resolve 的 runTask promise：后台运行中的
+// 会话进程一旦非终态死亡（claude 崩溃 / OOM / 被外部 kill），槽必须立刻归还。漏还则 concurrency:1
+// 的 bot 从此静默不接单——新任务只在 /tasks 里堆成「排队中」，群里落了 👍 再无动静，且无人工出路
+// （/stop 的无进程残留分支不碰槽位，/resume 走懒续跑本就不占槽），只能重启 bot。
+test('端到端（stub）：后台运行中的进程死亡即归还槽位，排队任务照常出队开跑', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-bgdead-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const awaitingPath = join(root, 'state', 'awaiting.jsonl');
+  const bLog = join(root, 'logs', 'task-om_dead_bbb222.log');
+  const { ok } = await runFedListener({
+    cfgPath, root, turns: 'working:等钩子|全仓测试后台跑着',
+    // 收轮 400ms 后进程自杀且不给 RESULT：会话进程非终态死亡的形态
+    env: { STUB_SELF_TURN: JSON.stringify({ afterMs: 400, directive: 'die' }) },
+    feed: async (send) => {
+      send(evLine({ message_id: 'om_dead_aaa111', message_type: 'post', thread_id: 'omt_dead_a' }));
+      assert.ok(await poll(() => existsSync(awaitingPath) && readFileSync(awaitingPath, 'utf8').includes('"kind":"background"')),
+        'A 应以 working 收轮并落下 background 登记');
+      send(evLine({ message_id: 'om_dead_bbb222', message_type: 'post', thread_id: 'omt_dead_b' }));
+      return poll(() => existsSync(bLog));
+    },
+  });
+  assert.ok(ok, 'A 的进程已死、没有进程在烧 CPU 了，B 必须出队开跑');
+  assert.deepEqual(new Store(join(root, 'state')).listQueued(), [], '队列应已清空');
+  // 归还槽位不等于终态化：A 的等待态原样留着交懒续跑
+  const left = readFileSync(awaitingPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.ok(left.find((e) => e.messageId === 'om_dead_aaa111' && e.kind === 'background'),
+    `A 的 background 登记应原样留存，实际：${JSON.stringify(left)}`);
+  rmFixture(root);
+});
+
+// 首 token 只在指得到在册任务时才算选择子。序号分支漏了范围校验时，在册只有 1 个任务的
+// `/resume 3 天后再说` 会被拆成 {index:'3'} + 正文「天后再说」，换来一句「未找到匹配的任务」，
+// 正文连同那个「3」一起丢掉。
+test('端到端（stub）：/resume 的越界数字首 token 当正文，不当序号', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-resnum-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const awaitingPath = join(root, 'state', 'awaiting.jsonl');
+  const first = await runListener({
+    cfgPath, root, turns: 'ask:选方案 A 还是 B？',
+    events: [evLine({ message_id: 'om_rn_aaa111', message_type: 'post', thread_id: 'omt_rn' })],
+    until: () => existsSync(awaitingPath) && readFileSync(awaitingPath, 'utf8').includes('"waiting":true'),
+  });
+  assert.ok(first.ok, 'ask 后 awaiting 条目应落盘');
+  // 第二程（新进程 = bot 重启）：在册恰一个任务，序号 3 越界 → 整段都是正文，走懒续跑注入
+  const msgsOut = join(root, 'msgs.txt');
+  const second = await runFedListener({
+    cfgPath, root, turns: 'pass', env: { STUB_MSGS_OUT: msgsOut },
+    feed: async (send) => {
+      send(dmLine({ message_id: 'om_dm_rn1111', content: '/resume 3 天后再说' }));
+      return poll(() => existsSync(msgsOut));
+    },
+  });
+  assert.ok(second.ok, '越界序号不该把这条 /resume 挡下');
+  const msgs = readFileSync(msgsOut, 'utf8');
+  assert.ok(msgs.includes('（原文）：⏎3 天后再说⏎'), `正文须整段注入，实际：${msgs}`);
+  assert.equal(readFileSync(larkLogPath, 'utf8').includes('未找到匹配的任务'), false);
+  rmFixture(root);
+});
+
+// ▶️ 已续跑 是回执不是预告：懒续跑是 fire-and-forget，resumeTask 随后可能立刻发现现场已被人工
+// 删掉而回 ❌——同一个动作两条相互矛盾的私信。
+test('端到端（stub）：worktree 已不在时 /resume 只回 ❌，不先报「已续跑」', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-resgone-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const awaitingPath = join(root, 'state', 'awaiting.jsonl');
+  const first = await runListener({
+    cfgPath, root, turns: 'ask:等指示',
+    events: [evLine({ message_id: 'om_rg_aaa111', message_type: 'post', thread_id: 'omt_rg' })],
+    until: () => existsSync(awaitingPath) && readFileSync(awaitingPath, 'utf8').includes('"waiting":true'),
+  });
+  assert.ok(first.ok, 'ask 后 awaiting 条目应落盘');
+  const entry = JSON.parse(readFileSync(awaitingPath, 'utf8').trim());
+  rmFixture(entry.worktree); // 人工删掉现场
+  const beforeSecond = readFileSync(larkLogPath, 'utf8').length;
+  const second = await runListener({
+    cfgPath, root, turns: 'pass',
+    events: [dmLine({ message_id: 'om_dm_rg1111', content: '/resume 继续' })],
+    until: () => readFileSync(larkLogPath, 'utf8').includes('无法续跑'),
+  });
+  assert.ok(second.ok, '现场已被删应回一条 ❌');
+  const calls = readFileSync(larkLogPath, 'utf8').slice(beforeSecond);
+  assert.equal(calls.includes('已续跑'), false, `同一动作不得先乐观回执再打脸，实际：${calls}`);
   rmFixture(root);
 });
 

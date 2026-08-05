@@ -85,7 +85,14 @@ if (isMain) {
   let running = 0;
   let stopping = false;
 
-  const counted = new Set(); // 占着 concurrency 槽的任务：首次 ask 即释放（用户裁定：回复轮不受槽位限制）
+  // 占着 concurrency 槽的任务：等人拍板（ask）时释放（用户裁定：回复轮不受槽位限制），
+  // 等自己布的后台工作时照占——那正是机器最忙的时刻。
+  const counted = new Set();
+  // 槽位归还的唯一动作。记账跟的是「有没有进程在烧 CPU」，故归还路径有三条：等人拍板、
+  // 挂起中的进程死亡、runTask 落定。counted.delete 的判据天然幂等，只有一条真正扣减 running。
+  function releaseSlot(messageId) {
+    if (counted.delete(messageId)) { running--; pump(); }
+  }
   // 启动窗口：出队后已不在 queue.jsonl，而 liveTasks 要等 worktree 建好才登记。这段时间（巨型
   // monorepo 上是分钟级）任务对刹车不可见，正是「发错了想立刻撤」的时刻——故单列一格在册状态。
   const starting = new Map(); // messageId → 出队时的任务原文，供在册视图取标题与入队时刻
@@ -94,8 +101,13 @@ if (isMain) {
     onLive: (info) => starting.delete(info.messageId),
     onAsk: (info) => {
       store.recordAsk(info.messageId, info);
-      if (counted.delete(info.messageId)) { running--; pump(); }
+      // 只有真的在等人（kind='user'）才让出槽位。等自己布的后台工作时机器最忙——全仓测试、
+      // 机审 CR 正在烧 CPU——放行下一个任务会让 concurrency:1 变成两份重负载并行。
+      if (info.kind === 'user') releaseSlot(info.messageId);
     },
+    // 挂起中的会话进程死亡（崩溃 / OOM / 被外部 kill / 换参数收割）：任务不终态、留给懒续跑，
+    // 但它已经不烧 CPU 了，槽位必须在此归还——那条 runTask promise 永远不会 resolve。
+    onSuspendClose: (info) => releaseSlot(info.messageId),
   };
   function settleTask(task) {
     return (out) => {
@@ -118,7 +130,7 @@ if (isMain) {
           // worktree 建不起来时 onLive 永不到达，这里是启动窗口的唯一出口：
           // 漏清则这条死任务会永远占着「启动中」一格，把在册视图与 /stop 钉死。
           starting.delete(task.messageId);
-          if (counted.delete(task.messageId)) { running--; pump(); }
+          releaseSlot(task.messageId);
         });
     }
   }
@@ -150,7 +162,7 @@ if (isMain) {
   }
 
   // 状态字面量与看板（harness-ceilf6/scripts/web.py 的 RUN_LABEL）同一套，改动须两边同步。
-  const STATE_LABEL = { active: '运行中', waiting: '等回复', starting: '启动中', queued: '排队中' };
+  const STATE_LABEL = { active: '运行中', waiting: '等回复', background: '后台运行中', starting: '启动中', queued: '排队中' };
 
   // 尚无 worktree 的任务（队列中 / 启动中）用消息首行当标题：按 code point 截 20，
   // 字节截断会撕裂 CJK 与 emoji。
@@ -161,20 +173,26 @@ if (isMain) {
   function registry() {
     const out = [];
     const seen = new Set();
-    for (const t of taskSnapshot()) { out.push(t); seen.add(t.messageId); }
+    // question 只在 awaiting 登记里，活表快照没有：后台运行中的任务不发私信，列表里那句进展
+    // 是它唯一的对外出口，两条来路都得带上。
+    for (const t of taskSnapshot()) {
+      out.push({ ...t, question: store.findAwaiting(t.messageId)?.question ?? '' });
+      seen.add(t.messageId);
+    }
     for (const e of store.listAwaiting()) {
       if (seen.has(e.messageId)) continue;
       seen.add(e.messageId);
       out.push({
         messageId: e.messageId, short: e.messageId.slice(-6), title: e.title ?? '', branch: e.branch ?? '',
-        worktree: e.worktree ?? '', state: 'waiting', startedAt: e.askedAt ?? '', sessionId: e.sessionId ?? '',
+        worktree: e.worktree ?? '', state: e.kind === 'background' ? 'background' : 'waiting',
+        startedAt: e.askedAt ?? '', sessionId: e.sessionId ?? '', question: e.question ?? '',
       });
     }
     for (const [messageId, t] of starting) {
       if (seen.has(messageId)) continue;
       seen.add(messageId);
       out.push({
-        messageId, short: messageId.slice(-6), title: rawTitle(t.text),
+        messageId, short: messageId.slice(-6), title: rawTitle(t.text), question: '',
         branch: '', worktree: '', state: 'starting', startedAt: t.receivedAt ?? '', sessionId: '',
       });
     }
@@ -182,7 +200,7 @@ if (isMain) {
       if (seen.has(t.messageId)) continue;
       seen.add(t.messageId);
       out.push({
-        messageId: t.messageId, short: t.messageId.slice(-6), title: rawTitle(t.text),
+        messageId: t.messageId, short: t.messageId.slice(-6), title: rawTitle(t.text), question: '',
         branch: '', worktree: '', state: 'queued', startedAt: t.receivedAt ?? '', sessionId: '',
       });
     }
@@ -209,14 +227,39 @@ if (isMain) {
   }
 
   // 排队中/启动中的行还没起进程，计时起点是消息入队时刻，量的是等待时长。
-  const ELAPSED_LABEL = { active: '已跑', waiting: '已跑', starting: '已等', queued: '已等' };
+  const ELAPSED_LABEL = { active: '已跑', waiting: '已跑', background: '已跑', starting: '已等', queued: '已等' };
+
+  // 后台运行中的任务全程不发私信，这一行进展是它唯一的对外出口。按 code point 截 60
+  // （字节截断会撕裂 CJK 与 emoji）：够看清它在干什么，又不至于把列表撑成一屏。
+  function progressLine(t) {
+    if (t.state !== 'background' || !t.question) return '';
+    const cs = [...String(t.question).replaceAll('\n', ' ')];
+    return `\n   进展：${cs.length > 60 ? cs.slice(0, 60).join('') + '…' : cs.join('')}`;
+  }
 
   function formatTasks(list) {
     return list.map((t, i) => {
       const ran = elapsed(t.startedAt);
       return `${i + 1}. [${STATE_LABEL[t.state]}] ${t.title || t.branch}（${t.short}）`
-        + `${t.branch ? ` · ${t.branch}` : ''}${ran ? ` · ${ELAPSED_LABEL[t.state] ?? '已跑'} ${ran}` : ''}`;
+        + `${t.branch ? ` · ${t.branch}` : ''}${ran ? ` · ${ELAPSED_LABEL[t.state] ?? '已跑'} ${ran}` : ''}`
+        + progressLine(t);
     }).join('\n');
+  }
+
+  const hasSel = (sel) => Boolean(sel.messageId || sel.worktree || sel.short || sel.index);
+
+  // /resume 的参数一段扛两件事：选择子与正文同在首行（`/resume 2 用方案 A 继续`），两者都可省略。
+  // 首 token 只在指得到在册任务时才算选择子（落在序号区间内的数字，或与某行 short 相等），否则
+  // 整段都是正文——反过来会把「继续」这类最常见的正文当成一个不存在的 short、把「3 天后再说」的
+  // 「3」当成越界序号，换来一句「未找到匹配的任务」，正文连同它一起丢掉。
+  function splitResumeArg(arg, list) {
+    const [head, ...rest] = String(arg ?? '').split(/\s+/).filter(Boolean);
+    if (!head) return { sel: {}, body: '' };
+    if (/^\d+$/.test(head) && Number(head) >= 1 && Number(head) <= list.length) {
+      return { sel: { index: head }, body: rest.join(' ') };
+    }
+    if (list.some((t) => t.short === head)) return { sel: { short: head }, body: rest.join(' ') };
+    return { sel: {}, body: [head, ...rest].join(' ') };
   }
 
   // 选择子：messageId / worktree（看板按路径定位）/ short / index（1 基，与 /tasks 当轮输出一致）；
@@ -261,7 +304,9 @@ if (isMain) {
     const entry = store.findAwaiting(t.messageId);
     if (!entry) return { ok: false, error: '该任务已结束。' };
     if (mode === 'pause') {
-      await lark.sendDm(config.dmOpenId, `⏸ ${entry.title} 本就无进程在跑，等待态保留，回复即续跑。`);
+      // background 条目不吃自由文本回复（它在等自己布的后台工作，不是在等你），只能由 /resume 推进。
+      const how = entry.kind === 'background' ? '用 /resume 续跑。' : '回复即续跑。';
+      await lark.sendDm(config.dmOpenId, `⏸ ${entry.title} 本就无进程在跑，等待态保留，${how}`);
       return { ok: true, was: 'waiting', title: entry.title, messageId: t.messageId };
     }
     store.dropAwaiting(t.messageId);
@@ -273,6 +318,69 @@ if (isMain) {
     await lark.sendDm(config.dmOpenId,
       `🛑 任务已停止（等待态作废，进程不在）\n${entry.title}\nworktree：${entry.worktree}\n如需接管：${takeover}`);
     return { ok: true, was: 'waiting', title: entry.title, messageId: t.messageId };
+  }
+
+  // 把一个等待中的任务推进一步：进程还活着就把正文注入本轮，否则按 awaiting 条目懒续跑。
+  // 懒续跑轮不占 concurrency 槽（用户裁定实时优先）。返回 'injected' / 'lazy'，false 表示注入
+  // 异常、没能推进——调用方据此区分回执时机：懒续跑是 fire-and-forget，成败要由 resumeTask 路径
+  // 自己私信（onResumed 在它过关之后触发）。
+  // waiting 先置 false 防同一轮被二次注入；异常时必须回滚成 true——不回滚则条目永久失联
+  // （引用回复恒得「正在跑」、直发恒不被选中、重启后 listWaiting 也不选中），只能手改
+  // awaiting.jsonl。回滚只恢复可路由性，用户重发一条回复即可再触发。
+  // inject=false 用于换过参数（flags）的续跑：新参数只在 spawn 生效，且旧进程正在被收割、
+  // 注入必死于半路。
+  async function advanceTask(target, body, { inject = true, onResumed } = {}) {
+    store.patchAwaiting(target.messageId, { waiting: false });
+    if (inject) {
+      try {
+        if (await injectReply(target.messageId, body)) return 'injected';
+      } catch (e) {
+        console.error(`[listener] 注入异常：${e.message}`);
+        store.patchAwaiting(target.messageId, { waiting: true });
+        return false; // 注入异常后旧进程状态未知，不得再叠一个懒续跑进程
+      }
+    }
+    const info = store.findAwaiting(target.messageId) ?? target;
+    resumeTask(info, body, config, lark, { onAsk: taskHooks.onAsk, onSuspendClose: taskHooks.onSuspendClose, onResumed })
+      .then(settleTask({ messageId: info.messageId, threadId: info.threadId }))
+      .catch((e) => {
+        console.error(`[listener] 懒续跑异常：${e.message}`);
+        store.patchAwaiting(info.messageId, { waiting: true });
+      });
+    return 'lazy';
+  }
+
+  // /resume：与 /stop 对称的显式推进命令。background 条目不参与私信直发的隐式路由，这是推进
+  // 它们的显式入口；也能唤醒 bot 重启后遗留的等待态残留。
+  async function resumeControl(sel, arg) {
+    const list = registry();
+    if (list.length === 0) return { ok: false, error: '当前没有在册任务。' };
+    const picked = hasSel(sel) ? { sel, body: String(arg ?? '').trim() } : splitResumeArg(arg, list);
+    const t = resolveTarget(picked.sel, list);
+    if (!t) {
+      return {
+        ok: false,
+        error: list.length > 1
+          ? `有 ${list.length} 个任务在册，请带序号或 short（如 /resume 2 继续）：\n${formatTasks(list)}`
+          : '未找到匹配的任务。',
+      };
+    }
+    if (t.state !== 'waiting' && t.state !== 'background') {
+      return { ok: false, error: `该任务是「${STATE_LABEL[t.state]}」，没有在等的轮次可推进。` };
+    }
+    const entry = store.findAwaiting(t.messageId);
+    if (!entry) return { ok: false, error: '该任务没有等待中的登记可推进（可能已结束）。' };
+    // 回执只在推进真的发生之后发一次：注入是同步可判的，懒续跑要等 resumeTask 过了
+    // 「worktree 还在 + 有 sessionId」两道关（否则它发的是 ❌，先报一句「已续跑」就成了
+    // 同一动作两条相互矛盾的私信）。
+    const receipt = () => lark.sendDm(config.dmOpenId, `▶️ 已续跑：${t.title || t.branch}`);
+    // 无正文时注入「继续」：续跑框架要有一句可转达的话，空正文会让会话读到一条空回复。
+    const advanced = await advanceTask(entry, picked.body || '继续', {
+      onResumed: () => { receipt().catch((e) => console.error(`[listener] 续跑回执发送失败：${e.message}`)); },
+    });
+    if (!advanced) return { ok: false, error: '注入失败且旧进程状态未知，未推进；稍后重试 /resume。' };
+    if (advanced === 'injected') await receipt();
+    return { ok: true, was: t.state, title: t.title, messageId: t.messageId };
   }
 
   async function sendTaskList() {
@@ -290,7 +398,7 @@ if (isMain) {
 
   async function runControl(sel, ctl) {
     if (ctl.name === 'tasks') { console.error('[listener] 控制命令 /tasks'); return sendTaskList(); }
-    const out = await controlTask(sel, ctl.name);
+    const out = ctl.name === 'resume' ? await resumeControl(sel, ctl.arg) : await controlTask(sel, ctl.name);
     // 用户按下刹车后的唯一现场证据：这条命令有没有进来、落到了哪个任务上。
     console.error(`[listener] 控制命令 /${ctl.name} ${out.ok
       ? `→ ${out.messageId.slice(-6)}（原状态 ${out.was}）`
@@ -299,13 +407,15 @@ if (isMain) {
   }
 
   // 私信回路：路由（引用精确 > 单任务直发）→ 斜杠命令 → 注入活会话或懒续跑。
-  // 懒续跑轮不占 concurrency 槽（用户裁定实时优先）。
   async function handleDm(ev) {
     store.markProcessed(ev.messageId);
     // 控制命令先于路由：/stop 必须能作用于活跃任务，而活跃任务不在 listWaiting 里。
     const ctl = parseControl(ev.text);
     if (ctl) {
-      const sel = ctl.arg ? (/^\d+$/.test(ctl.arg) ? { index: ctl.arg } : { short: ctl.arg }) : {};
+      // /resume 的参数里选择子与正文同行，交给 resumeControl 对着在册列表拆；
+      // 其余控制命令的参数整段就是选择子。
+      const sel = ctl.name === 'resume' || !ctl.arg ? {}
+        : (/^\d+$/.test(ctl.arg) ? { index: ctl.arg } : { short: ctl.arg });
       await runControl(sel, ctl);
       await noticeExtraBody(ev.text);
       return;
@@ -316,8 +426,18 @@ if (isMain) {
       return;
     }
     if (!target) {
-      const waitingList = store.listWaiting();
-      if (waitingList.length === 0) { await lark.sendDm(config.dmOpenId, '当前没有等待回复的任务。'); return; }
+      // background 条目不参与这条隐式路由：它在等自己布的后台工作、不是在等你，直发的自由文本
+      // 不该被它吃掉；让它入选还会把多任务时的直发一律逼成「请引用」，而从没 ask 过的那些
+      // 根本没有可引的提问消息，就此不可达。要推进后台任务用 /resume。
+      const all = store.listWaiting();
+      const waitingList = all.filter((e) => e.kind !== 'background');
+      if (waitingList.length === 0) {
+        const bg = all.length - waitingList.length;
+        await lark.sendDm(config.dmOpenId, bg
+          ? `当前没有等待回复的任务；有 ${bg} 个在后台运行中，用 /resume 推进（先 /tasks 看序号）。`
+          : '当前没有等待回复的任务。');
+        return;
+      }
       if (waitingList.length > 1) { await lark.sendDm(config.dmOpenId, `有 ${waitingList.length} 个任务在等回复，请引用对应提问消息回复。`); return; }
       target = waitingList[0];
     }
@@ -336,27 +456,7 @@ if (isMain) {
       }
       target = store.findAwaiting(target.messageId) ?? target;
     }
-    store.patchAwaiting(target.messageId, { waiting: false }); // 防同一轮被二次注入
-    // 注入/懒续跑异常时必须回滚 waiting=true：不回滚则条目永久失联——引用回复恒得「正在跑」、
-    // 直发恒得「没有等待」、重启后 listWaiting 也不选中，只能手改 awaiting.jsonl。
-    // 回滚只恢复可路由性，用户重发一条回复即可再触发注入/懒续跑。
-    if (!parsed.flags.length) {
-      // 换过参数（flags）必走懒续跑：新参数只在 spawn 生效，且旧进程正在被收割、注入必死于半路。
-      try {
-        if (await injectReply(target.messageId, parsed.body)) return;
-      } catch (e) {
-        console.error(`[listener] 注入异常：${e.message}`);
-        store.patchAwaiting(target.messageId, { waiting: true });
-        return; // 注入异常后旧进程状态未知，不得再叠一个懒续跑进程
-      }
-    }
-    const info = store.findAwaiting(target.messageId) ?? target;
-    resumeTask(info, parsed.body, config, lark, { onAsk: taskHooks.onAsk })
-      .then(settleTask({ messageId: info.messageId, threadId: info.threadId }))
-      .catch((e) => {
-        console.error(`[listener] 懒续跑异常：${e.message}`);
-        store.patchAwaiting(info.messageId, { waiting: true });
-      });
+    await advanceTask(target, parsed.body, { inject: !parsed.flags.length });
   }
 
   let attempt = 0;
