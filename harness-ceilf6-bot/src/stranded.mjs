@@ -7,7 +7,10 @@ import { parseResult } from './result.mjs';
 
 // 终态判据只认这几个：ask / working 是中间态，它们的任务若还活着必有 awaiting 条目，
 // 没有条目就说明进程已死、无人接管——正是要捞的形态。
-const TERMINAL = new Set(['pass', 'fail', 'skip', 'stopped', 'escalate', 'fused']);
+// escalate/fused 是旧契约的收场 verdict，runner 现在把它们映射成挂起等回复：那种任务必有 awaiting
+// 条目、在上一道判据就被排除，能落到这里的只有更早的老日志，按终态处理。整套判据宁可漏捞一个，
+// 也不把已经处置过的任务复活——多捞出来的那条会重新占住控制面并带着一枚可续跑的表情。
+export const TERMINAL = new Set(['pass', 'fail', 'skip', 'escalate', 'fused']);
 // 任务日志可达数 MB（headless claude 全量输出），只读末尾：RESULT 在最后。
 const TAIL_BYTES = 256 * 1024;
 
@@ -26,18 +29,28 @@ function readTail(path, bytes = TAIL_BYTES) {
 
 // 返回 {lastVerdict, sessionId}：日志是 stream-json，RESULT 行在 result 事件的 result 字段里，
 // session_id 挂在每个事件上。窗口起点多半切在半行中间，坏行跳过即可。
-function readLogTail(path) {
+export function readLogTail(path) {
   let lastVerdict = null;
   let sessionId = '';
-  for (const line of readTail(path).split('\n')) {
+  let streamJson = false;
+  const tail = readTail(path);
+  for (const line of tail.split('\n')) {
     if (!line.startsWith('{')) continue;
     let ev;
     try { ev = JSON.parse(line); } catch { continue; }
     if (ev.session_id) sessionId = ev.session_id;
-    if (ev.type === 'result' && !ev.is_error) {
-      const r = parseResult(String(ev.result ?? ''));
-      if (r) lastVerdict = r.verdict;
-    }
+    if (ev.type !== 'result') continue;
+    streamJson = true;
+    if (ev.is_error) continue;
+    const r = parseResult(String(ev.result ?? ''));
+    if (r) lastVerdict = r.verdict;
+  }
+  // stream-json 之前的任务日志是纯文本，RESULT 就是裸行。只认 result 事件的话这类日志一律取不到
+  // verdict，判据便朝「复活」失手：早已建完 MR 的任务会被当成滞留捞回控制面。一个 result 事件都
+  // 没有 = 这不是 stream-json 日志，按原文再解一次。
+  if (!streamJson) {
+    const r = parseResult(tail);
+    if (r) lastVerdict = r.verdict;
   }
   return { lastVerdict, sessionId };
 }
@@ -51,10 +64,13 @@ export function scanStranded(threads, { logsDir, isSettled, findAwaiting }) {
     if (isSettled(t.messageId) || findAwaiting(t.messageId)) continue;
     if (!existsSync(t.worktree)) continue; // 现场已清，无从续跑
     const logPath = join(logsDir, `task-${t.messageId}.log`);
-    if (!existsSync(logPath)) continue; // 会话从没起来，没有可 --resume 的历史
+    if (!existsSync(logPath)) continue; // 会话从没起来
     let tail;
     try { tail = readLogTail(logPath); } catch { continue; }
     if (tail.lastVerdict && TERMINAL.has(tail.lastVerdict)) continue;
+    // 可续跑的判据是「日志里有会话 id」而不是「有日志文件」：空文件、写了一半的日志同样存在，
+    // 凭它们登记出来的条目一按 /resume 就只换来一条 ❌。
+    if (!tail.sessionId) continue;
     out.push({
       messageId: t.messageId, threadId: t.threadId ?? '', branch: t.branch ?? '',
       worktree: t.worktree, sessionId: tail.sessionId, logPath,

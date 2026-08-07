@@ -119,7 +119,8 @@ async function runFedListener({ cfgPath, root, turns, env = {}, feed }) {
     await closed;
     if (!ok) console.error(`[fixture] listener stderr：\n${stderr().slice(-2000)}`);
   }
-  return { ok, larkLog };
+  // stderr 一并交出去：控制命令落到了哪个任务、原状态是什么，只在那里留痕。
+  return { ok, larkLog, stderr };
 }
 
 // 只挡 `git worktree add` 一个子命令（拖慢或拖垮），其余 git 调用原样透传：
@@ -610,6 +611,54 @@ test('端到端（stub）：多任务在册时无参 /stop 不猜目标，回执
   rmFixture(root);
 });
 
+// 滞留条目是启动扫描凭空造出来的，群里那枚接单表情的 reaction_id 无从继承——必须自己补回来
+// （飞书 reaction 按 (user, emoji) 唯一，重复 add 即幂等取回既有的那枚）。补不回来时 /stop 只是
+// 再叠一枚 🛑，而要收拾的那枚 👍 永远挂着，撞「一条被处理的消息上状态表情恒为一个」的不变量。
+test('端到端（stub）：/stop 收拾滞留任务，接单表情被撤，消息上只留停止表情', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-strandstop-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const awaitingPath = join(root, 'state', 'awaiting.jsonl');
+  const threadsPath = join(root, 'state', 'threads.jsonl');
+  const first = await runListener({
+    cfgPath, root, turns: 'hang',
+    events: [evLine({ message_id: 'om_ss_111111', message_type: 'post', thread_id: 'omt_ss' })],
+    until: () => existsSync(threadsPath) && readFileSync(threadsPath, 'utf8').includes('omt_ss')
+      && existsSync(join(root, 'logs', 'task-om_ss_111111.log')),
+  });
+  assert.ok(first.ok, '任务应已在活跃轮次中被收割，只留线程登记与任务日志');
+  const beforeSecond = readFileSync(larkLogPath, 'utf8').length;
+  const read = () => readFileSync(larkLogPath, 'utf8');
+  let entry = null;
+  const { ok, stderr } = await runFedListener({
+    cfgPath, root, turns: 'pass',
+    feed: async (send) => {
+      // 补 rid 要走一次飞书往返（事件流不等它），故先等条目落上 statusRid 再按停——
+      // 测的是「补回来之后 /stop 撤不撤旧表情」，不是与补 rid 竞速。
+      assert.ok(await poll(() => existsSync(awaitingPath) && readFileSync(awaitingPath, 'utf8').includes('"statusRid"')),
+        '滞留条目应把群里那枚接单表情的 reaction_id 补回来');
+      entry = JSON.parse(readFileSync(awaitingPath, 'utf8').trim());
+      // 滞留任务不等你回复，自由文本落不到它身上——兜底回执得说清在册的是什么，别报成后台运行中
+      send(dmLine({ message_id: 'om_dm_ssfree1', content: '这条自由文本没有任务在等着收' }));
+      assert.ok(await poll(() => read().includes('当前没有等待回复的任务')), '自由文本应得兜底回执');
+      assert.equal(read().includes('在后台运行中'), false, `滞留任务不是后台运行中，实际：${read()}`);
+      send(dmLine({ message_id: 'om_dm_ss1111', content: '/stop' }));
+      return poll(() => read().includes('等待态作废'));
+    },
+  });
+  assert.ok(ok, '/stop 应能处置掉滞留任务');
+  assert.ok(stderr().includes('（原状态 stranded）'),
+    `刹车审计须记下真实原状态，实际 stderr：${stderr().slice(-800)}`);
+  assert.equal(entry.kind, 'stranded');
+  assert.ok(entry.statusRid, '扫描登记的条目须带 statusRid');
+  const calls = readFileSync(larkLogPath, 'utf8').slice(beforeSecond).split('\n');
+  assert.ok(calls.some((l) => l.includes('om_ss_111111/reactions') && l.includes('MUTE')), '任务消息上应落 stopped 表情');
+  assert.ok(calls.some((l) => l.includes('DELETE') && l.includes(`om_ss_111111/reactions/${entry.statusRid}`)),
+    `接单表情应被撤（一条消息恒一个状态表情），实际：${calls.join('\n')}`);
+  assert.equal(readFileSync(awaitingPath, 'utf8').trim(), '', '条目应被删除，否则重启后又是一条滞留任务');
+  rmFixture(root);
+});
+
 test('端到端（stub）：活跃轮次中被重启的任务，重启后自动登记为已滞留并可 /resume', async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-strand-')));
   const cfgPath = writeConfig(root, makeRepo(root));
@@ -636,15 +685,32 @@ test('端到端（stub）：活跃轮次中被重启的任务，重启后自动�
   });
   assert.ok(second.ok, '重启后应自动登记滞留任务并在 /tasks 中显示');
   assert.ok(awaitingText().includes('"kind":"stranded"'));
-  // 第三程：/resume 凭 sessionId 续跑到终态，条目随之清掉
+  const line = readFileSync(larkLogPath, 'utf8').split('\n').find((l) => l.includes('[已滞留]'));
+  // 时长那一段量的是「停在这儿多久了」，复读一遍状态徽标等于白占一格
+  assert.ok(/\[已滞留\][^[]*· 已停 \d+[smh]/.test(line), `滞留行应带可读的停滞时长，实际：${line}`);
+  assert.equal(/已滞留 \d+[smh]/.test(line), false, `状态徽标已写明已滞留，时长段不该复读，实际：${line}`);
+  assert.equal((line.match(/bot\/\d{6}-\d{4}-\w+/g) ?? []).length, 1, `分支名只该出现一次，实际：${line}`);
+  // 登记时写下的处置指引：滞留任务不发私信，这一行是它唯一的对外出口
+  assert.ok(line.includes('/resume 即接着跑'), `滞留行须带处置指引，实际：${line}`);
+  assert.ok(line.includes('task-om_strand_1111.log'), `指引里的日志路径不该被截掉，实际：${line}`);
+  // 第三程：/resume 凭 sessionId 续跑，本轮进程不落 RESULT 就死（会话崩溃 / OOM / 被外部 kill 的
+  // 形态）→ 走 fail 终态。终态不落在日志里，正是只有终态记账兜得住的那三类之一。
+  const beforeThird = readFileSync(larkLogPath, 'utf8').length;
   const third = await runListener({
-    cfgPath, root, turns: 'pass',
+    cfgPath, root, turns: 'die',
     events: [dmLine({ message_id: 'om_dm_strand2', content: '/resume' })],
     until: () => awaitingText().trim() === '',
   });
   assert.ok(third.ok, '/resume 应能把滞留任务推到终态');
-  assert.ok(readFileSync(larkLogPath, 'utf8').includes('任务完成'));
-  // 第四程：终态已记账，重启不得再把它复活
+  const thirdCalls = readFileSync(larkLogPath, 'utf8').slice(beforeThird).split('\n');
+  assert.ok(thirdCalls.some((l) => l.includes('任务未完成')), '进程不落 RESULT 就死应走 fail 终态');
+  // 续跑不得先撤再打：滞留条目的 statusRid 就是群里那枚接单表情，(user, emoji) 唯一意味着
+  // re-add 拿不到第二枚，随后那次 del 撤掉的正是它自己——群消息上就此零表情。
+  assert.equal(thirdCalls.filter((l) => l.includes('DELETE') && l.includes('om_strand_1111/reactions/')).length, 1,
+    `续跑到终态之间只该有终态换表情那一次 del，实际：${thirdCalls.join('\n')}`);
+  // 第四程：终态没在日志里留下 RESULT（判据看日志尾只会判它还滞留着），全靠 settled 记账兜住
+  const tailLog = readFileSync(join(root, 'logs', 'task-om_strand_1111.log'), 'utf8');
+  assert.equal(tailLog.includes('RESULT'), false, '日志里没有终态 RESULT，第四程才是真的只靠记账');
   const fourth = await runListener({
     cfgPath, root, turns: 'pass',
     events: [dmLine({ message_id: 'om_dm_strand3', content: '/tasks' })],

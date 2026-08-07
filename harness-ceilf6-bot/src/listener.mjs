@@ -231,22 +231,32 @@ if (isMain) {
     return `${Math.floor(s / 3600)}h${Math.floor((s % 3600) / 60)}m`;
   }
 
-  // 排队中/启动中的行还没起进程，计时起点是消息入队时刻，量的是等待时长。
-  const ELAPSED_LABEL = { active: '已跑', waiting: '已跑', background: '已跑', stranded: '已滞留', starting: '已等', queued: '已等' };
+  // 排队中/启动中的行还没起进程，计时起点是消息入队时刻，量的是等待时长；滞留任务的计时起点是
+  // 本次启动扫描登记的时刻，量的是它停在那儿多久了。各词与状态徽标不重复——复读一遍白占一格。
+  const ELAPSED_LABEL = { active: '已跑', waiting: '已跑', background: '已跑', stranded: '已停', starting: '已等', queued: '已等' };
 
-  // 后台运行中的任务全程不发私信，这一行进展是它唯一的对外出口。按 code point 截 60
-  // （字节截断会撕裂 CJK 与 emoji）：够看清它在干什么，又不至于把列表撑成一屏。
+  // 这两类任务全程不发私信，列表里这一行是它们唯一的对外出口：background 报进展，stranded 报处置。
+  const PROGRESS_LABEL = { background: '进展', stranded: '处置' };
+
+  // background 的那句是会话写的自由文本，长度无上限，按 code point 截 60（字节截断会撕裂 CJK 与
+  // emoji）：够看清它在干什么，又不至于把列表撑成一屏。stranded 的那句是 bot 自己写的定长指引，
+  // 截断只会把末尾的日志路径切没，故整句照出。
   function progressLine(t) {
-    if (t.state !== 'background' || !t.question) return '';
+    const label = PROGRESS_LABEL[t.state];
+    if (!label || !t.question) return '';
     const cs = [...String(t.question).replaceAll('\n', ' ')];
-    return `\n   进展：${cs.length > 60 ? cs.slice(0, 60).join('') + '…' : cs.join('')}`;
+    const text = t.state === 'background' && cs.length > 60 ? cs.slice(0, 60).join('') + '…' : cs.join('');
+    return `\n   ${label}：${text}`;
   }
 
   function formatTasks(list) {
     return list.map((t, i) => {
       const ran = elapsed(t.startedAt);
-      return `${i + 1}. [${STATE_LABEL[t.state]}] ${t.title || t.branch}（${t.short}）`
-        + `${t.branch ? ` · ${t.branch}` : ''}${ran ? ` · ${ELAPSED_LABEL[t.state] ?? '已跑'} ${ran}` : ''}`
+      const title = t.title || t.branch;
+      return `${i + 1}. [${STATE_LABEL[t.state]}] ${title}（${t.short}）`
+        // 拿分支当标题的任务（滞留登记没有别的可用）不再把分支名重复一遍
+        + `${t.branch && t.branch !== title ? ` · ${t.branch}` : ''}`
+        + `${ran ? ` · ${ELAPSED_LABEL[t.state] ?? '已跑'} ${ran}` : ''}`
         + progressLine(t);
     }).join('\n');
   }
@@ -309,11 +319,14 @@ if (isMain) {
     // 活表没有 → bot 重启后遗留的等待态：进程早已不在，只需处置登记与表情。
     const entry = store.findAwaiting(t.messageId);
     if (!entry) return { ok: false, error: '该任务已结束。' };
+    // 回执与审计都按条目自己的 kind 说话：一律写「waiting」会让 stderr 里那行刹车记录把滞留任务、
+    // 后台任务都记成「原状态 waiting」——出事后翻日志时那是唯一的现场。
+    const entryWas = KIND_STATE[entry.kind] ?? 'waiting';
     if (mode === 'pause') {
       // background 条目不吃自由文本回复（它在等自己布的后台工作，不是在等你），只能由 /resume 推进。
       const how = (entry.kind ?? 'user') === 'user' ? '回复即续跑。' : '用 /resume 续跑。';
       await lark.sendDm(config.dmOpenId, `⏸ ${entry.title} 本就无进程在跑，等待态保留，${how}`);
-      return { ok: true, was: 'waiting', title: entry.title, messageId: t.messageId };
+      return { ok: true, was: entryWas, title: entry.title, messageId: t.messageId };
     }
     store.markSettled(t.messageId); // 人工叫停也是处置，重启后不得被滞留扫描复活
     store.dropAwaiting(t.messageId);
@@ -324,7 +337,7 @@ if (isMain) {
       : `cd ${entry.worktree} && claude`;
     await lark.sendDm(config.dmOpenId,
       `🛑 任务已停止（等待态作废，进程不在）\n${entry.title}\nworktree：${entry.worktree}\n如需接管：${takeover}`);
-    return { ok: true, was: 'waiting', title: entry.title, messageId: t.messageId };
+    return { ok: true, was: entryWas, title: entry.title, messageId: t.messageId };
   }
 
   // 把一个等待中的任务推进一步：进程还活着就把正文注入本轮，否则按 awaiting 条目懒续跑。
@@ -441,9 +454,10 @@ if (isMain) {
       const all = store.listWaiting();
       const waitingList = all.filter((e) => (e.kind ?? 'user') === 'user');
       if (waitingList.length === 0) {
-        const bg = all.length - waitingList.length;
-        await lark.sendDm(config.dmOpenId, bg
-          ? `当前没有等待回复的任务；有 ${bg} 个在后台运行中，用 /resume 推进（先 /tasks 看序号）。`
+        // 剩下的那些不等你回复（后台运行中、已滞留），逐类点名只会把回执写长：报个数、指向 /tasks。
+        const idle = all.length - waitingList.length;
+        await lark.sendDm(config.dmOpenId, idle
+          ? `当前没有等待回复的任务；另有 ${idle} 个不等回复的任务（后台运行中 / 已滞留），用 /resume 推进（先 /tasks 看序号）。`
           : '当前没有等待回复的任务。');
         return;
       }
@@ -559,8 +573,11 @@ if (isMain) {
   // 启动即扫滞留：活跃轮次中被重启收割的任务在控制面三个来源里都不存在（活表随进程清空、
   // 从没 ask 过所以没有 awaiting 条目、队列早已出队），群里那枚接单表情会永远挂着。
   // 登记成 stranded 后 /tasks 看得见、/stop 收拾得掉、/resume 能凭 sessionId 无损续跑。
-  for (const info of scanStranded([...store.threads.values()],
-    { logsDir: config.logsDir, isSettled: (id) => store.isSettled(id), findAwaiting: (id) => store.findAwaiting(id) })) {
+  // 登记本身是纯本地的，必须在事件流之前做完：晚一步，紧跟着到达的 /tasks、/stop 就会回
+  // 「当前没有在册任务」——那正是人发现它不动了、伸手去管的时刻。
+  const stranded = scanStranded([...store.threads.values()],
+    { logsDir: config.logsDir, isSettled: (id) => store.isSettled(id), findAwaiting: (id) => store.findAwaiting(id) });
+  for (const info of stranded) {
     store.recordAsk(info.messageId, {
       threadId: info.threadId, branch: info.branch, worktree: info.worktree, sessionId: info.sessionId,
       question: `活跃轮次中被 bot 重启收割，现场与会话历史完好；/resume 即接着跑，/stop 作废。日志：${info.logPath}`,
@@ -570,4 +587,18 @@ if (isMain) {
   }
   startConsumer();
   pump(); // 处理重启前遗留队列
+  // 补回群里那枚接单表情的 reaction_id：条目是扫描凭空造出来的，无从继承它。缺了 rid，处置路径
+  // （/stop、看板停止、续跑失败出口）只会再叠一枚新表情，而要收拾的那枚接单表情永远挂着——撞
+  // 「一条被处理的消息上，本 bot 的状态表情恒为恰好一个」。飞书 reaction 按 (user, emoji) 唯一，
+  // 重复 add 即幂等取回既有的那枚 rid。
+  // 放在事件流起来之后异步做：每次 add 最坏要等两次 30s 超时，事件流不能等它。补不回来（网络失败）
+  // 时条目照样在册，只是少一枚可撤的旧表情——为一次网络失败丢掉整条滞留任务更亏。
+  (async () => {
+    for (const info of stranded) {
+      // 期间被 /stop 收拾掉的（条目已删、消息上已是终态表情）不再补：那一下会把接单表情重新贴回去。
+      if (!store.findAwaiting(info.messageId)) continue;
+      const rid = await lark.addReaction(info.messageId, config.reactions.claimed);
+      if (rid) store.patchAwaiting(info.messageId, { statusRid: rid });
+    }
+  })().catch((e) => console.error(`[listener] 滞留任务表情回补异常：${e.message}`));
 }

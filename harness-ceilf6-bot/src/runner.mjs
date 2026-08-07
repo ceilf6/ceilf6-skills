@@ -292,6 +292,9 @@ export function killSession(messageId) {
   return true;
 }
 
+// awaiting 条目里 statusRid 指向接单表情（而非某个换过的状态表情）的那几类。
+const CLAIMED_STATUS_KINDS = new Set(['background', 'stranded']);
+
 // 懒续跑：bot 重启 / 进程被收割 / 挂起进程意外死亡后，用户回复到达时按 awaiting 条目重建会话。
 // info 即 awaiting.jsonl 条目；replyText 是本次要注入的回复正文。
 export async function resumeTask(info, replyText, config, lark, hooks = {}) {
@@ -312,10 +315,11 @@ export async function resumeTask(info, replyText, config, lark, hooks = {}) {
   }
   const task = { messageId: info.messageId, threadId: info.threadId ?? '', text: info.title ?? '' };
   const logPath = join(config.logsDir, `task-${info.messageId}.log`);
-  // background 条目的 statusRid 就是群里那枚接单表情（后台运行中从不换表情），此时无表情可换：
-  // 飞书 reaction 按 (user, emoji) 唯一，再 add 一次拿不到第二枚，随后的 del 撤掉的正是它自己，
-  // 于是从续跑到终态（可能数小时）群消息上零表情——而「没表情」等于「bot 没看见」。
-  const claimedRid = info.kind === 'background'
+  // 这两类条目的 statusRid 就是群里那枚接单表情本身（background 从不换表情，stranded 由启动扫描
+  // 把它补回来），此时无表情可换：飞书 reaction 按 (user, emoji) 唯一，再 add 一次拿不到第二枚，
+  // 随后的 del 撤掉的正是它自己，于是从续跑到终态（可能数小时）群消息上零表情——而「没表情」
+  // 等于「bot 没看见」。
+  const claimedRid = CLAIMED_STATUS_KINDS.has(info.kind)
     ? info.statusRid
     : await swapReaction(lark, info.messageId, config.reactions.claimed, info.statusRid);
   // 回执时机落在上面两道关之后：worktree 或 sessionId 缺一，这条路径发的就是 ❌，

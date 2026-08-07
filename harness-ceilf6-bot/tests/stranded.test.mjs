@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { scanStranded } from '../src/stranded.mjs';
+import { scanStranded, readLogTail } from '../src/stranded.mjs';
 
 // 任务日志是 stream-json：每行一个事件，RESULT 行藏在 result 事件的 result 字段里。
 function logLine(verdict, { sessionId = 'sess_1', ...extra } = {}) {
@@ -38,13 +38,42 @@ test('活跃轮次中被重启：日志尾无终态 RESULT → 判滞留，带�
   f.rm();
 });
 
-test('终态任务不复活：pass/fail/skip/stopped 的日志一律跳过', () => {
+test('终态任务不复活：pass/fail/skip 与旧契约 escalate/fused 的日志一律跳过', () => {
   const f = fixture();
-  for (const v of ['pass', 'fail', 'skip']) {
+  const verdicts = ['pass', 'fail', 'skip', 'escalate', 'fused'];
+  for (const v of verdicts) {
     writeFileSync(join(f.logsDir, `task-om_${v}.log`), initLine() + logLine(v));
   }
-  const threads = ['pass', 'fail', 'skip'].map((v) => f.thread(v));
+  const threads = verdicts.map((v) => f.thread(v));
   assert.deepEqual(scanStranded(threads, { logsDir: f.logsDir, isSettled: () => false, findAwaiting: () => null }), []);
+  f.rm();
+});
+
+// 迁移期的真盘面形态：stream-json 之前的任务日志是纯文本，RESULT 就是裸行，一个 type:"result"
+// 事件都没有。只认事件的话这类日志取不到 verdict，判据就朝「复活」失手——已经建了 MR 的任务
+// 会在首次启动时被捞回控制面。
+test('readLogTail：没有任何 result 事件时回落到原文解析，旧格式的裸 RESULT 行照样算数', () => {
+  const f = fixture();
+  const p = join(f.logsDir, 'task-om_old.log');
+  writeFileSync(p, 'Warning: no stdin data received in 3s\n过程输出若干\n'
+    + 'RESULT {"verdict":"pass","mr_url":"https://mr/8293690"}\n');
+  assert.deepEqual(readLogTail(p), { lastVerdict: 'pass', sessionId: '' });
+  f.rm();
+});
+
+// 「有日志文件」担不起「有可 --resume 的历史」：空文件、只写了半行的文件同样 existsSync 为真，
+// 凭它们登记出来的条目一按 /resume 只会换来一条 ❌（还撤不掉群里那枚接单表情）。
+test('无会话 id 的日志不登记：空文件、只有坏行、旧格式纯文本都不算可续跑', () => {
+  const f = fixture();
+  const scan = (ids) => scanStranded(ids.map((id) => f.thread(id)),
+    { logsDir: f.logsDir, isSettled: () => false, findAwaiting: () => null });
+  writeFileSync(join(f.logsDir, 'task-om_empty.log'), '');
+  writeFileSync(join(f.logsDir, 'task-om_half.log'), '{"type":"system","subty');
+  writeFileSync(join(f.logsDir, 'task-om_plain.log'), '过程输出，没有会话 id，也没有结果行\n');
+  assert.deepEqual(scan(['empty', 'half', 'plain']), []);
+  // 对照：同样没有终态 RESULT，但日志里有会话 id → 这才是可续跑的滞留任务
+  writeFileSync(join(f.logsDir, 'task-om_live.log'), initLine('sess_live'));
+  assert.deepEqual(scan(['live']).map((e) => e.sessionId), ['sess_live']);
   f.rm();
 });
 

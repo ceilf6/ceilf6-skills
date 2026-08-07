@@ -45,6 +45,7 @@ echo "$page" | grep -q "clean.disabled = true" && ok "运行中禁用清理按�
 echo "$page" | grep -q '先停止该任务' && ok "禁用态提示指向停止" || bad "禁用态无提示"
 # 运行态徽标的状态字面量与 listener 的 STATE_LABEL 同一套，缺一个就渲染成裸英文
 echo "$page" | grep -q '启动中' && ok "starting 状态标签在册" || bad "缺 starting 标签"
+echo "$page" | grep -q '已滞留' && ok "stranded 状态标签在册" || bad "缺 stranded 标签"
 out=$(curl -s "http://127.0.0.1:${PORT}/api/threads")
 echo "$out" | jq -e 'type == "array" and (.[0].node == "待人工CR")' >/dev/null && ok "api/threads 透传" || bad "api/threads: $out"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/mark" \
