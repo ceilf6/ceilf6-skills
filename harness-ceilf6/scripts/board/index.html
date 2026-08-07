@@ -126,9 +126,10 @@
 const BOARD = window.BOARD || {mode: 'local'};
 const PUB = BOARD.mode === 'public';
 const ORDER = ['plan_gate','dev_done','cr_passed','mr_created','human_cr_done','selftest_done',
-               'cr_group_created','cr_requested'];
+               'cr_group_created','cr_requested','qa_requested'];
 const LABEL = {plan_gate:'计划门', dev_done:'开发', cr_passed:'机审CR', mr_created:'建MR',
-               human_cr_done:'人工CR', selftest_done:'自测', cr_group_created:'拉群', cr_requested:'求CR'};
+               human_cr_done:'人工CR', selftest_done:'自测', cr_group_created:'拉群',
+               cr_requested:'求CR', qa_requested:'求QA'};
 async function setNode(ctx, target, silent){
   const r = await fetch('/api/set-node', {method:'POST', body: JSON.stringify({ctx_dir: ctx, target: target})});
   const out = await r.json().catch(() => ({}));
@@ -155,11 +156,13 @@ async function crStep(ctx, path, failMsg, silent){
 }
 const crGroup = (ctx, silent) => crStep(ctx, '/api/cr-group', '拉群失败', silent);
 const crRequest = (ctx, silent) => crStep(ctx, '/api/cr-request', '求CR 失败', silent);
-// 自测完成后一路走到求CR：任一步失败即停在那个节点上，免得群还没建就去发消息
+const crQa = (ctx, silent) => crStep(ctx, '/api/cr-qa', '求QA 失败', silent);
+// 自测完成后一路走到求QA：任一步失败即停在那个节点上，免得群还没建就去发消息
 async function finishSelftest(ctx){
   if (!await setNode(ctx, 'cr_group_created', true)) { load(); return; }
   if (!await crGroup(ctx, true)) return;
-  await crRequest(ctx);
+  if (!await crRequest(ctx, true)) return;
+  await crQa(ctx);
 }
 function chip(text, cls, tip, onclick){
   const s = document.createElement('span');
@@ -178,7 +181,7 @@ function renderNodes(t){
   const wrap = document.createElement('div');
   wrap.className = 'nodes';
   let cur = ORDER.indexOf(t.current);
-  if (t.current === '') cur = ORDER.length;   // 八键全齐：停在端点前（待合入）
+  if (t.current === '') cur = ORDER.length;   // 九键全齐：停在端点前（待合入）
   if (t.current === '-') cur = 0;             // 未知：按全未完成
   ORDER.forEach((n, j) => {
     let label = LABEL[n];
@@ -200,8 +203,11 @@ function renderNodes(t){
         } else if (n === 'cr_requested'){
           tip = '点击往群里发求CR消息';
           act = () => crRequest(t.ctx_dir);
+        } else if (n === 'qa_requested'){
+          tip = '点击一键提醒 QA 并在群里知会';
+          act = () => crQa(t.ctx_dir);
         } else if (n === 'selftest_done'){
-          tip = '点击标记自测完成，随后自动拉群并求CR';
+          tip = '点击标记自测完成，随后自动拉群、求CR、求QA';
           act = () => finishSelftest(t.ctx_dir);
         } else {
           tip = '点击标记「' + LABEL[n] + '」完成';
@@ -211,7 +217,7 @@ function renderNodes(t){
     } else {
       cls = 'n-todo';
       if (!PUB){
-        if (n === 'cr_group_created' || n === 'cr_requested'){
+        if (n === 'cr_group_created' || n === 'cr_requested' || n === 'qa_requested'){
           tip = '请先完成自测'; act = () => alert('请先完成自测');
         } else {
           tip = '点击完成到「' + LABEL[n] + '」（含前序节点）';

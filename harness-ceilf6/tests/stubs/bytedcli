@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 假 bytedcli：整行 argv 追加进 $STUB_STATE/calls.log；按子命令回放 $STUB_STATE 下的应答文件。
 # 哨兵：create_fail → chat create 失败（模拟群已存在）；add_fail → chat add 失败；
-#       update_fail → mr update 失败。
+#       update_fail → mr update 失败；qa_fail → remind-qa 失败。
 set -euo pipefail
 printf '%s\n' "$*" >> "${STUB_STATE:?bytedcli stub 需要 STUB_STATE}/calls.log"
 case "$*" in
@@ -13,6 +13,8 @@ case "$*" in
     if [ -f "${STUB_STATE}/add_fail" ]; then echo "add member failed" >&2; exit 1; fi ;;
   *"mr update"*)
     if [ -f "${STUB_STATE}/update_fail" ]; then echo "update failed" >&2; exit 1; fi ;;
+  *"remind-qa"*)
+    if [ -f "${STUB_STATE}/qa_fail" ]; then echo "remind qa failed" >&2; exit 1; fi ;;
   *"mr status"*) cat "${STUB_STATE}/status.json" 2>/dev/null || echo '{}' ;;
   *) : ;;
 esac

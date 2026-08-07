@@ -54,6 +54,7 @@ echo "$page" | grep -q '启动中' && ok "starting 状态标签在册" || bad "�
 echo "$page" | grep -q '已滞留' && ok "stranded 状态标签在册" || bad "缺 stranded 标签"
 echo "$page" | grep -Fq "cr_group_created:'拉群'" && ok "拉群标签在册" || bad "缺拉群标签"
 echo "$page" | grep -Fq "cr_requested:'求CR'" && ok "求CR 标签在册" || bad "缺求CR 标签"
+echo "$page" | grep -Fq "qa_requested:'求QA'" && ok "求QA 标签在册" || bad "缺求QA 标签"
 echo "$page" | grep -Fq "chip('完成'" && ok "端点完成在册" || bad "缺完成端点"
 echo "$page" | grep -Fq '<script>window.BOARD = {"mode": "local"}</script>' \
   && ok "local 配置已注入" || bad "local 配置未注入"
@@ -101,12 +102,12 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/set-node" \
   -d "{\"ctx_dir\": \"$CTX\", \"target\": \"done\"}")
 [ "$code" = 200 ] && ok "set-node done 200" || bad "set-node done: $code"
-jq -e '(.status == "done") and (.milestones | length == 8)' "$CTX/meta.json" >/dev/null \
-  && ok "done 落盘（status + 八键）" || bad "done 落盘: $(jq -c '{status, n: (.milestones|length)}' "$CTX/meta.json")"
+jq -e '(.status == "done") and (.milestones | length == 9)' "$CTX/meta.json" >/dev/null \
+  && ok "done 落盘（status + 九键）" || bad "done 落盘: $(jq -c '{status, n: (.milestones|length)}' "$CTX/meta.json")"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/undone" \
   -d "{\"ctx_dir\": \"$CTX\"}")
 [ "$code" = 200 ] && ok "undone 200" || bad "undone: $code"
-jq -e '.status == "awaiting_human" and (.milestones | length == 8)' "$CTX/meta.json" >/dev/null \
+jq -e '.status == "awaiting_human" and (.milestones | length == 9)' "$CTX/meta.json" >/dev/null \
   && ok "undone 落盘" || bad "undone 落盘: $(jq -c .status "$CTX/meta.json")"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/undone" -d '{}')
 [ "$code" = 400 ] && ok "undone 缺参 400" || bad "undone 缺参: $code"
@@ -158,6 +159,8 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/
 [ "$code" = 400 ] && ok "无 MR 求CR 400" || bad "无 MR 求CR: $code"
 curl -s -X POST "http://127.0.0.1:${PORT}/api/cr-request" -d "{\"ctx_dir\": \"$CTX\"}" \
   | jq -e '.error == "无 MR，未求CR"' >/dev/null && ok "无 MR 求CR 错误文案" || bad "无 MR 求CR 错误文案"
+curl -s -X POST "http://127.0.0.1:${PORT}/api/cr-qa" -d "{\"ctx_dir\": \"$CTX\"}" \
+  | jq -e '.error == "无 MR，未求QA"' >/dev/null && ok "无 MR 求QA 错误文案" || bad "无 MR 求QA 错误文案"
 
 # 有 MR：拉群只建群拉人（不发消息），求CR 才发消息并摘 WIP
 tmp=$(mktemp); jq '.mr_id = "8300100"' "$CTX/meta.json" > "$tmp" && mv "$tmp" "$CTX/meta.json"
@@ -173,6 +176,22 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/
 jq -e '.milestones.cr_requested' "$CTX/meta.json" >/dev/null && ok "求CR 后节点落盘" || bad "求CR 未落节点"
 grep -q '大佬们，有空辛苦 CR 一下' "$STUB_STATE/calls.log" && ok "求CR消息被发" || bad "消息未发"
 grep -q 'mr update --mr-id 8300100 --wip false' "$STUB_STATE/calls.log" && ok "求CR 摘 WIP" || bad "未摘 WIP"
+# 求QA：一键提醒 + 群里知会
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/cr-qa" \
+  -d "{\"ctx_dir\": \"$CTX\"}")
+[ "$code" = 200 ] && ok "求QA 200" || bad "求QA: $code"
+jq -e '.milestones.qa_requested' "$CTX/meta.json" >/dev/null && ok "求QA 后节点落盘" || bad "求QA 未落节点"
+grep -q 'bits mr remind-qa --mr-id 8300100' "$STUB_STATE/calls.log" && ok "一键提醒 QA 被调" || bad "未调提醒"
+grep -q '辛苦 QA 老师有空测一下' "$STUB_STATE/calls.log" && ok "群里知会 QA" || bad "未知会"
+# 提醒失败即不标完成：节点留黄可重试
+tmp=$(mktemp); jq 'del(.milestones.qa_requested)' "$CTX/meta.json" > "$tmp" && mv "$tmp" "$CTX/meta.json"
+touch "$STUB_STATE/qa_fail"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/cr-qa" \
+  -d "{\"ctx_dir\": \"$CTX\"}")
+rm -f "$STUB_STATE/qa_fail"
+[ "$code" = 500 ] && ok "提醒失败 500" || bad "提醒失败码: $code"
+jq -e '.milestones | has("qa_requested") | not' "$CTX/meta.json" >/dev/null && ok "提醒失败不标完成" || bad "提醒失败误标完成"
+curl -s -o /dev/null -X POST "http://127.0.0.1:${PORT}/api/cr-qa" -d "{\"ctx_dir\": \"$CTX\"}"
 out=$(curl -s -X POST "http://127.0.0.1:${PORT}/api/cr-group" -d "{\"ctx_dir\": \"$CTX\"}")
 echo "$out" | jq -e '.ok == true and (has("warning") | not)' >/dev/null \
   && ok "拉群顺利时不带 warning" || bad "拉群顺利响应: $out"

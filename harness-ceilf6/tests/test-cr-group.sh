@@ -63,6 +63,34 @@ jq -e '.milestones.cr_requested' "$CTX/meta.json" >/dev/null && ok "求CR 节点
 hasnt "求CR 不重复建群" 'chat create' "$calls"
 hasnt "求CR 不重复拉人" 'chat add' "$calls"
 
+echo "== qa：一键提醒 + 群里知会，两者都成才标完成 =="
+: > "$STUB_STATE/calls.log"
+out=$(bash "$CG" qa --ctx-dir "$CTX")
+calls=$(cat "$STUB_STATE/calls.log")
+has "调一键提醒 QA" 'bits mr remind-qa --mr-id 8300001' "$calls"
+has "群里知会 QA" '辛苦 QA 老师有空测一下[送心]' "$calls"
+has "发到既有的群" '+messages-send --chat-id oc_stub_1' "$calls"
+jq -e '.milestones.qa_requested' "$CTX/meta.json" >/dev/null && ok "求QA 节点已 mark" || bad "求QA 节点未 mark"
+hasnt "求QA 不碰 WIP" '--wip' "$calls"
+# 提醒失败：不发群消息、不标完成
+tmp=$(mktemp); jq 'del(.milestones.qa_requested)' "$CTX/meta.json" > "$tmp" && mv "$tmp" "$CTX/meta.json"
+: > "$STUB_STATE/calls.log"; : > "$STUB_STATE/qa_fail"
+err=$(mktemp); rc=0
+bash "$CG" qa --ctx-dir "$CTX" >/dev/null 2>"$err" || rc=$?
+[ "$rc" != 0 ] && ok "提醒失败非零退出" || bad "提醒失败仍 exit 0"
+grep -q '一键提醒 QA 失败' "$err" && ok "提醒失败有诊断" || bad "提醒失败无诊断"
+grep -q 'messages-send' "$STUB_STATE/calls.log" && bad "提醒失败不该发群消息" || ok "提醒失败不发群消息"
+jq -e '.milestones | has("qa_requested") | not' "$CTX/meta.json" >/dev/null && ok "提醒失败不 mark" || bad "提醒失败误 mark"
+rm -f "$STUB_STATE/qa_fail"
+# 群消息发不出：已提醒但仍不标完成
+: > "$STUB_STATE/msg_fail"; rc=0
+bash "$CG" qa --ctx-dir "$CTX" >/dev/null 2>"$err" || rc=$?
+[ "$rc" != 0 ] && ok "群消息失败非零退出" || bad "群消息失败仍 exit 0"
+grep -q '已提醒 QA，但群消息未发出' "$err" && ok "点明已提醒但消息未发" || bad "缺该诊断"
+jq -e '.milestones | has("qa_requested") | not' "$CTX/meta.json" >/dev/null && ok "群消息失败不 mark" || bad "群消息失败误 mark"
+rm -f "$STUB_STATE/msg_fail" "$err"
+bash "$CG" qa --ctx-dir "$CTX" >/dev/null 2>&1
+
 echo "== 返工重来：拉群幂等，求CR 再发一次 =="
 : > "$STUB_STATE/calls.log"
 : > "$STUB_STATE/create_fail"   # 群已存在，建群必失败
@@ -76,9 +104,11 @@ jq -e '.cr_chat_id == "oc_stub_1"' "$CTX/meta.json" >/dev/null && ok "沿用既�
 bash "$CG" request --ctx-dir "$CTX" >/dev/null 2>&1
 has "返工后重新发消息" '+messages-send --chat-id oc_stub_1' "$(cat "$STUB_STATE/calls.log")"
 jq -e '.milestones.cr_requested' "$CTX/meta.json" >/dev/null && ok "求CR 重新标记" || bad "求CR 未重新标记"
+bash "$CG" qa --ctx-dir "$CTX" >/dev/null 2>&1
+jq -e '.milestones.qa_requested' "$CTX/meta.json" >/dev/null && ok "求QA 重新标记" || bad "求QA 未重新标记"
 rm -f "$err"; teardown
 
-echo "== 无 mr_id：两个子命令都 exit 3 且零外部调用 =="
+echo "== 无 mr_id：三个子命令都 exit 3 且零外部调用 =="
 setup ""
 rc=0; out=$(bash "$CG" group --ctx-dir "$CTX") || rc=$?
 [ "$rc" = 3 ] && ok "group exit 3" || bad "group rc=$rc"
@@ -86,6 +116,9 @@ has "group 契约文案" '无 MR，未拉群' "$out"
 rc=0; out=$(bash "$CG" request --ctx-dir "$CTX") || rc=$?
 [ "$rc" = 3 ] && ok "request exit 3" || bad "request rc=$rc"
 has "request 契约文案" '无 MR，未求CR' "$out"
+rc=0; out=$(bash "$CG" qa --ctx-dir "$CTX") || rc=$?
+[ "$rc" = 3 ] && ok "qa exit 3" || bad "qa rc=$rc"
+has "qa 契约文案" '无 MR，未求QA' "$out"
 jq -e '.milestones | has("cr_group_created") | not' "$CTX/meta.json" >/dev/null && ok "未 mark" || bad "误 mark"
 [ ! -f "$STUB_STATE/calls.log" ] && ok "零外部调用" || bad "有外部调用: $(cat "$STUB_STATE/calls.log")"
 teardown
@@ -175,6 +208,10 @@ has "group dry-run 提到建群" 'chat create' "$out"
 out=$(bash "$CG" request --ctx-dir "$CTX" --dry-run)
 has "request dry-run 打印计划" 'DRY:' "$out"
 has "request dry-run 提到发消息" 'messages-send' "$out"
+out=$(bash "$CG" qa --ctx-dir "$CTX" --dry-run)
+has "qa dry-run 打印计划" 'DRY:' "$out"
+has "qa dry-run 提到一键提醒" 'remind-qa' "$out"
+has "qa dry-run 用 QA 默认文案" '辛苦 QA 老师有空测一下[送心]' "$out"
 [ ! -f "$STUB_STATE/calls.log" ] && ok "dry-run 零外部调用" || bad "dry-run 有外部调用"
 jq -e '.milestones | has("cr_group_created") | not' "$CTX/meta.json" >/dev/null && ok "dry-run 不落盘" || bad "dry-run 落盘了"
 teardown

@@ -8,7 +8,7 @@ threads.sh 保证。写一律用 --ctx-dir 直指：序号与关键词定位只�
 仅绑 127.0.0.1，无鉴权；/api/mark 只放行人工节点，/api/set-node 是看板手控的
 绝对定位入口（推进/回退，目标校验仍在 threads.sh）。
 看板页本体在 board/index.html（本地/对外共用单文件），本文件只注入 local 模式配置后返回。
-拉群、求CR 与 WIP 走 cr-group.sh：bytedcli / lark-cli 一律不在本文件直调。
+拉群、求CR、求QA 与 WIP 走 cr-group.sh：bytedcli / lark-cli 一律不在本文件直调。
 运行态与停止不经 threads.sh：转调 bot 控制端口，bot 不在时看板照常渲染静态进度。
 """
 import argparse
@@ -23,8 +23,16 @@ THREADS_SH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "threads.s
 BOARD_HTML = os.path.join(os.path.dirname(os.path.abspath(__file__)), "board", "index.html")
 CR_GROUP_SH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cr-group.sh")
 MANUAL_NODES = ("human_cr_done", "selftest_done")
-SET_TARGETS = ("plan_gate", "dev_done", "cr_passed", "mr_created", "human_cr_done",
-               "selftest_done", "cr_group_created", "cr_requested", "done")
+SET_TARGETS = ("plan_gate", "dev_done", "cr_passed", "mr_created", "human_cr_done", "selftest_done",
+               "cr_group_created", "cr_requested", "qa_requested", "done")
+
+# 收尾段三步各自一个端点：拉群、求CR、求QA。值为 (cr-group.sh 子命令, 无 MR 时的错误文案)——
+# 无 MR 是契约码 exit 3，文案按步区分才说得清是哪一步没做成。
+CR_STEPS = {
+    "/api/cr-group": ("group", "无 MR，未拉群"),
+    "/api/cr-request": ("request", "无 MR，未求CR"),
+    "/api/cr-qa": ("qa", "无 MR，未求QA"),
+}
 
 # bot 控制端口：看板的停止按钮转调它。bot 未运行时看板只是少了运行态信息，不是错误。
 BOT_CONTROL = os.environ.get("HARNESS_BOT_CONTROL", "http://127.0.0.1:7659")
@@ -126,7 +134,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             ctx, target = got
             if target not in SET_TARGETS:
-                self._send(400, json.dumps({"error": "target 须为八节点名或 done"}))
+                self._send(400, json.dumps({"error": "target 须为九节点名或 done"}))
                 return
             r = run_threads("set-node", "--ctx-dir", ctx, target)
             # 返工自动挂 WIP：方向标记是 threads.sh 的契约输出。wip 失败不改变节点写入结果，
@@ -166,16 +174,16 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(400, json.dumps({"error": "title 须为字符串"}))
                 return
             r = run_threads("retitle", "--ctx-dir", ctx, title)
-        elif self.path in ("/api/cr-group", "/api/cr-request"):
+        elif self.path in CR_STEPS:
             got = self._post_body(("ctx_dir",))
             if got is None:
                 self._send(400, json.dumps({"error": "需要 JSON：{ctx_dir}"}))
                 return
             (ctx,) = got
-            grouping = self.path == "/api/cr-group"
-            r = run_cr_group("group" if grouping else "request", "--ctx-dir", ctx)
+            step, no_mr = CR_STEPS[self.path]
+            r = run_cr_group(step, "--ctx-dir", ctx)
             if r.returncode == 3:
-                self._send(400, json.dumps({"error": "无 MR，未拉群" if grouping else "无 MR，未求CR"}))
+                self._send(400, json.dumps({"error": no_mr}))
             elif r.returncode != 0:
                 self._send(500, json.dumps({"error": (r.stderr or r.stdout).strip()}))
             else:

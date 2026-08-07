@@ -2,11 +2,12 @@
 # MR 评审群与求CR。子命令：
 #   group   --ctx-dir <路径> [--dry-run]                       建群并把 reviewer 拉进来
 #   request --ctx-dir <路径> [--message <文案>] [--dry-run]     往群里发求CR消息
+#   qa      --ctx-dir <路径> [--message <文案>] [--dry-run]     一键提醒 QA 并往群里发消息
 #   wip     --ctx-dir <路径> [--dry-run]                       返工时给 MR 挂 WIP
-# 拆成两步是因为返工只需重新求CR：群一旦建成就长期有效，回退到开发再走一遍时不必重建。
+# 拆成独立子命令是因为返工只需重新喊人：群一旦建成就长期有效，回退到开发再走一遍时不必重建。
 # 名单不设配置：现读 MR 上建 MR 时自动配置的 reviewer（bits mr reviewer info）。
-# 两个动作的完成判据不同——group 宽容（群多半已在，建群失败、拉人失败都只告警），
-# request 严格（消息没发出去就不标完成，节点留黄可重试），否则「已求CR」会掩盖没人收到消息。
+# 完成判据分两类——group 宽容（群多半已在，建群失败、拉人失败都只告警）；request 与 qa 严格
+# （提醒或消息没送达就不标完成，节点留黄可重试），否则「已求CR」「已求QA」会掩盖没人收到消息。
 # 群标识落 meta.cr_chat_id：建群那次拿到的 chat_id 是后续发消息的唯一入口。
 # 无 MR 一律 exit 3（契约码，web.py 据此回 400）；meta 缺失阻断。
 # 全部 bytedcli / lark-cli 调用收敛在本脚本，web.py 只转调。
@@ -16,11 +17,13 @@ TH="$HERE/threads.sh"
 die() { echo "cr-group: $*" >&2; exit 1; }
 command -v jq >/dev/null 2>&1 || die "缺少依赖：jq"
 DEFAULT_MSG='大佬们，有空辛苦 CR 一下[送心]'
+DEFAULT_QA_MSG='辛苦 QA 老师有空测一下[送心]'
 
 usage() {
   cat >&2 <<'EOF'
 用法：cr-group.sh group   --ctx-dir <路径> [--dry-run]
       cr-group.sh request --ctx-dir <路径> [--message <文案>] [--dry-run]
+      cr-group.sh qa      --ctx-dir <路径> [--message <文案>] [--dry-run]
       cr-group.sh wip     --ctx-dir <路径> [--dry-run]
 EOF
   exit 1
@@ -39,7 +42,7 @@ save_chat_id() { # <chat_id>：落 meta.cr_chat_id，供求CR 复用
 sub="${1:-}"
 [ -n "$sub" ] || usage
 shift
-ctx="" msg="$DEFAULT_MSG" dry=0
+ctx="" msg="" dry=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --ctx-dir) ctx="${2:?--ctx-dir 需要值}"; shift 2 ;;
@@ -49,6 +52,10 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$ctx" ] || usage
+# 两条消息路径各有默认文案，--message 未给时按子命令取
+if [ -z "$msg" ]; then
+  case "$sub" in qa) msg="$DEFAULT_QA_MSG" ;; *) msg="$DEFAULT_MSG" ;; esac
+fi
 meta="$ctx/meta.json"
 [ -f "$meta" ] || die "缺 meta.json：$ctx"
 # mr_id 历史上 string / number 两种形态都有，jq -r 皆输出裸值
@@ -129,6 +136,25 @@ case "$sub" in
     bash "$TH" mark --ctx-dir "$ctx" cr_requested
     bytedcli bits mr update --mr-id "$mr" --wip false >/dev/null 2>&1 || true
     echo "cr-group: 求CR 消息已发出（MR ${mr}）"
+    ;;
+
+  qa)
+    if [ -z "$mr" ]; then echo "cr-group: 无 MR，未求QA"; exit 3; fi
+    if [ "$dry" = 1 ]; then
+      echo "DRY: bytedcli bits mr remind-qa --mr-id ${mr}"
+      echo "DRY: lark-cli im +messages-send --chat-id <meta.cr_chat_id> --text ${msg}"
+      echo "DRY: threads.sh mark --ctx-dir ${ctx} qa_requested"
+      exit 0
+    fi
+    # 先走 Bits 原生的一键提醒 QA（QA 侧的待办由它派发），再往群里补一句给人看。
+    # 提醒失败就不发群消息：只发消息不提醒是半吊子，QA 的待办列表里仍然没有这条
+    bytedcli bits mr remind-qa --mr-id "$mr" >/dev/null || die "一键提醒 QA 失败（MR ${mr}）"
+    chat_id=$(jq -r '.cr_chat_id // empty' "$meta")
+    [ -n "$chat_id" ] || die "未拿到群标识，消息未发出——请先完成拉群"
+    lark-cli im +messages-send --chat-id "$chat_id" --text "$msg" >/dev/null \
+      || die "已提醒 QA，但群消息未发出（群 ${chat_id}）"
+    bash "$TH" mark --ctx-dir "$ctx" qa_requested
+    echo "cr-group: 已提醒 QA 并在群里知会（MR ${mr}）"
     ;;
 
   *) usage ;;

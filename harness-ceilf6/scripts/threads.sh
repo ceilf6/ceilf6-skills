@@ -23,8 +23,8 @@ PROJ="${CLAUDE_PROJECTS_DIR:-$HOME/.claude/projects}"
 # cr_passed 由 cr-round.sh 内联写入，是唯一绕开 mark 的节点；其余节点（含 cr-group.sh
 # 拉群成功后写的 cr_group_created）都经 mark 单点写入，三条确认渠道共用。看板手控的 set-node
 # 是另一条写入路径：它按目标位置整体重写 milestones，不走单点 mark。端点「完成」不是里程碑键：
-# 它的亮灯条件是 meta.status == done（八键全齐只是「待合入」——CR 与 MR 合入仍在进行）。
-MILESTONES="plan_gate dev_done cr_passed mr_created human_cr_done selftest_done cr_group_created cr_requested"
+# 它的亮灯条件是 meta.status == done（九键全齐只是「待合入」——CR、QA 与 MR 合入仍在进行）。
+MILESTONES="plan_gate dev_done cr_passed mr_created human_cr_done selftest_done cr_group_created cr_requested qa_requested"
 
 milestone_label() { # 节点内部名 → 进度图段名
   case "$1" in
@@ -36,10 +36,11 @@ milestone_label() { # 节点内部名 → 进度图段名
     selftest_done) echo "自测" ;;
     cr_group_created) echo "拉群" ;;
     cr_requested) echo "求CR" ;;
+    qa_requested) echo "求QA" ;;
   esac
 }
 
-node_label() { # <当前节点> <status> → 列表「节点」列文案；八键全齐后由 status 决定待合入/已完成
+node_label() { # <当前节点> <status> → 列表「节点」列文案；九键全齐后由 status 决定待合入/已完成
   case "$1" in
     plan_gate) echo "规划中" ;;
     dev_done) echo "开发中" ;;
@@ -49,6 +50,7 @@ node_label() { # <当前节点> <status> → 列表「节点」列文案；八�
     selftest_done) echo "待自测" ;;
     cr_group_created) echo "待拉群" ;;
     cr_requested) echo "待求CR" ;;
+    qa_requested) echo "待求QA" ;;
     "") if [ "${2:-}" = done ]; then echo "已完成"; else echo "待合入"; fi ;;
   esac
 }
@@ -164,7 +166,7 @@ cmd_progress() {
   progress_line "$ctx/meta.json"
 }
 
-node_index() { # 节点名 → 链条位次（0 起）；""（八键全齐）与 done 都是端点位；"-"（meta 不可解析）按 0
+node_index() { # 节点名 → 链条位次（0 起）；""（九键全齐）与 done 都是端点位；"-"（meta 不可解析）按 0
   local i=0 m
   case "$1" in
     "" | done) for m in $MILESTONES; do i=$((i+1)); done; echo "$i"; return ;;
@@ -178,7 +180,7 @@ node_index() { # 节点名 → 链条位次（0 起）；""（八键全齐）与
 }
 
 cmd_set_node() { # 看板手控入口：把当前节点钉为 <目标>——其前节点保留既有时间戳/缺则补点，其及其后删除；
-                 # done = 八节点全点亮 + status=done。绝对定位语义下 cr_passed/cr_group_created 可作为
+                 # done = 九节点全点亮 + status=done。绝对定位语义下 cr_passed/cr_group_created 可作为
                  # 位置的一部分被补点，单点 mark 的拒绝不适用于此（那防的是手滑，这里是人为定位）。
                  # stdout 的「方向：回退/推进」是 web.py 判定 WIP 自动化的契约字符串。
   local ctx="" target="" meta tmp old_cur old_idx tgt_idx dir
