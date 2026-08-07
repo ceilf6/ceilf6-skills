@@ -1,0 +1,81 @@
+harness-ceilf6-bot/bootstrap-prompt.md
+  s_829a6e2f9c0efe::t_47cdbb3b97aad2 15-17,19,21
+harness-ceilf6-bot/config.json
+  s_829a6e2f9c0efe::t_9dfade505e54e6 12,22-23
+harness-ceilf6-bot/runbook.md
+  s_829a6e2f9c0efe::t_9cd6b2de95edf1 11,20-41,79,90,93,95,102,105-111,124-130,132-134,142,154,158-161,163,165,168,171-173
+harness-ceilf6-bot/scripts/seed-settled.mjs
+  s_829a6e2f9c0efe::t_78b147781d2472 1-52
+harness-ceilf6-bot/src/commands.mjs
+  s_829a6e2f9c0efe::t_4dd98a0bdda518 1-52
+harness-ceilf6-bot/src/control.mjs
+  s_829a6e2f9c0efe::t_a429775331677d 1-60
+harness-ceilf6-bot/src/filter.mjs
+  s_829a6e2f9c0efe::t_24628b7ebd13cc 2,5-13
+harness-ceilf6-bot/src/lark.mjs
+  s_829a6e2f9c0efe::t_c0012c2b19b701 42-44
+harness-ceilf6-bot/src/listener.mjs
+  s_829a6e2f9c0efe::t_8d9d6a0634c9be 12-20,56-63,89-121,126-129,131-136,166-484,503-507,509-514,520-532,559-587,590-603
+harness-ceilf6-bot/src/normalize.mjs
+  s_829a6e2f9c0efe::t_15a1f72ec7fd62 9
+harness-ceilf6-bot/src/result.mjs
+  s_829a6e2f9c0efe::t_076660b104a311 2-4
+harness-ceilf6-bot/src/runner.mjs
+  s_829a6e2f9c0efe::t_62ee5a337b79ea 1-4,8-10,14-18,49-51,68,78-337,373-377
+harness-ceilf6-bot/src/session.mjs
+  s_829a6e2f9c0efe::t_f375718d053766 1-97
+harness-ceilf6-bot/src/state.mjs
+  s_829a6e2f9c0efe::t_3d243cc05abd51 1,12-13,19-22,72-122
+harness-ceilf6-bot/src/stranded.mjs
+  s_829a6e2f9c0efe::t_0be2bda9b7fd64 1-80
+harness-ceilf6-bot/tests/commands.test.mjs
+  s_829a6e2f9c0efe::t_ec214f98146eee 1-83
+harness-ceilf6-bot/tests/control.test.mjs
+  s_829a6e2f9c0efe::t_738807d5f68aa9 1-104
+harness-ceilf6-bot/tests/core.test.mjs
+  s_829a6e2f9c0efe::t_0cae2d74ea7a0a 74-95,173-204,220-248
+harness-ceilf6-bot/tests/lark.test.mjs
+  s_829a6e2f9c0efe::t_1238bbe30f638f 34,37
+harness-ceilf6-bot/tests/listener.test.mjs
+  s_829a6e2f9c0efe::t_aa557da6abad9a 3,5,22-34,36,42-49,62-63,65,70-77,80,85-89,92,96,100-137,220-1021,1095,1098-1126
+harness-ceilf6-bot/tests/runner.test.mjs
+  s_829a6e2f9c0efe::t_6cb90d2c4f6f18 7,22,27,33,36-42,93,96-127,131,135,140,142-145,162-176,285-799
+harness-ceilf6-bot/tests/seed-settled.test.mjs
+  s_829a6e2f9c0efe::t_c5eb22519c297b 1-79
+harness-ceilf6-bot/tests/session.test.mjs
+  s_829a6e2f9c0efe::t_9e5978385aa30c 1-220
+harness-ceilf6-bot/tests/stranded.test.mjs
+  s_829a6e2f9c0efe::t_5be1d76dc783ba 1-119
+harness-ceilf6-bot/tests/stubs/claude
+  s_829a6e2f9c0efe::t_262bb5bde2b9fd 1-96
+harness-ceilf6-bot/tests/stubs/lark-cli
+  s_829a6e2f9c0efe::t_5dbc614305c313 4-5,18-20,34
+harness-ceilf6/SKILL.md
+  s_829a6e2f9c0efe::t_e81fb22a0f2ce9 14,18,20-23,42
+harness-ceilf6/scripts/threads.sh
+  s_829a6e2f9c0efe::t_abd4132762fb06 259-260,282,298-304,377,384-387,392,400,402-404,406,524-574,592-594
+harness-ceilf6/scripts/web.py
+  s_829a6e2f9c0efe::t_06cb904485a851 4-7,10,16-17,25-47,66-68,71,122-172,174,176-181,190-202,205,252-261,294-325
+harness-ceilf6/tests/test-threads.sh
+  s_829a6e2f9c0efe::t_b5425306278283 368-455
+harness-ceilf6/tests/test-web.sh
+  s_829a6e2f9c0efe::t_eedbbcf056f7cc 27-31,33,41-48,73-139
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c1767e6906de13e3c81cc415f248c55f710b8933",
+  "prompts": {},
+  "sessions": {
+    "s_829a6e2f9c0efe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a3b90b322af1f0341",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
