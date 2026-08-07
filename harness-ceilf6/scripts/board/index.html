@@ -125,15 +125,16 @@
 // 此注释不得写占位行字面量——测试以「页面无该字面量」断言注入完成）。
 const BOARD = window.BOARD || {mode: 'local'};
 const PUB = BOARD.mode === 'public';
-const ORDER = ['plan_gate','dev_done','cr_passed','mr_created','human_cr_done','selftest_done','cr_group_created'];
+const ORDER = ['plan_gate','dev_done','cr_passed','mr_created','human_cr_done','selftest_done',
+               'cr_group_created','cr_requested'];
 const LABEL = {plan_gate:'计划门', dev_done:'开发', cr_passed:'机审CR', mr_created:'建MR',
-               human_cr_done:'人工CR', selftest_done:'自测', cr_group_created:'拉群求CR'};
-async function setNode(ctx, target){
+               human_cr_done:'人工CR', selftest_done:'自测', cr_group_created:'拉群', cr_requested:'求CR'};
+async function setNode(ctx, target, silent){
   const r = await fetch('/api/set-node', {method:'POST', body: JSON.stringify({ctx_dir: ctx, target: target})});
   const out = await r.json().catch(() => ({}));
   if (!r.ok) alert(out.error || '操作失败');
   else if (out.warning) alert(out.warning);
-  load();
+  if (!silent || !r.ok) load();
   return r.ok;
 }
 async function undone(ctx){
@@ -142,12 +143,23 @@ async function undone(ctx){
   if (!r.ok) alert(out.error || '操作失败');
   load();
 }
-async function crGroup(ctx){
-  const r = await fetch('/api/cr-group', {method:'POST', body: JSON.stringify({ctx_dir: ctx})});
+// 拉群与求CR 是两个动作：群一次建成长期有效，求CR 每次返工都要重发。silent 供自测完成后的
+// 串联使用——中途重渲染会让链路白闪三次，最后一步再刷。
+async function crStep(ctx, path, failMsg, silent){
+  const r = await fetch(path, {method:'POST', body: JSON.stringify({ctx_dir: ctx})});
   const out = await r.json().catch(() => ({}));
-  if (!r.ok) alert(out.error || '拉群失败');
+  if (!r.ok) alert(out.error || failMsg);
   else if (out.warning) alert(out.warning);
-  load();
+  if (!silent || !r.ok) load();
+  return r.ok;
+}
+const crGroup = (ctx, silent) => crStep(ctx, '/api/cr-group', '拉群失败', silent);
+const crRequest = (ctx, silent) => crStep(ctx, '/api/cr-request', '求CR 失败', silent);
+// 自测完成后一路走到求CR：任一步失败即停在那个节点上，免得群还没建就去发消息
+async function finishSelftest(ctx){
+  if (!await setNode(ctx, 'cr_group_created', true)) { load(); return; }
+  if (!await crGroup(ctx, true)) return;
+  await crRequest(ctx);
 }
 function chip(text, cls, tip, onclick){
   const s = document.createElement('span');
@@ -166,7 +178,7 @@ function renderNodes(t){
   const wrap = document.createElement('div');
   wrap.className = 'nodes';
   let cur = ORDER.indexOf(t.current);
-  if (t.current === '') cur = ORDER.length;   // 七键全齐：停在端点前（待合入）
+  if (t.current === '') cur = ORDER.length;   // 八键全齐：停在端点前（待合入）
   if (t.current === '-') cur = 0;             // 未知：按全未完成
   ORDER.forEach((n, j) => {
     let label = LABEL[n];
@@ -183,11 +195,14 @@ function renderNodes(t){
       cls = 'n-cur';
       if (!PUB){
         if (n === 'cr_group_created'){
-          tip = '点击拉群求CR（建 MR 群并发送求CR消息）';
+          tip = '点击建 MR 群并把 reviewer 拉进来（群已存在也照常补人）';
           act = () => crGroup(t.ctx_dir);
+        } else if (n === 'cr_requested'){
+          tip = '点击往群里发求CR消息';
+          act = () => crRequest(t.ctx_dir);
         } else if (n === 'selftest_done'){
-          tip = '点击标记自测完成，并自动拉群求CR';
-          act = async () => { if (await setNode(t.ctx_dir, next)) crGroup(t.ctx_dir); };
+          tip = '点击标记自测完成，随后自动拉群并求CR';
+          act = () => finishSelftest(t.ctx_dir);
         } else {
           tip = '点击标记「' + LABEL[n] + '」完成';
           act = () => setNode(t.ctx_dir, next);
@@ -196,7 +211,7 @@ function renderNodes(t){
     } else {
       cls = 'n-todo';
       if (!PUB){
-        if (n === 'cr_group_created'){
+        if (n === 'cr_group_created' || n === 'cr_requested'){
           tip = '请先完成自测'; act = () => alert('请先完成自测');
         } else {
           tip = '点击完成到「' + LABEL[n] + '」（含前序节点）';

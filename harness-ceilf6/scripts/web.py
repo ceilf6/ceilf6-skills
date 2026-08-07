@@ -8,7 +8,7 @@ threads.sh 保证。写一律用 --ctx-dir 直指：序号与关键词定位只�
 仅绑 127.0.0.1，无鉴权；/api/mark 只放行人工节点，/api/set-node 是看板手控的
 绝对定位入口（推进/回退，目标校验仍在 threads.sh）。
 看板页本体在 board/index.html（本地/对外共用单文件），本文件只注入 local 模式配置后返回。
-拉群求CR 与 WIP 走 cr-group.sh：bytedcli / lark-cli 一律不在本文件直调。
+拉群、求CR 与 WIP 走 cr-group.sh：bytedcli / lark-cli 一律不在本文件直调。
 运行态与停止不经 threads.sh：转调 bot 控制端口，bot 不在时看板照常渲染静态进度。
 """
 import argparse
@@ -23,8 +23,8 @@ THREADS_SH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "threads.s
 BOARD_HTML = os.path.join(os.path.dirname(os.path.abspath(__file__)), "board", "index.html")
 CR_GROUP_SH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cr-group.sh")
 MANUAL_NODES = ("human_cr_done", "selftest_done")
-SET_TARGETS = ("plan_gate", "dev_done", "cr_passed", "mr_created",
-               "human_cr_done", "selftest_done", "cr_group_created", "done")
+SET_TARGETS = ("plan_gate", "dev_done", "cr_passed", "mr_created", "human_cr_done",
+               "selftest_done", "cr_group_created", "cr_requested", "done")
 
 # bot 控制端口：看板的停止按钮转调它。bot 未运行时看板只是少了运行态信息，不是错误。
 BOT_CONTROL = os.environ.get("HARNESS_BOT_CONTROL", "http://127.0.0.1:7659")
@@ -126,7 +126,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             ctx, target = got
             if target not in SET_TARGETS:
-                self._send(400, json.dumps({"error": "target 须为七节点名或 done"}))
+                self._send(400, json.dumps({"error": "target 须为八节点名或 done"}))
                 return
             r = run_threads("set-node", "--ctx-dir", ctx, target)
             # 返工自动挂 WIP：方向标记是 threads.sh 的契约输出。wip 失败不改变节点写入结果，
@@ -166,20 +166,21 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(400, json.dumps({"error": "title 须为字符串"}))
                 return
             r = run_threads("retitle", "--ctx-dir", ctx, title)
-        elif self.path == "/api/cr-group":
+        elif self.path in ("/api/cr-group", "/api/cr-request"):
             got = self._post_body(("ctx_dir",))
             if got is None:
                 self._send(400, json.dumps({"error": "需要 JSON：{ctx_dir}"}))
                 return
             (ctx,) = got
-            r = run_cr_group("request", "--ctx-dir", ctx)
+            grouping = self.path == "/api/cr-group"
+            r = run_cr_group("group" if grouping else "request", "--ctx-dir", ctx)
             if r.returncode == 3:
-                self._send(400, json.dumps({"error": "无 MR，未拉群"}))
+                self._send(400, json.dumps({"error": "无 MR，未拉群" if grouping else "无 MR，未求CR"}))
             elif r.returncode != 0:
                 self._send(500, json.dumps({"error": (r.stderr or r.stdout).strip()}))
             else:
-                # 拉群是分级容错的：建群/拉人/发消息任一失败都只在 stderr 告警并继续，
-                # 退出码仍是 0。不带上 stderr 前端就不 alert，节点照绿，半成功被当成成功。
+                # 拉群是分级容错的：建群失败、拉人失败都只在 stderr 告警并继续，退出码仍是 0。
+                # 不带上 stderr 前端就不 alert，节点照绿，半成功被当成成功。
                 out = {"ok": True, "output": r.stdout}
                 if r.stderr.strip():
                     out["warning"] = r.stderr.strip()

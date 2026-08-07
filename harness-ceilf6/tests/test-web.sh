@@ -27,7 +27,7 @@ PORT=$(( (RANDOM % 2000) + 47000 ))
 # 固定指向无人监听的端口：本用例覆盖的是 bot 离线时的降级路径，不能受本机是否在跑 bot 影响
 export HARNESS_BOT_CONTROL="http://127.0.0.1:1"
 # 假 bytedcli / lark-cli 必须在 server 启动前进环境：server 继承本进程的 PATH 与 STUB_STATE，
-# 拉群求CR 用例靠它们零真实外部调用
+# 拉群与求CR 用例靠它们零真实外部调用
 export PATH="$HERE/stubs:$PATH"
 export STUB_STATE="$T/stub"; mkdir -p "$STUB_STATE"
 echo '[{"username":"dalao1"}]' > "$STUB_STATE/reviewers.json"
@@ -52,7 +52,8 @@ echo "$page" | grep -q '先停止该任务' && ok "禁用态提示指向停止" 
 # 运行态徽标的状态字面量与 listener 的 STATE_LABEL 同一套，缺一个就渲染成裸英文
 echo "$page" | grep -q '启动中' && ok "starting 状态标签在册" || bad "缺 starting 标签"
 echo "$page" | grep -q '已滞留' && ok "stranded 状态标签在册" || bad "缺 stranded 标签"
-echo "$page" | grep -q '拉群求CR' && ok "七键标签拉群求CR" || bad "缺拉群求CR 标签"
+echo "$page" | grep -Fq "cr_group_created:'拉群'" && ok "拉群标签在册" || bad "缺拉群标签"
+echo "$page" | grep -Fq "cr_requested:'求CR'" && ok "求CR 标签在册" || bad "缺求CR 标签"
 echo "$page" | grep -Fq "chip('完成'" && ok "端点完成在册" || bad "缺完成端点"
 echo "$page" | grep -Fq '<script>window.BOARD = {"mode": "local"}</script>' \
   && ok "local 配置已注入" || bad "local 配置未注入"
@@ -100,12 +101,12 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/set-node" \
   -d "{\"ctx_dir\": \"$CTX\", \"target\": \"done\"}")
 [ "$code" = 200 ] && ok "set-node done 200" || bad "set-node done: $code"
-jq -e '(.status == "done") and (.milestones | length == 7)' "$CTX/meta.json" >/dev/null \
-  && ok "done 落盘（status + 七键）" || bad "done 落盘: $(jq -c '{status, n: (.milestones|length)}' "$CTX/meta.json")"
+jq -e '(.status == "done") and (.milestones | length == 8)' "$CTX/meta.json" >/dev/null \
+  && ok "done 落盘（status + 八键）" || bad "done 落盘: $(jq -c '{status, n: (.milestones|length)}' "$CTX/meta.json")"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/undone" \
   -d "{\"ctx_dir\": \"$CTX\"}")
 [ "$code" = 200 ] && ok "undone 200" || bad "undone: $code"
-jq -e '.status == "awaiting_human" and (.milestones | length == 7)' "$CTX/meta.json" >/dev/null \
+jq -e '.status == "awaiting_human" and (.milestones | length == 8)' "$CTX/meta.json" >/dev/null \
   && ok "undone 落盘" || bad "undone 落盘: $(jq -c .status "$CTX/meta.json")"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/undone" -d '{}')
 [ "$code" = 400 ] && ok "undone 缺参 400" || bad "undone 缺参: $code"
@@ -143,7 +144,7 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/
 curl -s -o /dev/null -X POST "http://127.0.0.1:${PORT}/api/set-node" \
   -d "{\"ctx_dir\": \"$CTX\", \"target\": \"dev_done\"}"
 
-# 拉群求CR：无 MR 线程 → 400 且不 mark
+# 拉群与求CR：无 MR 线程 → 各自 400 且不 mark
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/cr-group" \
   -d "{\"ctx_dir\": \"$CTX\"}")
 [ "$code" = 400 ] && ok "无 MR 拉群 400" || bad "无 MR 拉群: $code"
@@ -152,15 +153,26 @@ curl -s -X POST "http://127.0.0.1:${PORT}/api/cr-group" -d "{\"ctx_dir\": \"$CTX
 jq -e '.milestones | has("cr_group_created") | not' "$CTX/meta.json" >/dev/null && ok "无 MR 未 mark" || bad "无 MR 误 mark"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/cr-group" -d '{}')
 [ "$code" = 400 ] && ok "cr-group 缺参 400" || bad "cr-group 缺参: $code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/cr-request" \
+  -d "{\"ctx_dir\": \"$CTX\"}")
+[ "$code" = 400 ] && ok "无 MR 求CR 400" || bad "无 MR 求CR: $code"
+curl -s -X POST "http://127.0.0.1:${PORT}/api/cr-request" -d "{\"ctx_dir\": \"$CTX\"}" \
+  | jq -e '.error == "无 MR，未求CR"' >/dev/null && ok "无 MR 求CR 错误文案" || bad "无 MR 求CR 错误文案"
 
-# 有 MR：拉群走 stub 全流，节点落盘
+# 有 MR：拉群只建群拉人（不发消息），求CR 才发消息并摘 WIP
 tmp=$(mktemp); jq '.mr_id = "8300100"' "$CTX/meta.json" > "$tmp" && mv "$tmp" "$CTX/meta.json"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/cr-group" \
   -d "{\"ctx_dir\": \"$CTX\"}")
 [ "$code" = 200 ] && ok "拉群 200" || bad "拉群: $code"
 jq -e '.milestones.cr_group_created' "$CTX/meta.json" >/dev/null && ok "拉群后节点落盘" || bad "拉群未落节点"
 grep -q 'chat create --mr-id 8300100' "$STUB_STATE/calls.log" && ok "建群被调" || bad "建群未调"
+grep -q 'messages-send' "$STUB_STATE/calls.log" && bad "拉群不该发消息" || ok "拉群不发消息"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/cr-request" \
+  -d "{\"ctx_dir\": \"$CTX\"}")
+[ "$code" = 200 ] && ok "求CR 200" || bad "求CR: $code"
+jq -e '.milestones.cr_requested' "$CTX/meta.json" >/dev/null && ok "求CR 后节点落盘" || bad "求CR 未落节点"
 grep -q '大佬们，有空辛苦 CR 一下' "$STUB_STATE/calls.log" && ok "求CR消息被发" || bad "消息未发"
+grep -q 'mr update --mr-id 8300100 --wip false' "$STUB_STATE/calls.log" && ok "求CR 摘 WIP" || bad "未摘 WIP"
 out=$(curl -s -X POST "http://127.0.0.1:${PORT}/api/cr-group" -d "{\"ctx_dir\": \"$CTX\"}")
 echo "$out" | jq -e '.ok == true and (has("warning") | not)' >/dev/null \
   && ok "拉群顺利时不带 warning" || bad "拉群顺利响应: $out"
