@@ -121,7 +121,7 @@ function renderNodes(t){
 }
 // 状态字面量与 bot 的在册视图（harness-ceilf6-bot/src/listener.mjs 的 STATE_LABEL）同一套，
 // 改动须两边同步；漏一个状态徽标就渲染成裸英文。
-const RUN_LABEL = {active:'运行中', waiting:'等回复', background:'后台运行中', starting:'启动中', queued:'排队中'};
+const RUN_LABEL = {active:'运行中', waiting:'等回复', background:'后台运行中', stranded:'已滞留', starting:'启动中', queued:'排队中'};
 let RUN = {tasks: [], offline: true};
 async function loadRunning(){
   try { RUN = await (await fetch('/api/running')).json(); }

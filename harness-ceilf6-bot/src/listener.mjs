@@ -11,6 +11,7 @@ import { Store } from './state.mjs';
 import { makeLark } from './lark.mjs';
 import { runTask, resumeTask, injectReply, killSession, killActiveChildren, taskSnapshot, stopLive } from './runner.mjs';
 import { parseDmReply, mergeFlags, parseControl, SUPPORTED_HINT } from './commands.mjs';
+import { scanStranded } from './stranded.mjs';
 import { startControlServer } from './control.mjs';
 
 // 控制端口出厂值：config 省略 controlPort 即用它（spec 与 runbook 以此为准）。
@@ -111,6 +112,7 @@ if (isMain) {
   };
   function settleTask(task) {
     return (out) => {
+      store.markSettled(task.messageId); // 已处置：滞留扫描不得再把它复活
       store.dropAwaiting(task.messageId);
       // skip 会把 worktree 与分支删掉，登记不注销的话后续回复会往已删目录写出无人读的文件。
       if (out?.verdict === 'skip') unregisterThread(store, task);
@@ -162,7 +164,10 @@ if (isMain) {
   }
 
   // 状态字面量与看板（harness-ceilf6/scripts/web.py 的 RUN_LABEL）同一套，改动须两边同步。
-  const STATE_LABEL = { active: '运行中', waiting: '等回复', background: '后台运行中', starting: '启动中', queued: '排队中' };
+  const STATE_LABEL = { active: '运行中', waiting: '等回复', background: '后台运行中', stranded: '已滞留', starting: '启动中', queued: '排队中' };
+  // awaiting 条目的 kind → 无进程时的展示状态。缺 kind 的旧条目按「等你回复」处理。
+  const KIND_STATE = { user: 'waiting', background: 'background', stranded: 'stranded' };
+  const ADVANCEABLE = new Set(['waiting', 'background', 'stranded']);
 
   // 尚无 worktree 的任务（队列中 / 启动中）用消息首行当标题：按 code point 截 20，
   // 字节截断会撕裂 CJK 与 emoji。
@@ -184,7 +189,7 @@ if (isMain) {
       seen.add(e.messageId);
       out.push({
         messageId: e.messageId, short: e.messageId.slice(-6), title: e.title ?? '', branch: e.branch ?? '',
-        worktree: e.worktree ?? '', state: e.kind === 'background' ? 'background' : 'waiting',
+        worktree: e.worktree ?? '', state: KIND_STATE[e.kind] ?? 'waiting',
         startedAt: e.askedAt ?? '', sessionId: e.sessionId ?? '', question: e.question ?? '',
       });
     }
@@ -227,7 +232,7 @@ if (isMain) {
   }
 
   // 排队中/启动中的行还没起进程，计时起点是消息入队时刻，量的是等待时长。
-  const ELAPSED_LABEL = { active: '已跑', waiting: '已跑', background: '已跑', starting: '已等', queued: '已等' };
+  const ELAPSED_LABEL = { active: '已跑', waiting: '已跑', background: '已跑', stranded: '已滞留', starting: '已等', queued: '已等' };
 
   // 后台运行中的任务全程不发私信，这一行进展是它唯一的对外出口。按 code point 截 60
   // （字节截断会撕裂 CJK 与 emoji）：够看清它在干什么，又不至于把列表撑成一屏。
@@ -293,6 +298,7 @@ if (isMain) {
     }
     if (t.state === 'queued') {
       if (mode === 'pause') return { ok: false, error: '排队中的任务尚未起进程，请改用 /stop。' };
+      store.markSettled(t.messageId);
       store.removeQueued(t.messageId);
       await lark.addReaction(t.messageId, config.reactions.stopped);
       await lark.sendDm(config.dmOpenId, `🛑 已出队（未起进程）：${t.title}`);
@@ -305,10 +311,11 @@ if (isMain) {
     if (!entry) return { ok: false, error: '该任务已结束。' };
     if (mode === 'pause') {
       // background 条目不吃自由文本回复（它在等自己布的后台工作，不是在等你），只能由 /resume 推进。
-      const how = entry.kind === 'background' ? '用 /resume 续跑。' : '回复即续跑。';
+      const how = (entry.kind ?? 'user') === 'user' ? '回复即续跑。' : '用 /resume 续跑。';
       await lark.sendDm(config.dmOpenId, `⏸ ${entry.title} 本就无进程在跑，等待态保留，${how}`);
       return { ok: true, was: 'waiting', title: entry.title, messageId: t.messageId };
     }
+    store.markSettled(t.messageId); // 人工叫停也是处置，重启后不得被滞留扫描复活
     store.dropAwaiting(t.messageId);
     await lark.addReaction(t.messageId, config.reactions.stopped);
     if (entry.statusRid) await lark.deleteReaction(t.messageId, entry.statusRid);
@@ -365,7 +372,9 @@ if (isMain) {
           : '未找到匹配的任务。',
       };
     }
-    if (t.state !== 'waiting' && t.state !== 'background') {
+    // 可推进 = 有登记、无进程在跑：等回复、后台运行中、已滞留三态都算。
+    // 运行中/启动中/排队中没有可注入的会话，明确拒绝而不是静默把正文丢掉。
+    if (!ADVANCEABLE.has(t.state)) {
       return { ok: false, error: `该任务是「${STATE_LABEL[t.state]}」，没有在等的轮次可推进。` };
     }
     const entry = store.findAwaiting(t.messageId);
@@ -430,7 +439,7 @@ if (isMain) {
       // 不该被它吃掉；让它入选还会把多任务时的直发一律逼成「请引用」，而从没 ask 过的那些
       // 根本没有可引的提问消息，就此不可达。要推进后台任务用 /resume。
       const all = store.listWaiting();
-      const waitingList = all.filter((e) => e.kind !== 'background');
+      const waitingList = all.filter((e) => (e.kind ?? 'user') === 'user');
       if (waitingList.length === 0) {
         const bg = all.length - waitingList.length;
         await lark.sendDm(config.dmOpenId, bg
@@ -547,6 +556,18 @@ if (isMain) {
     killActiveChildren();
     process.exit(1);
   });
+  // 启动即扫滞留：活跃轮次中被重启收割的任务在控制面三个来源里都不存在（活表随进程清空、
+  // 从没 ask 过所以没有 awaiting 条目、队列早已出队），群里那枚接单表情会永远挂着。
+  // 登记成 stranded 后 /tasks 看得见、/stop 收拾得掉、/resume 能凭 sessionId 无损续跑。
+  for (const info of scanStranded([...store.threads.values()],
+    { logsDir: config.logsDir, isSettled: (id) => store.isSettled(id), findAwaiting: (id) => store.findAwaiting(id) })) {
+    store.recordAsk(info.messageId, {
+      threadId: info.threadId, branch: info.branch, worktree: info.worktree, sessionId: info.sessionId,
+      question: `活跃轮次中被 bot 重启收割，现场与会话历史完好；/resume 即接着跑，/stop 作废。日志：${info.logPath}`,
+      title: info.branch, kind: 'stranded',
+    });
+    console.error(`[listener] 发现滞留任务 ${info.messageId.slice(-6)}（${info.branch}），已登记为可续跑`);
+  }
   startConsumer();
   pump(); // 处理重启前遗留队列
 }

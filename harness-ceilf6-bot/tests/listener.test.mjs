@@ -610,6 +610,50 @@ test('端到端（stub）：多任务在册时无参 /stop 不猜目标，回执
   rmFixture(root);
 });
 
+test('端到端（stub）：活跃轮次中被重启的任务，重启后自动登记为已滞留并可 /resume', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-strand-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const awaitingPath = join(root, 'state', 'awaiting.jsonl');
+  const threadsPath = join(root, 'state', 'threads.jsonl');
+  // 第一程：任务进入长轮次（hang，从不产出 RESULT）→ SIGTERM 模拟部署重启，
+  // 会话被收割在活跃轮次里：无 awaiting 条目、无终态记账，群里只留一枚 claimed。
+  const first = await runListener({
+    cfgPath, root, turns: 'hang',
+    events: [evLine({ message_id: 'om_strand_1111', message_type: 'post', thread_id: 'omt_strand' })],
+    until: () => existsSync(threadsPath) && readFileSync(threadsPath, 'utf8').includes('omt_strand')
+      && existsSync(join(root, 'logs', 'task-om_strand_1111.log')),
+  });
+  assert.ok(first.ok, '任务应已登记线程并落下任务日志');
+  // 文件压根没被写过也算「没有条目」：滞留任务从没 ask 过
+  const awaitingText = () => (existsSync(awaitingPath) ? readFileSync(awaitingPath, 'utf8') : '');
+  assert.equal(awaitingText().trim(), '', '收割时没有 awaiting 条目——这正是滞留的成因');
+  // 第二程（新进程 = bot 重启）：启动扫描应把它捞成 stranded，/tasks 看得见
+  const second = await runListener({
+    cfgPath, root, turns: 'pass',
+    events: [dmLine({ message_id: 'om_dm_strand1', content: '/tasks' })],
+    until: () => readFileSync(larkLogPath, 'utf8').includes('已滞留'),
+  });
+  assert.ok(second.ok, '重启后应自动登记滞留任务并在 /tasks 中显示');
+  assert.ok(awaitingText().includes('"kind":"stranded"'));
+  // 第三程：/resume 凭 sessionId 续跑到终态，条目随之清掉
+  const third = await runListener({
+    cfgPath, root, turns: 'pass',
+    events: [dmLine({ message_id: 'om_dm_strand2', content: '/resume' })],
+    until: () => awaitingText().trim() === '',
+  });
+  assert.ok(third.ok, '/resume 应能把滞留任务推到终态');
+  assert.ok(readFileSync(larkLogPath, 'utf8').includes('任务完成'));
+  // 第四程：终态已记账，重启不得再把它复活
+  const fourth = await runListener({
+    cfgPath, root, turns: 'pass',
+    events: [dmLine({ message_id: 'om_dm_strand3', content: '/tasks' })],
+    until: () => readFileSync(larkLogPath, 'utf8').includes('当前没有在册任务'),
+  });
+  assert.ok(fourth.ok, '已处置的任务不得被滞留扫描复活');
+  rmFixture(root);
+});
+
 test('端到端（stub）：working 态零私信；bot 重启后 /tasks 仍显示后台运行中', async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-bg-')));
   const cfgPath = writeConfig(root, makeRepo(root));

@@ -10,6 +10,7 @@ export class Store {
     this.queuePath = join(stateDir, 'queue.jsonl');
     this.threadsPath = join(stateDir, 'threads.jsonl');
     this.awaitingPath = join(stateDir, 'awaiting.jsonl');
+    this.settledPath = join(stateDir, 'settled.jsonl');
     this.processed = new Set(this.#readEntries(this.processedPath).map((e) => e.id));
     this.queue = this.#readEntries(this.queuePath);
     this.threads = new Map(this.#readEntries(this.threadsPath)
@@ -18,6 +19,7 @@ export class Store {
     this.awaiting = new Map(this.#readEntries(this.awaitingPath)
       .filter((e) => typeof e.messageId === 'string' && e.messageId)
       .map((e) => [e.messageId, e]));
+    this.settled = new Set(this.#readEntries(this.settledPath).map((e) => e.id));
   }
   #readEntries(p) {
     if (!existsSync(p)) return [];
@@ -101,6 +103,14 @@ export class Store {
   }
   // 在册全量：含已不在等待态的条目（会话仍活着，只是没在等回复）；只要等待中的用 listWaiting。
   listAwaiting() { return [...this.awaiting.values()]; }
+  // 终态记账（只增）：滞留扫描据此区分「进程被重启杀掉、还没人处置」与「已经处置过」。
+  // processed 不能替代它——那记的是「收下过这条消息」，入队即写，与是否跑完无关。
+  isSettled(id) { return this.settled.has(id); }
+  markSettled(id) {
+    if (this.settled.has(id)) return;
+    this.settled.add(id);
+    appendFileSync(this.settledPath, JSON.stringify({ id, at: new Date().toISOString() }) + '\n');
+  }
   listQueued() { return [...this.queue]; }
   // 控制面停止排队中任务：按 id 精确出队，避免 dequeue 的 FIFO 语义误伤队首。
   removeQueued(messageId) {
