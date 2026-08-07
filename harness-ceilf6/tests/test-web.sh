@@ -58,6 +58,20 @@ echo "$page" | grep -Fq '<script>window.BOARD = {"mode": "local"}</script>' \
   && ok "local 配置已注入" || bad "local 配置未注入"
 echo "$page" | grep -q 'BOARD_CONFIG' && bad "注入点残留" || ok "注入点已替换"
 echo "$page" | grep -q '排队中' && ok "queued 状态标签在册" || bad "缺 queued 标签"
+# 站点图标内联为 data URI：对外页在 CDN 后面、且发布只传两个文件，外链图标取不到
+echo "$page" | grep -Fq 'rel="icon" type="image/png" href="data:image/png;base64,' \
+  && ok "站点图标内联" || bad "缺内联站点图标"
+echo "$page" | grep -qE 'https?://' && bad "页面含外链 URL" || ok "零外链"
+# 展示口径紧跟标题：note 容器须排在 header 之后、线程列表之前
+hline=$(echo "$page" | grep -n '</header>' | cut -d: -f1)
+nline=$(echo "$page" | grep -n '<div id="note">' | cut -d: -f1)
+lline=$(echo "$page" | grep -n '<div id="list">' | cut -d: -f1)
+if [ -n "$hline" ] && [ -n "$nline" ] && [ -n "$lline" ] \
+   && [ "$nline" -gt "$hline" ] && [ "$nline" -lt "$lline" ]; then
+  ok "说明位于标题下方"
+else
+  bad "说明位置不对（header=${hline} note=${nline} list=${lline}）"
+fi
 out=$(curl -s "http://127.0.0.1:${PORT}/api/threads")
 echo "$out" | jq -e 'type == "array" and (.[0].node == "待人工CR")' >/dev/null && ok "api/threads 透传" || bad "api/threads: $out"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/mark" \
@@ -98,6 +112,33 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/set-node" \
   -d "{\"ctx_dir\": \"$CTX\", \"target\": \"delivered\"}")
 [ "$code" = 400 ] && ok "delivered 目标 400" || bad "delivered: $code"
+
+# 备注：写入 → 透传 → 清空即删除
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/note" \
+  -d "{\"ctx_dir\": \"$CTX\", \"note\": \"等 CI 修好再推\"}")
+[ "$code" = 200 ] && ok "api/note 200" || bad "api/note: $code"
+jq -e '.note == "等 CI 修好再推"' "$CTX/meta.json" >/dev/null && ok "note 落盘" || bad "note 未落盘"
+out=$(curl -s "http://127.0.0.1:${PORT}/api/threads")
+echo "$out" | jq -e '.[0].note == "等 CI 修好再推"' >/dev/null && ok "api/threads 透传 note" || bad "note 透传：$out"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/note" \
+  -d "{\"ctx_dir\": \"$CTX\", \"note\": \"   \"}")
+[ "$code" = 200 ] && ok "空白备注 200" || bad "空白备注: $code"
+jq -e 'has("note") | not' "$CTX/meta.json" >/dev/null && ok "空白备注即清除" || bad "备注未清除"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/note" -d '{}')
+[ "$code" = 400 ] && ok "note 缺参 400" || bad "note 缺参: $code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/note" \
+  -d "{\"ctx_dir\": \"$CTX\", \"note\": 42}")
+[ "$code" = 400 ] && ok "note 非字符串 400" || bad "note 非字符串: $code"
+
+# 改短题：登记表追加一行，列表读到新题
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/title" \
+  -d "{\"ctx_dir\": \"$CTX\", \"title\": \"看板改过的短题\"}")
+[ "$code" = 200 ] && ok "api/title 200" || bad "api/title: $code"
+out=$(curl -s "http://127.0.0.1:${PORT}/api/threads")
+echo "$out" | jq -e '.[0].title == "看板改过的短题"' >/dev/null && ok "短题已改" || bad "短题：$out"
+echo "$out" | jq -e 'length == 1' >/dev/null && ok "改短题不产生重复线程" || bad "线程数：$(echo "$out" | jq 'length')"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/title" -d '{}')
+[ "$code" = 400 ] && ok "title 缺参 400" || bad "title 缺参: $code"
 # 后续用例假定线程停在早期节点，回退复位
 curl -s -o /dev/null -X POST "http://127.0.0.1:${PORT}/api/set-node" \
   -d "{\"ctx_dir\": \"$CTX\", \"target\": \"dev_done\"}"

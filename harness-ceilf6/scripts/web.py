@@ -145,6 +145,27 @@ class Handler(BaseHTTPRequestHandler):
                 return
             (ctx,) = got
             r = run_threads("undone", "--ctx-dir", ctx)
+        elif self.path == "/api/note":
+            got = self._post_body(("ctx_dir", "note"))
+            if got is None:
+                self._send(400, json.dumps({"error": "需要 JSON：{ctx_dir, note}"}))
+                return
+            ctx, note = got
+            if not isinstance(note, str):
+                self._send(400, json.dumps({"error": "note 须为字符串"}))
+                return
+            # 空备注即清除：threads.sh note 省略文本参数时删掉该字段
+            r = run_threads("note", "--ctx-dir", ctx, *( [note] if note.strip() else [] ))
+        elif self.path == "/api/title":
+            got = self._post_body(("ctx_dir", "title"))
+            if got is None:
+                self._send(400, json.dumps({"error": "需要 JSON：{ctx_dir, title}"}))
+                return
+            ctx, title = got
+            if not isinstance(title, str):
+                self._send(400, json.dumps({"error": "title 须为字符串"}))
+                return
+            r = run_threads("retitle", "--ctx-dir", ctx, title)
         elif self.path == "/api/cr-group":
             got = self._post_body(("ctx_dir",))
             if got is None:

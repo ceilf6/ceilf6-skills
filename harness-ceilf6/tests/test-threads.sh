@@ -390,6 +390,46 @@ check_die "archive 缺 --ctx-dir" "用法" bash "$TH" archive
 check_die "archive 指向无 meta 的目录" "meta.json" bash "$TH" archive --ctx-dir "$T/nope"
 cleanup_env
 
+echo "== 列表顺序：老在前、新在后，序号随登记时间稳定 =="
+make_env
+make_repo repo-x1 feat/first developing
+(cd "$REPO" && bash "$TH" register --ctx-dir "$CTX" --title '先登记') >/dev/null
+CTX1="$CTX"
+sleep 1   # registered_at 精度到秒，同秒登记两条时顺序无从判定
+make_repo repo-x2 feat/second developing
+(cd "$REPO" && bash "$TH" register --ctx-dir "$CTX" --title '后登记') >/dev/null
+out=$(bash "$TH" list --json)
+echo "$out" | jq -e '[.[].title] == ["先登记","后登记"]' >/dev/null \
+  && ok "先登记的排在前" || bad "顺序：$(echo "$out" | jq -c '[.[].title]')"
+echo "$out" | jq -e '.[0].idx == 1 and .[1].idx == 2' >/dev/null \
+  && ok "序号随顺序递增" || bad "序号：$(echo "$out" | jq -c '[.[].idx]')"
+
+echo "== note：写入 / 清除 / list 透传 =="
+bash "$TH" note --ctx-dir "$CTX1" '等 CI 修好再推' >/dev/null
+jq -e '.note == "等 CI 修好再推"' "$CTX1/meta.json" >/dev/null && ok "note 落 meta" || bad "note 未落盘"
+out=$(bash "$TH" list --json)
+echo "$out" | jq -e '.[0].note == "等 CI 修好再推"' >/dev/null && ok "list --json 透传 note" || bad "note 透传：$out"
+echo "$out" | jq -e '.[1].note == ""' >/dev/null && ok "无备注线程 note 为空串" || bad "空 note：$(echo "$out" | jq -c '.[1].note')"
+bash "$TH" note --ctx-dir "$CTX1" >/dev/null
+jq -e 'has("note") | not' "$CTX1/meta.json" >/dev/null && ok "省略文本即清除 note" || bad "note 未清除"
+check_die "note 缺 --ctx-dir" "用法" bash "$TH" note
+check_die "note 指向无 meta 的目录" "meta.json" bash "$TH" note --ctx-dir "$T/nope" x
+
+echo "== retitle：追加登记行，位置与登记时间不变 =="
+before=$(bash "$TH" list --json | jq -r '.[0].idx')
+bash "$TH" retitle --ctx-dir "$CTX1" '改过的短题' >/dev/null
+out=$(bash "$TH" list --json)
+echo "$out" | jq -e '.[0].title == "改过的短题"' >/dev/null && ok "短题已改" || bad "短题：$(echo "$out" | jq -c '.[0].title')"
+echo "$out" | jq -e '[.[].title] == ["改过的短题","后登记"]' >/dev/null \
+  && ok "改名不改变排序位置" || bad "改名后顺序：$(echo "$out" | jq -c '[.[].title]')"
+[ "$(echo "$out" | jq -r '.[0].idx')" = "$before" ] && ok "序号不变" || bad "序号漂移"
+echo "$out" | jq -e 'length == 2' >/dev/null && ok "不产生重复线程" || bad "线程数：$(echo "$out" | jq 'length')"
+echo "$out" | jq -e --arg w "$T/repo-x1" '.[0].cwd == $w and (.[0].resume | test("repo-x1"))' >/dev/null \
+  && ok "其余登记字段沿用" || bad "字段丢失：$(echo "$out" | jq -c '.[0]|{cwd,resume}')"
+check_die "retitle 缺 --ctx-dir" "用法" bash "$TH" retitle
+check_die "retitle 未登记的 ctx" "登记表" bash "$TH" retitle --ctx-dir "$CTX1/.." x
+cleanup_env
+
 # ---- clean：删 worktree 与分支，主检出硬拒绝 ----
 make_env
 MAIN="$T/repo-main"; mkdir -p "$MAIN"

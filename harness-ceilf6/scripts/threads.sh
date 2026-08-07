@@ -225,6 +225,48 @@ cmd_undone() { # 撤销完成：status 回落 awaiting_human、milestones 不动
   progress_line "$meta"
 }
 
+cmd_note() { # 线程备注：看板与命令行共用的一段自由文本，存 meta.note；空文本即清除
+  local ctx="" text="" meta tmp
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --ctx-dir) ctx="${2:?--ctx-dir 需要值}"; shift 2 ;;
+      -*) usage ;;
+      *) if [ -z "$text" ]; then text="$1"; else usage; fi; shift ;;
+    esac
+  done
+  [ -n "$ctx" ] || die "用法：${0##*/} note --ctx-dir <路径> [文本]"
+  meta="$ctx/meta.json"
+  [ -f "$meta" ] || die "缺 meta.json：${ctx}"
+  tmp=$(mktemp)
+  if [ -z "$text" ]; then
+    jq 'del(.note)' "$meta" > "$tmp" || die "meta 不可解析：${meta}"
+    mv "$tmp" "$meta"
+    echo "harness-threads: 已清除备注"
+  else
+    jq --arg n "$text" '.note = $n' "$meta" > "$tmp" || die "meta 不可解析：${meta}"
+    mv "$tmp" "$meta"
+    echo "harness-threads: 已记备注"
+  fi
+}
+
+cmd_retitle() { # 改短题：登记表只增不改，追加一条除 title 外全部沿用的记录（读时 last-wins）。
+                # registered_at 必须沿用旧值——它是列表排序键，换成当下会让线程跳到末尾。
+  local ctx="" title="" last
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --ctx-dir) ctx="${2:?--ctx-dir 需要值}"; shift 2 ;;
+      -*) usage ;;
+      *) if [ -z "$title" ]; then title="$1"; else usage; fi; shift ;;
+    esac
+  done
+  [ -n "$ctx" ] || die "用法：${0##*/} retitle --ctx-dir <路径> <新短题>"
+  ctx=$(cd "$ctx" 2>/dev/null && pwd -P) || die "ctx 目录不存在：${ctx}"
+  last=$(rows | jq -c --arg c "$ctx" 'select(.ctx_dir == $c)' | tail -1)
+  [ -n "$last" ] || die "登记表里没有 ctx_dir=${ctx}"
+  printf '%s' "$last" | jq -c --arg t "$title" '.title = $t' >> "$REG"
+  echo "harness-threads: 短题已改为「${title}」"
+}
+
 cmd_mark() {
   local ctx="" a="" b="" node
   while [ $# -gt 0 ]; do
@@ -264,18 +306,22 @@ usage() {
   ht progress --ctx-dir <路径>      输出该线程节点进度图
   ht set-node --ctx-dir <路径> <节点|done>   看板手控：当前节点绝对定位（推进/回退）
   ht undone --ctx-dir <路径>             撤销完成（status 回落，milestones 不动）
+  ht note --ctx-dir <路径> [文本]        线程备注（省略文本即清除）
+  ht retitle --ctx-dir <路径> <新短题>   改列表与看板上的短题
   ht web [--port 7657]              本地节点看板（127.0.0.1）
 EOF
   exit 1
 }
 
-# ---- 读取：按 ctx_dir 取最后一条（last-wins），再按登记时间倒序 ----
+# ---- 读取：按 ctx_dir 取最后一条（last-wins），再按登记时间正序 ----
+# 正序（老在前、新在后）让序号随线程终身不变：新线程追加在末尾，既有线程的
+# 序号不因此漂移，`ht resume 3` 这类肌肉记忆才立得住。
 rows() {
   [ -f "$REG" ] || return 0
   # 逐行 fromjson? 跳过坏行；max_by(.key) 取文件中最后出现的那条
   jq -R 'fromjson? // empty' "$REG" | jq -c -s '
     to_entries | group_by(.value.ctx_dir) | map(max_by(.key).value)
-    | sort_by(.registered_at) | reverse | .[]'
+    | sort_by(.registered_at) | .[]'
 }
 
 # 输出分隔字段：idx ctx cwd branch sid title status cur_branch sess_ok node_label
@@ -375,7 +421,7 @@ cmd_register() {
 }
 
 cmd_list_json() { # <show_all>：web 看板数据源；文本列表与看板共用 enumerate 聚合
-  local show_all="$1" out idx ctx cwd branch sid title status cur sess nodecol ms prog curnode crr resume mrid arch
+  local show_all="$1" out idx ctx cwd branch sid title status cur sess nodecol ms prog curnode crr resume mrid arch note
   # 必须先命令替换捕获再喂 heredoc，不能 `done < <(enumerate ...)`：进程替换子 shell 里
   # errexit 存活，某行 meta.json 坏掉会让 enumerate 中途退出，数组静默截断却仍 rc=0。
   out=$(enumerate "$show_all")
@@ -390,6 +436,7 @@ cmd_list_json() { # <show_all>：web 看板数据源；文本列表与看板共�
       [ -n "$ms" ] || ms='{}'
       mrid=$(jq -c '.mr_id // null' "$ctx/meta.json" 2>/dev/null || echo null)
       [ -n "$mrid" ] || mrid=null
+      note=$(jq -r '.note // ""' "$ctx/meta.json" 2>/dev/null || echo "")
       [ -n "$arch" ] || arch=false
       prog=""; curnode="-"
       if [ -f "$ctx/meta.json" ]; then
@@ -400,11 +447,11 @@ cmd_list_json() { # <show_all>：web 看板数据源；文本列表与看板共�
       resume=$(wake_cmd "$cwd" "$branch" "$sid" "$cur")
       jq -cn --arg idx "$idx" --arg ctx "$ctx" --arg cwd "$cwd" --arg branch "$branch" --arg title "$title" \
         --arg status "$status" --arg node "$nodecol" --arg progress "$prog" --argjson ms "$ms" \
-        --arg current "$curnode" --arg crr "$crr" --arg resume "$resume" \
+        --arg current "$curnode" --arg crr "$crr" --arg resume "$resume" --arg note "$note" \
         --argjson mrid "$mrid" --argjson arch "$arch" \
         '{idx:($idx|tonumber), ctx_dir:$ctx, cwd:$cwd, branch:$branch, mr_id:$mrid, title:$title, status:$status,
           node:$node, current:$current, cr_rounds:($crr|tonumber), progress:$progress,
-          resume:$resume, archived:$arch, milestones:$ms}'
+          resume:$resume, archived:$arch, note:$note, milestones:$ms}'
     done <<EOF
 $out
 EOF
@@ -598,6 +645,8 @@ case "$cmd" in
   progress) cmd_progress "$@" ;;
   set-node) cmd_set_node "$@" ;;
   undone) cmd_undone "$@" ;;
+  note) cmd_note "$@" ;;
+  retitle) cmd_retitle "$@" ;;
   -h|--help) usage ;;
   *) echo "harness-threads: 未知子命令 ${cmd}" >&2; usage ;;
 esac

@@ -30,7 +30,9 @@ CTX="$REPO/.harness-ceilf6/feat__pub"; mkdir -p "$CTX"
 jq -n '{branch:"feat/pub", base_branch:"master", status:"awaiting_human", mr_id:"8300200",
         milestones:{plan_gate:"2026-08-07T00:00:00Z"}, archived:true}' > "$CTX/meta.json"
 SECRET_TITLE='内部需求短题勿外泄'
+SECRET_NOTE='备注写着同事名字与内部进度'
 (cd "$REPO" && bash "$TH" register --ctx-dir "$CTX" --title "$SECRET_TITLE") >/dev/null
+bash "$TH" note --ctx-dir "$CTX" "$SECRET_NOTE" >/dev/null
 echo '{"url":"https://bits.example/mr/8300200"}' > "$STUB_STATE/status.json"
 
 echo "== 缺 publish.json：拒绝执行 =="
@@ -68,6 +70,10 @@ echo "== 对外快照脱敏 =="
 jq -e '.threads[0] | has("title") | not' "$D" >/dev/null \
   && ok "threads 无 title 键" || bad "threads 含 title: $(jq -c '.threads[0]|keys' "$D")"
 grep -Fq "$SECRET_TITLE" "$D" && bad "快照泄漏需求短题" || ok "快照全文无需求短题"
+# 备注是本机看板上的自留笔记，与需求短题同一待遇
+jq -e '.threads[0] | has("note") | not' "$D" >/dev/null \
+  && ok "threads 无 note 键" || bad "threads 含 note: $(jq -c '.threads[0]|keys' "$D")"
+grep -Fq "$SECRET_NOTE" "$D" && bad "快照泄漏备注" || ok "快照全文无备注"
 jq -e '.running | keys == ["offline","tasks"]' "$D" >/dev/null \
   && ok "离线 running 只留 tasks/offline" || bad "running: $(jq -c '.running|keys' "$D")"
 

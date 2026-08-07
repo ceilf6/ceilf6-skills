@@ -46,12 +46,13 @@ done
 at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
-# 白名单式脱敏：对外只出页面真正消费的字段。threads 去掉需求短题（线程对外由 MR 链接标识）；
+# 白名单式脱敏：对外只出页面真正消费的字段。threads 去掉需求短题与备注（线程对外由 MR 链接
+# 标识，备注是本机看板上的自留笔记）；
 # running 逐条收窄到 worktree/state，把 bot 控制端口带来的指令正文、agent 提问、会话与消息
 # 标识挡在本机——离线降级的 {tasks:[],offline:true} 过同一收窄仍成立
 printf '%s' "$threads" | jq --slurpfile urls "$CACHE" --argjson running "$running" --arg at "$at" '
   {generated_at: $at,
-   threads: map(del(.title) + {mr_url: (if .mr_id == null then ""
+   threads: map(del(.title, .note) + {mr_url: (if .mr_id == null then ""
                               else ($urls[0][(.mr_id | tostring)] // "") end)}),
    running: {tasks: [($running.tasks // [])[] | select(type == "object") | {worktree, state}],
              offline: ($running.offline // false)}}' > "$out/data.json"
