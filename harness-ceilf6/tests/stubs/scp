@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# 假 scp：记录 argv，把源文件拷进 $STUB_STATE/dest 供断言；最后一个参数视为远端目的地。
+set -euo pipefail
+printf '%s\n' "$*" >> "${STUB_STATE:?scp stub 需要 STUB_STATE}/calls.log"
+mkdir -p "${STUB_STATE}/dest"
+args=("$@"); n=${#args[@]}
+i=0
+while [ "$i" -lt $((n - 1)) ]; do
+  a="${args[$i]}"
+  case "$a" in
+    -i|-o) i=$((i + 2)) ;;
+    -*) i=$((i + 1)) ;;
+    *) cp "$a" "${STUB_STATE}/dest/"; i=$((i + 1)) ;;
+  esac
+done

@@ -91,4 +91,4 @@ init / add / get 任一动作完成后，**不等用户指示，立即接续调�
 
 - `context/` 只增不改：勘误用新条目说明，不回改旧文件。
 - 本技能不写代码仓文件、不建 MR、不动 Meego 状态。
-- status 变更用 `ctx-dir.sh set-status <状态>`，不手改 meta.json 其他字段。例外两处：wiki_url 补写（`jq '.wiki_url="<url>"' "$CTX/meta.json" > "$CTX/tmp" && mv "$CTX/tmp" "$CTX/meta.json"`）；milestones 节点时间戳由 harness-ceilf6 的 `threads.sh mark` 写入。
+- status 变更用 `ctx-dir.sh set-status <状态>`，不手改 meta.json 其他字段。例外三处：wiki_url 补写（`jq '.wiki_url="<url>"' "$CTX/meta.json" > "$CTX/tmp" && mv "$CTX/tmp" "$CTX/meta.json"`）；milestones 节点时间戳由 harness-ceilf6 的 `threads.sh mark` 写入；harness-ceilf6 看板手控的 `threads.sh set-node` / `threads.sh undone` 在钉节点与撤销完成时连带改写 status。

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# 假 lark-cli：整行 argv 追加进 $STUB_STATE/calls.log；哨兵 msg_fail 存在 → 发送失败。
+set -euo pipefail
+printf '%s\n' "$*" >> "${STUB_STATE:?lark-cli stub 需要 STUB_STATE}/calls.log"
+[ -f "${STUB_STATE}/msg_fail" ] && exit 1
+echo '{}'

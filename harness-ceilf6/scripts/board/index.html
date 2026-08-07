@@ -1,0 +1,350 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>harness 线程看板</title>
+<!--BOARD_CONFIG-->
+<style>
+ /* 亮色为默认取值，暗色块覆盖同名变量；颜色一律走令牌，不在规则里写死色值 */
+ :root{
+   --paper:#F4F6F5; --card:#FFFFFF; --ink:#1B2823; --dim:#66736D; --line:#E1E6E3;
+   --rail:#C9D2CD; --done:#17934F; --now:#C7920B; --danger:#B3403A;
+   --hover:#EDF1EF; --shadow:rgba(16,22,20,.07); --halo:rgba(199,146,11,.30);
+   --ok-bg:#DDF0E5;   --ok-fg:#0E6B39;
+   --warn-bg:#F8EFD5; --warn-fg:#8A6407;
+   --info-bg:#E3E7F7; --info-fg:#3D4B8F;
+   --bad-bg:#F7E3E1;  --bad-fg:#8F2F2A;
+   --mute-bg:#ECEFED; --mute-fg:#66736D;
+   --sans:-apple-system,"SF Pro SC","PingFang SC",system-ui,sans-serif;
+   --mono:ui-monospace,"SF Mono",Menlo,monospace;
+ }
+ @media (prefers-color-scheme:dark){
+  :root{
+   --paper:#101614; --card:#171E1A; --ink:#E6EBE8; --dim:#8A968F; --line:#242D28;
+   --rail:#3A453F; --done:#2FAE68; --now:#D9A82A; --danger:#D06A63;
+   --hover:#202824; --shadow:rgba(0,0,0,.32); --halo:rgba(217,168,42,.26);
+   --ok-bg:#153020;   --ok-fg:#6FD79A;
+   --warn-bg:#33290F; --warn-fg:#E4C468;
+   --info-bg:#1D2340; --info-fg:#AAB6E8;
+   --bad-bg:#331F1D;  --bad-fg:#E4A099;
+   --mute-bg:#212925; --mute-fg:#8A968F;
+  }
+ }
+ *{box-sizing:border-box}
+ body{margin:24px auto;max-width:880px;padding:0 16px;background:var(--paper);color:var(--ink);
+      font:14px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+ header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 12px}
+ h1{margin:0;font-size:20px;font-weight:800;letter-spacing:-.01em}
+ #count{font:12px/1.6 var(--mono);color:var(--dim)}
+ #allwrap{display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--dim)}
+ #allwrap input{margin:0;accent-color:var(--done)}
+ .card{margin:14px 0;padding:16px 18px;background:var(--card);border:1px solid var(--line);border-radius:10px;
+       transition:transform .18s ease,box-shadow .18s ease}
+ .card:hover{transform:translateY(-1px);box-shadow:0 3px 12px var(--shadow)}
+ /* 卡片首行由 JS 组装：标题 + 运行/归档徽标 */
+ .card>div:first-child{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+ .card b{font-size:15px;font-weight:650;color:var(--ink)}
+ .card a{color:var(--ink);font-family:var(--mono);text-decoration:underline;text-underline-offset:3px}
+ .card a:hover{color:var(--done)}
+ .badge{padding:1px 8px;border:1px solid var(--line);border-radius:999px;white-space:nowrap;
+        font:11px/1.7 var(--mono);color:var(--dim)}
+ .badge.run{border-color:transparent;background:var(--mute-bg);color:var(--mute-fg)}
+ .badge.s-active{background:var(--ok-bg);color:var(--ok-fg)}
+ .badge.s-waiting{background:var(--warn-bg);color:var(--warn-fg)}
+ .badge.s-background{background:var(--info-bg);color:var(--info-fg)}
+ .badge.s-stranded{background:var(--bad-bg);color:var(--bad-fg)}
+ .badge.s-starting,.badge.s-queued{background:var(--mute-bg);color:var(--mute-fg)}
+ /* 站点轨道：七个站点 + 终点站，站点之间由可伸展的轨道段连接 */
+ .nodes{display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px 4px;margin:14px 0 2px}
+ .chip{display:flex;flex-direction:column;align-items:center;gap:6px;padding:2px 6px;
+       border:1px solid transparent;border-radius:8px;cursor:pointer;user-select:none;
+       font-size:12px;font-weight:500;line-height:1.35;color:var(--dim)}
+ .chip::before{content:"";box-sizing:border-box;flex:none;width:12px;height:12px;border-radius:50%}
+ .chip:hover{background:var(--hover);border-color:var(--line)}
+ .chip.ro,.chip.ro:hover{cursor:default;background:transparent;border-color:transparent}
+ .n-done{color:var(--ink)}
+ .n-done::before{border:1px solid var(--done);background:var(--done)}
+ .n-cur{color:var(--ink);font-weight:650}
+ .n-cur::before{border:2px solid var(--now);animation:halo 2.4s ease-out infinite}
+ .n-todo{color:var(--dim)}
+ .n-todo::before{border:1px solid var(--rail)}
+ /* 终点站画方块与中途圆站区分，亮/未亮沿用 n-done / n-todo 的着色 */
+ .n-final::before{border-radius:2px}
+ /* 只读态等价于对外快照：静态页不做持续动画 */
+ .chip.ro::before{animation:none}
+ @keyframes halo{
+  0%{box-shadow:0 0 0 0 var(--halo)}
+  70%{box-shadow:0 0 0 6px rgba(0,0,0,0)}
+  100%{box-shadow:0 0 0 0 rgba(0,0,0,0)}
+ }
+ /* 轨道段：文字视觉隐藏，2px 线段对齐站点圆心（1px 边框 + 2px 内距 + 6px 半径 = 9px） */
+ .arrow{flex:1 1 14px;min-width:14px;height:0;margin-top:8px;font-size:0;border-top:2px solid var(--rail)}
+ .a-done{border-top-color:var(--done)}
+ .a-todo{border-top-style:dashed}
+ .acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+ button{padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:transparent;
+        color:var(--ink);font:12px/1.5 var(--sans);cursor:pointer;flex-shrink:0}
+ button:hover:not(:disabled){background:var(--hover);border-color:var(--rail)}
+ button:disabled{opacity:.45;cursor:not-allowed}
+ button:focus-visible{outline:2px solid var(--now);outline-offset:2px}
+ .acts button:first-child{border-color:var(--done);color:var(--done)}
+ /* 线程已完成时首个按钮是「撤销完成」，不再是主行动，收回中性样式 */
+ .card:has(.n-final.n-done) .acts button:first-child{border-color:var(--line);color:var(--ink)}
+ .acts button:last-child{color:var(--danger)}
+ .cmd{display:flex;align-items:center;gap:8px;margin-top:12px}
+ /* min-width:0 让横向溢出关在 code 内部，不把整页撑出滚动条 */
+ .cmd code{flex:1;min-width:0;padding:4px 8px;background:var(--paper);border:1px solid var(--line);
+           border-radius:6px;font:12px/1.7 var(--mono);color:var(--ink);white-space:nowrap;overflow-x:auto}
+ #note{margin-top:24px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--dim)}
+ #note:empty{display:none}
+ @media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none !important;transition:none !important}
+  .card:hover{transform:none}
+ }
+ @media (max-width:520px){
+  body{margin:16px auto}
+  .card{padding:14px}
+ }
+</style>
+<header><h1>harness 线程看板</h1><span id="count"></span></header>
+<label id="allwrap"><input type="checkbox" id="all"> 显示已完成/已归档</label>
+<div id="list"></div>
+<div id="note"></div>
+<script>
+// 双模式单页：local = ht web 全交互；public = 对外静态快照（数据来自同目录 data.json，纯展示）。
+// 模式由发布方注入的 window.BOARD 决定（配置占位行在 head，web.py 与 publish-board.sh 各自替换；
+// 此注释不得写占位行字面量——测试以「页面无该字面量」断言注入完成）。
+const BOARD = window.BOARD || {mode: 'local'};
+const PUB = BOARD.mode === 'public';
+const ORDER = ['plan_gate','dev_done','cr_passed','mr_created','human_cr_done','selftest_done','cr_group_created'];
+const LABEL = {plan_gate:'计划门', dev_done:'开发', cr_passed:'机审CR', mr_created:'建MR',
+               human_cr_done:'人工CR', selftest_done:'自测', cr_group_created:'拉群求CR'};
+async function setNode(ctx, target){
+  const r = await fetch('/api/set-node', {method:'POST', body: JSON.stringify({ctx_dir: ctx, target: target})});
+  const out = await r.json().catch(() => ({}));
+  if (!r.ok) alert(out.error || '操作失败');
+  else if (out.warning) alert(out.warning);
+  load();
+  return r.ok;
+}
+async function undone(ctx){
+  const r = await fetch('/api/undone', {method:'POST', body: JSON.stringify({ctx_dir: ctx})});
+  const out = await r.json().catch(() => ({}));
+  if (!r.ok) alert(out.error || '操作失败');
+  load();
+}
+async function crGroup(ctx){
+  const r = await fetch('/api/cr-group', {method:'POST', body: JSON.stringify({ctx_dir: ctx})});
+  const out = await r.json().catch(() => ({}));
+  if (!r.ok) alert(out.error || '拉群失败');
+  else if (out.warning) alert(out.warning);
+  load();
+}
+function chip(text, cls, tip, onclick){
+  const s = document.createElement('span');
+  s.className = 'chip ' + cls + (onclick ? '' : ' ro');
+  s.textContent = text;
+  if (tip) s.title = tip;
+  if (onclick) s.onclick = onclick;
+  return s;
+}
+function arrow(cls){
+  const s = document.createElement('span');
+  s.className = 'arrow ' + cls; s.textContent = '→';
+  return s;
+}
+function renderNodes(t){
+  const wrap = document.createElement('div');
+  wrap.className = 'nodes';
+  let cur = ORDER.indexOf(t.current);
+  if (t.current === '') cur = ORDER.length;   // 七键全齐：停在端点前（待合入）
+  if (t.current === '-') cur = 0;             // 未知：按全未完成
+  ORDER.forEach((n, j) => {
+    let label = LABEL[n];
+    if (n === 'cr_passed' && t.cr_rounds > 0) label += '(' + t.cr_rounds + '轮)';
+    const next = j === ORDER.length - 1 ? 'done' : ORDER[j + 1];
+    let cls, tip = '', act = null;
+    if (j < cur){
+      cls = 'n-done';
+      if (!PUB){
+        tip = '点击回退到「' + LABEL[n] + '」（其后完成记录将清除；有 MR 时自动挂 WIP）';
+        act = () => { if (confirm('回退到「' + LABEL[n] + '」？该节点及之后的完成记录将清除')) setNode(t.ctx_dir, n); };
+      }
+    } else if (j === cur){
+      cls = 'n-cur';
+      if (!PUB){
+        if (n === 'cr_group_created'){
+          tip = '点击拉群求CR（建 MR 群并发送求CR消息）';
+          act = () => crGroup(t.ctx_dir);
+        } else if (n === 'selftest_done'){
+          tip = '点击标记自测完成，并自动拉群求CR';
+          act = async () => { if (await setNode(t.ctx_dir, next)) crGroup(t.ctx_dir); };
+        } else {
+          tip = '点击标记「' + LABEL[n] + '」完成';
+          act = () => setNode(t.ctx_dir, next);
+        }
+      }
+    } else {
+      cls = 'n-todo';
+      if (!PUB){
+        if (n === 'cr_group_created'){
+          tip = '请先完成自测'; act = () => alert('请先完成自测');
+        } else {
+          tip = '点击完成到「' + LABEL[n] + '」（含前序节点）';
+          act = () => setNode(t.ctx_dir, next);
+        }
+      }
+    }
+    wrap.appendChild(chip(label, cls, tip, act));
+    wrap.appendChild(arrow(j < cur ? 'a-done' : 'a-todo'));
+  });
+  const fin = t.status === 'done';
+  let ftip = '', fact = null;
+  if (!PUB){
+    ftip = fin ? '点击撤销完成（回到待合入）' : '点击标记完成（MR 已合入，全节点标绿）';
+    fact = fin ? () => { if (confirm('撤销完成？回到待合入状态')) undone(t.ctx_dir); }
+               : () => { if (confirm('标记完成？全部节点将点亮')) setNode(t.ctx_dir, 'done'); };
+  }
+  wrap.appendChild(chip('完成', 'n-final ' + (fin ? 'n-done' : 'n-todo'), ftip, fact));
+  return wrap;
+}
+// 状态字面量与 bot 的在册视图（harness-ceilf6-bot/src/listener.mjs 的 STATE_LABEL）同一套，
+// 改动须两边同步；漏一个状态徽标就渲染成裸英文。
+const RUN_LABEL = {active:'运行中', waiting:'等回复', background:'后台运行中', stranded:'已滞留', starting:'启动中', queued:'排队中'};
+let RUN = {tasks: [], offline: true};
+async function loadRunning(){
+  try { RUN = await (await fetch('/api/running')).json(); }
+  catch(e){ RUN = {tasks: [], offline: true}; }
+}
+function runningOf(t){ return (RUN.tasks || []).find(x => x.worktree && x.worktree === t.cwd); }
+async function post(path, body){
+  const r = await fetch(path, {method:'POST', body: JSON.stringify(body)});
+  const out = await r.json().catch(() => ({}));
+  if (!r.ok) alert(out.error || '操作失败');
+  load();
+}
+function actions(t){
+  const wrap = document.createElement('div');
+  wrap.className = 'acts';
+  const fin = document.createElement('button');
+  fin.textContent = t.status === 'done' ? '撤销完成' : '完成';
+  fin.onclick = t.status === 'done'
+    ? () => { if (confirm('撤销完成？回到待合入状态')) undone(t.ctx_dir); }
+    : () => { if (confirm('标记完成？全部节点将点亮')) setNode(t.ctx_dir, 'done'); };
+  wrap.appendChild(fin);
+  const r = runningOf(t);
+  const stop = document.createElement('button');
+  stop.textContent = '停止';
+  if (r){
+    stop.onclick = () => { if (confirm('停止「' + (t.title || t.branch) + '」？现场保留，可手工续跑')) post('/api/stop', {cwd: t.cwd}); };
+  } else {
+    stop.disabled = true;
+    stop.title = RUN.offline ? 'bot 未运行' : '该线程当前没有在跑的任务';
+  }
+  wrap.appendChild(stop);
+  const arch = document.createElement('button');
+  arch.textContent = t.archived ? '取消归档' : '归档';
+  arch.onclick = () => post('/api/archive', {ctx_dir: t.ctx_dir, archived: !t.archived});
+  wrap.appendChild(arch);
+  const clean = document.createElement('button');
+  clean.textContent = '清理';
+  if (r){
+    // 清理是对着整棵工作树 rm -rf。任务还在里面跑时按下去 = 无人值守 claude 未提交的工作全没，
+    // 且两道 confirm 只讲删除范围、讲不出「现在有人在用」——所以这里直接不给按。
+    clean.disabled = true;
+    clean.title = '有任务正在这棵工作树里跑，请先停止该任务';
+  } else {
+    clean.onclick = () => {
+      if (!confirm('清理「' + (t.title || t.branch) + '」？将删除 worktree 目录与分支，不可撤销')) return;
+      // 登记的 cwd 可能落在工作树的子目录里，而 threads.sh 删的是整棵工作树：
+      // 措辞不敢宣称精确路径，否则这道闸给的是比实际删除范围更窄的承诺
+      if (!confirm('再确认一次：删除 ' + t.cwd + ' 所在的整棵工作树，以及分支 ' + t.branch)) return;
+      post('/api/clean', {ctx_dir: t.ctx_dir});
+    };
+  }
+  wrap.appendChild(clean);
+  return wrap;
+}
+function titleOf(t){
+  const b = document.createElement('b');
+  if (!PUB){ b.textContent = t.title || t.branch; return b; }
+  // 对外以 MR 链接为标识（打开需公司内网），不含需求描述；无 MR 降级分支名
+  if (t.mr_url){
+    const a = document.createElement('a');
+    a.href = t.mr_url; a.target = '_blank'; a.rel = 'noreferrer';
+    a.textContent = 'MR !' + t.mr_id;
+    b.appendChild(a);
+  } else if (t.mr_id){
+    b.textContent = 'MR !' + t.mr_id + ' · ' + t.branch;
+  } else {
+    b.textContent = t.branch;
+  }
+  return b;
+}
+function render(rows){
+  const el = document.getElementById('list');
+  el.innerHTML = '';
+  for(const t of rows){
+    const d = document.createElement('div');
+    d.className = 'card';
+    const h = document.createElement('div');
+    h.appendChild(titleOf(t));
+    const r = runningOf(t);
+    if (r){
+      const badge = document.createElement('span');
+      badge.className = 'badge run s-' + r.state;
+      badge.textContent = RUN_LABEL[r.state] || r.state;
+      h.appendChild(badge);
+    }
+    if (t.archived){
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = '已归档';
+      h.appendChild(badge);
+    }
+    d.appendChild(h);
+    d.appendChild(renderNodes(t));
+    if (!PUB) d.appendChild(actions(t));
+    if (t.resume){
+      const c = document.createElement('div'); c.className = 'cmd';
+      const code = document.createElement('code'); code.textContent = t.resume;
+      const cp = document.createElement('button'); cp.textContent = '复制启动命令';
+      cp.onclick = () => { navigator.clipboard.writeText(t.resume).then(() => {
+        cp.textContent = '已复制'; setTimeout(() => { cp.textContent = '复制启动命令'; }, 1500);
+      }); };
+      c.appendChild(code); c.appendChild(cp);
+      d.appendChild(c);
+    }
+    el.appendChild(d);
+  }
+  document.getElementById('count').textContent = rows.length + ' 条线程';
+}
+async function load(){
+  let rows;
+  if (PUB){
+    let d;
+    try { d = await (await fetch('data.json', {cache: 'no-store'})).json(); } catch(e){ return; }
+    if (!d || !Array.isArray(d.threads)) return;
+    RUN = d.running || {tasks: [], offline: true};
+    rows = d.threads;
+    document.getElementById('note').textContent =
+      '对外展示以 MR 链接标识线程（打开需公司内网），不含需求描述——内部信息由公司系统的访问控制兜底。'
+      + ' 数据截至 ' + (d.generated_at || BOARD.generated_at || '未知');
+    render(rows);
+    return;
+  }
+  await loadRunning();
+  const all = document.getElementById('all').checked ? '?all=1' : '';
+  // 取不到列表就留着上一次的渲染：轮询会自己接上，清空反而只剩白屏。
+  // 后端出错时回的是 {error} 这种合法 JSON，故解析成功也要认一次数组。
+  try { rows = await (await fetch('/api/threads' + all)).json(); }
+  catch(e){ return; }
+  if (!Array.isArray(rows)) return;
+  render(rows);
+}
+if (PUB){
+  document.getElementById('allwrap').style.display = 'none';
+} else {
+  document.getElementById('all').onchange = load;
+}
+load();
+setInterval(load, PUB ? 60000 : 3000);
+</script>

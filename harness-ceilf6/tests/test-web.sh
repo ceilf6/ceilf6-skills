@@ -26,6 +26,12 @@ jq -n '{branch:"feat/web", base_branch:"master", status:"awaiting_human", mr_id:
 PORT=$(( (RANDOM % 2000) + 47000 ))
 # 固定指向无人监听的端口：本用例覆盖的是 bot 离线时的降级路径，不能受本机是否在跑 bot 影响
 export HARNESS_BOT_CONTROL="http://127.0.0.1:1"
+# 假 bytedcli / lark-cli 必须在 server 启动前进环境：server 继承本进程的 PATH 与 STUB_STATE，
+# 拉群求CR 用例靠它们零真实外部调用
+export PATH="$HERE/stubs:$PATH"
+export STUB_STATE="$T/stub"; mkdir -p "$STUB_STATE"
+echo '[{"username":"dalao1"}]' > "$STUB_STATE/reviewers.json"
+echo '{"data":{"chat_id":"oc_web_1"}}' > "$STUB_STATE/create.json"
 # 改 HOME 是为了让 web 子命令走「同目录 web.py」的回退分支：否则它优先加载已安装技能里的副本，
 # 测的就不是本仓库的这份代码了
 HOME="$T" bash "$TH" web --port "$PORT" >/dev/null 2>&1 &
@@ -46,6 +52,12 @@ echo "$page" | grep -q '先停止该任务' && ok "禁用态提示指向停止" 
 # 运行态徽标的状态字面量与 listener 的 STATE_LABEL 同一套，缺一个就渲染成裸英文
 echo "$page" | grep -q '启动中' && ok "starting 状态标签在册" || bad "缺 starting 标签"
 echo "$page" | grep -q '已滞留' && ok "stranded 状态标签在册" || bad "缺 stranded 标签"
+echo "$page" | grep -q '拉群求CR' && ok "七键标签拉群求CR" || bad "缺拉群求CR 标签"
+echo "$page" | grep -Fq "chip('完成'" && ok "端点完成在册" || bad "缺完成端点"
+echo "$page" | grep -Fq '<script>window.BOARD = {"mode": "local"}</script>' \
+  && ok "local 配置已注入" || bad "local 配置未注入"
+echo "$page" | grep -q 'BOARD_CONFIG' && bad "注入点残留" || ok "注入点已替换"
+echo "$page" | grep -q '排队中' && ok "queued 状态标签在册" || bad "缺 queued 标签"
 out=$(curl -s "http://127.0.0.1:${PORT}/api/threads")
 echo "$out" | jq -e 'type == "array" and (.[0].node == "待人工CR")' >/dev/null && ok "api/threads 透传" || bad "api/threads: $out"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/mark" \
@@ -61,6 +73,8 @@ code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/nope")
 out=$(curl -s "http://127.0.0.1:${PORT}/api/threads")
 echo "$out" | jq -e '.[0] | has("current") and has("cr_rounds") and has("resume")' >/dev/null \
   && ok "看板字段 current/cr_rounds/resume" || bad "看板字段: $out"
+echo "$out" | jq -e '.[0] | has("mr_id") and has("status")' >/dev/null \
+  && ok "看板字段 mr_id/status" || bad "缺 mr_id/status: $out"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/set-node" \
   -d "{\"ctx_dir\": \"$CTX\", \"target\": \"dev_done\"}")
 [ "$code" = 200 ] && ok "set-node 接口 200" || bad "set-node 接口: $code"
@@ -69,6 +83,86 @@ jq -e '.milestones | has("plan_gate") and (has("dev_done") | not)' "$CTX/meta.js
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/set-node" \
   -d "{\"ctx_dir\": \"$CTX\", \"target\": \"bogus\"}")
 [ "$code" = 400 ] && ok "set-node 非法目标 400" || bad "set-node 非法目标: $code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/set-node" \
+  -d "{\"ctx_dir\": \"$CTX\", \"target\": \"done\"}")
+[ "$code" = 200 ] && ok "set-node done 200" || bad "set-node done: $code"
+jq -e '(.status == "done") and (.milestones | length == 7)' "$CTX/meta.json" >/dev/null \
+  && ok "done 落盘（status + 七键）" || bad "done 落盘: $(jq -c '{status, n: (.milestones|length)}' "$CTX/meta.json")"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/undone" \
+  -d "{\"ctx_dir\": \"$CTX\"}")
+[ "$code" = 200 ] && ok "undone 200" || bad "undone: $code"
+jq -e '.status == "awaiting_human" and (.milestones | length == 7)' "$CTX/meta.json" >/dev/null \
+  && ok "undone 落盘" || bad "undone 落盘: $(jq -c .status "$CTX/meta.json")"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/undone" -d '{}')
+[ "$code" = 400 ] && ok "undone 缺参 400" || bad "undone 缺参: $code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/set-node" \
+  -d "{\"ctx_dir\": \"$CTX\", \"target\": \"delivered\"}")
+[ "$code" = 400 ] && ok "delivered 目标 400" || bad "delivered: $code"
+# 后续用例假定线程停在早期节点，回退复位
+curl -s -o /dev/null -X POST "http://127.0.0.1:${PORT}/api/set-node" \
+  -d "{\"ctx_dir\": \"$CTX\", \"target\": \"dev_done\"}"
+
+# 拉群求CR：无 MR 线程 → 400 且不 mark
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/cr-group" \
+  -d "{\"ctx_dir\": \"$CTX\"}")
+[ "$code" = 400 ] && ok "无 MR 拉群 400" || bad "无 MR 拉群: $code"
+curl -s -X POST "http://127.0.0.1:${PORT}/api/cr-group" -d "{\"ctx_dir\": \"$CTX\"}" \
+  | jq -e '.error == "无 MR，未拉群"' >/dev/null && ok "无 MR 错误文案" || bad "无 MR 错误文案"
+jq -e '.milestones | has("cr_group_created") | not' "$CTX/meta.json" >/dev/null && ok "无 MR 未 mark" || bad "无 MR 误 mark"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/cr-group" -d '{}')
+[ "$code" = 400 ] && ok "cr-group 缺参 400" || bad "cr-group 缺参: $code"
+
+# 有 MR：拉群走 stub 全流，节点落盘
+tmp=$(mktemp); jq '.mr_id = "8300100"' "$CTX/meta.json" > "$tmp" && mv "$tmp" "$CTX/meta.json"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/api/cr-group" \
+  -d "{\"ctx_dir\": \"$CTX\"}")
+[ "$code" = 200 ] && ok "拉群 200" || bad "拉群: $code"
+jq -e '.milestones.cr_group_created' "$CTX/meta.json" >/dev/null && ok "拉群后节点落盘" || bad "拉群未落节点"
+grep -q 'chat create --mr-id 8300100' "$STUB_STATE/calls.log" && ok "建群被调" || bad "建群未调"
+grep -q '大佬们，有空辛苦 CR 一下' "$STUB_STATE/calls.log" && ok "求CR消息被发" || bad "消息未发"
+out=$(curl -s -X POST "http://127.0.0.1:${PORT}/api/cr-group" -d "{\"ctx_dir\": \"$CTX\"}")
+echo "$out" | jq -e '.ok == true and (has("warning") | not)' >/dev/null \
+  && ok "拉群顺利时不带 warning" || bad "拉群顺利响应: $out"
+
+# 拉群「半成功」：cr-group.sh 逐个告警走 stderr，200 响应必须带上——否则前端不 alert，
+# 节点照绿，用户以为已经喊到人
+touch "$STUB_STATE/add_fail"
+out=$(curl -s -X POST "http://127.0.0.1:${PORT}/api/cr-group" -d "{\"ctx_dir\": \"$CTX\"}")
+rm -f "$STUB_STATE/add_fail"
+echo "$out" | jq -e '.ok == true and (.warning | contains("拉人失败"))' >/dev/null \
+  && ok "拉人失败带 warning" || bad "拉人失败响应: $out"
+
+# 回退（有 MR）→ 自动挂 WIP。先推到后段，dev_done 才构成回退（cr_group_created 之后当前节点仍是 dev_done）
+curl -s -o /dev/null -X POST "http://127.0.0.1:${PORT}/api/set-node" \
+  -d "{\"ctx_dir\": \"$CTX\", \"target\": \"human_cr_done\"}"
+: > "$STUB_STATE/calls.log"
+out=$(curl -s -X POST "http://127.0.0.1:${PORT}/api/set-node" \
+  -d "{\"ctx_dir\": \"$CTX\", \"target\": \"dev_done\"}")
+grep -q 'mr update --mr-id 8300100 --wip' "$STUB_STATE/calls.log" && ok "回退触发 WIP" || bad "回退未触发 WIP"
+echo "$out" | jq -e '.ok == true' >/dev/null && ok "回退响应 ok" || bad "回退响应: $out"
+echo "$out" | jq -e 'has("warning") | not' >/dev/null && ok "WIP 成功不报警" || bad "WIP 成功误报警: $out"
+
+# 推进不触发 WIP
+: > "$STUB_STATE/calls.log"
+curl -s -o /dev/null -X POST "http://127.0.0.1:${PORT}/api/set-node" \
+  -d "{\"ctx_dir\": \"$CTX\", \"target\": \"cr_passed\"}"
+grep -q 'wip' "$STUB_STATE/calls.log" && bad "推进误触发 WIP" || ok "推进不触发 WIP"
+
+# WIP 失败不撤销节点回退，只以 warning 告知（MR 已合入时挂 WIP 本就该失败）
+touch "$STUB_STATE/update_fail"
+out=$(curl -s -X POST "http://127.0.0.1:${PORT}/api/set-node" \
+  -d "{\"ctx_dir\": \"$CTX\", \"target\": \"dev_done\"}")
+rm -f "$STUB_STATE/update_fail"
+echo "$out" | jq -e '.ok == true and (.warning | contains("WIP 标记失败"))' >/dev/null \
+  && ok "WIP 失败带 warning" || bad "WIP 失败响应: $out"
+jq -e '.milestones | has("plan_gate") and (has("dev_done") | not)' "$CTX/meta.json" >/dev/null \
+  && ok "WIP 失败仍保留节点回退" || bad "WIP 失败回滚了节点: $(jq -c .milestones "$CTX/meta.json")"
+
+# 无 MR 回退：wip no-op，响应无 warning
+tmp=$(mktemp); jq '.mr_id = null' "$CTX/meta.json" > "$tmp" && mv "$tmp" "$CTX/meta.json"
+out=$(curl -s -X POST "http://127.0.0.1:${PORT}/api/set-node" \
+  -d "{\"ctx_dir\": \"$CTX\", \"target\": \"plan_gate\"}")
+echo "$out" | jq -e 'has("warning") | not' >/dev/null && ok "无 MR 回退无警告" || bad "无 MR 回退: $out"
 
 # bot 未运行时 /api/running 降级为空列表 + offline，看板照常渲染
 out=$(curl -s "http://127.0.0.1:${PORT}/api/running")

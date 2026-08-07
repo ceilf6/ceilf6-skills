@@ -20,8 +20,11 @@ SEP=$'\037'
 PROJ="${CLAUDE_PROJECTS_DIR:-$HOME/.claude/projects}"
 
 # ---- 里程碑：meta.milestones.<节点>=完成时间戳，缺键=未完成，顺序即交付管道 ----
-# cr_passed 只由 cr-round.sh 内联写；其余节点全部经 mark 单点写入，三条确认渠道共用。
-MILESTONES="plan_gate dev_done cr_passed mr_created human_cr_done selftest_done"
+# cr_passed 由 cr-round.sh 内联写入，是唯一绕开 mark 的节点；其余节点（含 cr-group.sh
+# 拉群成功后写的 cr_group_created）都经 mark 单点写入，三条确认渠道共用。看板手控的 set-node
+# 是另一条写入路径：它按目标位置整体重写 milestones，不走单点 mark。端点「完成」不是里程碑键：
+# 它的亮灯条件是 meta.status == done（七键全齐只是「待合入」——CR 与 MR 合入仍在进行）。
+MILESTONES="plan_gate dev_done cr_passed mr_created human_cr_done selftest_done cr_group_created"
 
 milestone_label() { # 节点内部名 → 进度图段名
   case "$1" in
@@ -31,10 +34,11 @@ milestone_label() { # 节点内部名 → 进度图段名
     mr_created) echo "建MR" ;;
     human_cr_done) echo "人工CR" ;;
     selftest_done) echo "自测" ;;
+    cr_group_created) echo "拉群求CR" ;;
   esac
 }
 
-node_label() { # 当前节点内部名 → 列表「节点」列文案；空串=六节点全齐
+node_label() { # <当前节点> <status> → 列表「节点」列文案；七键全齐后由 status 决定待合入/已完成
   case "$1" in
     plan_gate) echo "规划中" ;;
     dev_done) echo "开发中" ;;
@@ -42,7 +46,8 @@ node_label() { # 当前节点内部名 → 列表「节点」列文案；空串=
     mr_created) echo "待建MR" ;;
     human_cr_done) echo "待人工CR" ;;
     selftest_done) echo "待自测" ;;
-    "") echo "可交付" ;;
+    cr_group_created) echo "待拉群求CR" ;;
+    "") if [ "${2:-}" = done ]; then echo "已完成"; else echo "待合入"; fi ;;
   esac
 }
 
@@ -68,7 +73,7 @@ current_node() { # <meta.json> → 第一个缺键节点名；全齐输出空串
 }
 
 progress_line() { # <meta.json> → 一行进度图；机审CR 段带已有轮数
-  local meta="$1" ctx cur m sym label parts="" reached=0 rounds
+  local meta="$1" ctx cur m sym label parts="" reached=0 rounds st
   ctx=$(dirname "$meta")
   cur=$(current_node "$meta")
   [ "$cur" = "-" ] && cur="plan_gate"   # meta 不可解析 / status 不识别时按全未完成渲染
@@ -85,7 +90,8 @@ progress_line() { # <meta.json> → 一行进度图；机审CR 段带已有轮�
     parts="${parts}${sym} ${label}"
     [ "$m" = "$cur" ] && parts="${parts}（当前）"
   done
-  if [ -z "$cur" ]; then parts="${parts} → ● 可交付"; else parts="${parts} → ○ 可交付"; fi
+  st=$(jq -r '.status // ""' "$meta" 2>/dev/null || echo "")
+  if [ "$st" = done ]; then parts="${parts} → ● 完成"; else parts="${parts} → ○ 完成"; fi
   printf '%s\n' "$parts"
 }
 
@@ -156,10 +162,24 @@ cmd_progress() {
   progress_line "$ctx/meta.json"
 }
 
+node_index() { # 节点名 → 链条位次（0 起）；""（七键全齐）与 done 都是端点位；"-"（meta 不可解析）按 0
+  local i=0 m
+  case "$1" in
+    "" | done) for m in $MILESTONES; do i=$((i+1)); done; echo "$i"; return ;;
+    -) echo 0; return ;;
+  esac
+  for m in $MILESTONES; do
+    [ "$m" = "$1" ] && { echo "$i"; return; }
+    i=$((i+1))
+  done
+  echo 0
+}
+
 cmd_set_node() { # 看板手控入口：把当前节点钉为 <目标>——其前节点保留既有时间戳/缺则补点，其及其后删除；
-                 # delivered = 六节点全点亮。绝对定位语义下 cr_passed 可作为位置的一部分被补点，
-                 # 单点 mark 对 cr_passed 的拒绝不适用于此（那防的是手滑，这里是人为定位）。
-  local ctx="" target="" meta tmp
+                 # done = 七节点全点亮 + status=done。绝对定位语义下 cr_passed/cr_group_created 可作为
+                 # 位置的一部分被补点，单点 mark 的拒绝不适用于此（那防的是手滑，这里是人为定位）。
+                 # stdout 的「方向：回退/推进」是 web.py 判定 WIP 自动化的契约字符串。
+  local ctx="" target="" meta tmp old_cur old_idx tgt_idx dir
   while [ $# -gt 0 ]; do
     case "$1" in
       --ctx-dir) ctx="${2:?--ctx-dir 需要值}"; shift 2 ;;
@@ -167,19 +187,41 @@ cmd_set_node() { # 看板手控入口：把当前节点钉为 <目标>——其�
       *) if [ -z "$target" ]; then target="$1"; else usage; fi; shift ;;
     esac
   done
-  if [ -z "$ctx" ] || [ -z "$target" ]; then die "用法：set-node --ctx-dir <路径> <节点|delivered>"; fi
+  if [ -z "$ctx" ] || [ -z "$target" ]; then die "用法：set-node --ctx-dir <路径> <节点|done>"; fi
   meta="$ctx/meta.json"
   [ -f "$meta" ] || die "缺 meta.json：${ctx}"
-  case " $MILESTONES delivered " in *" $target "*) ;; *) die "未知目标：${target}（可用：${MILESTONES} delivered）" ;; esac
+  case " $MILESTONES done " in *" $target "*) ;; *) die "未知目标：${target}（可用：${MILESTONES} done）" ;; esac
+  old_cur=$(current_node "$meta")
+  old_idx=$(node_index "$old_cur")
+  tgt_idx=$(node_index "$target")
   tmp=$(mktemp)
   jq --arg order "$MILESTONES" --arg target "$target" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
     ($order | split(" ")) as $ord
     | (.milestones // {}) as $old
-    | (if $target == "delivered" then ($ord | length) else ($ord | index($target)) end) as $i
+    | (if $target == "done" then ($ord | length) else ($ord | index($target)) end) as $i
     | .milestones = (reduce $ord[:$i][] as $k ({}; .[$k] = ($old[$k] // $t)))
+    | .status = (if $target == "done" then "done"
+                 elif .status == "done" then "awaiting_human"
+                 else .status end)
   ' "$meta" > "$tmp" || die "meta 不可解析：${meta}"
   mv "$tmp" "$meta"
-  echo "harness-threads: 当前节点已钉为 ${target}"
+  if [ "$tgt_idx" -lt "$old_idx" ]; then dir="回退"; else dir="推进"; fi
+  echo "harness-threads: 当前节点已钉为 ${target}（方向：${dir}）"
+  progress_line "$meta"
+}
+
+cmd_undone() { # 撤销完成：status 回落 awaiting_human、milestones 不动——回到待合入，不是回退节点
+  local ctx="" meta tmp
+  while [ $# -gt 0 ]; do
+    case "$1" in --ctx-dir) ctx="${2:?--ctx-dir 需要值}"; shift 2 ;; *) usage ;; esac
+  done
+  [ -n "$ctx" ] || die "用法：${0##*/} undone --ctx-dir <路径>"
+  meta="$ctx/meta.json"
+  [ -f "$meta" ] || die "缺 meta.json：${ctx}"
+  tmp=$(mktemp)
+  jq '.status = "awaiting_human"' "$meta" > "$tmp" || die "meta 不可解析：${meta}"
+  mv "$tmp" "$meta"
+  echo "harness-threads: 已撤销完成（回到待合入）"
   progress_line "$meta"
 }
 
@@ -220,7 +262,8 @@ usage() {
   ht mark <序号|关键词> <human-cr|selftest>   标记人工节点完成
   ht mark --ctx-dir <路径> <节点>             直指形式（cr_passed 除外，供会话流程）
   ht progress --ctx-dir <路径>      输出该线程节点进度图
-  ht set-node --ctx-dir <路径> <节点|delivered>   看板手控：当前节点绝对定位（推进/回退）
+  ht set-node --ctx-dir <路径> <节点|done>   看板手控：当前节点绝对定位（推进/回退）
+  ht undone --ctx-dir <路径>             撤销完成（status 回落，milestones 不动）
   ht web [--port 7657]              本地节点看板（127.0.0.1）
 EOF
   exit 1
@@ -248,7 +291,7 @@ enumerate() {
     if [ -f "$ctx/meta.json" ]; then
       status=$(jq -r '.status // "?"' "$ctx/meta.json")
       node=$(current_node "$ctx/meta.json")
-      if [ "$node" = "-" ]; then nodecol="-"; else nodecol=$(node_label "$node"); fi
+      if [ "$node" = "-" ]; then nodecol="-"; else nodecol=$(node_label "$node" "$status"); fi
     else
       status="[失效]"   # ctx 目录已消失（检出被删 / worktree 被清）
       nodecol="-"
@@ -332,7 +375,7 @@ cmd_register() {
 }
 
 cmd_list_json() { # <show_all>：web 看板数据源；文本列表与看板共用 enumerate 聚合
-  local show_all="$1" out idx ctx cwd branch sid title status cur sess nodecol ms prog curnode crr resume arch
+  local show_all="$1" out idx ctx cwd branch sid title status cur sess nodecol ms prog curnode crr resume mrid arch
   # 必须先命令替换捕获再喂 heredoc，不能 `done < <(enumerate ...)`：进程替换子 shell 里
   # errexit 存活，某行 meta.json 坏掉会让 enumerate 中途退出，数组静默截断却仍 rc=0。
   out=$(enumerate "$show_all")
@@ -345,6 +388,8 @@ cmd_list_json() { # <show_all>：web 看板数据源；文本列表与看板共�
       fi
       # 零字节 meta.json 下 jq 退出 0 且零输出，|| 分支不触发，空串会让 --argjson 直接报错
       [ -n "$ms" ] || ms='{}'
+      mrid=$(jq -c '.mr_id // null' "$ctx/meta.json" 2>/dev/null || echo null)
+      [ -n "$mrid" ] || mrid=null
       [ -n "$arch" ] || arch=false
       prog=""; curnode="-"
       if [ -f "$ctx/meta.json" ]; then
@@ -355,8 +400,9 @@ cmd_list_json() { # <show_all>：web 看板数据源；文本列表与看板共�
       resume=$(wake_cmd "$cwd" "$branch" "$sid" "$cur")
       jq -cn --arg idx "$idx" --arg ctx "$ctx" --arg cwd "$cwd" --arg branch "$branch" --arg title "$title" \
         --arg status "$status" --arg node "$nodecol" --arg progress "$prog" --argjson ms "$ms" \
-        --arg current "$curnode" --arg crr "$crr" --arg resume "$resume" --argjson arch "$arch" \
-        '{idx:($idx|tonumber), ctx_dir:$ctx, cwd:$cwd, branch:$branch, title:$title, status:$status,
+        --arg current "$curnode" --arg crr "$crr" --arg resume "$resume" \
+        --argjson mrid "$mrid" --argjson arch "$arch" \
+        '{idx:($idx|tonumber), ctx_dir:$ctx, cwd:$cwd, branch:$branch, mr_id:$mrid, title:$title, status:$status,
           node:$node, current:$current, cr_rounds:($crr|tonumber), progress:$progress,
           resume:$resume, archived:$arch, milestones:$ms}'
     done <<EOF
@@ -551,6 +597,7 @@ case "$cmd" in
   mark) cmd_mark "$@" ;;
   progress) cmd_progress "$@" ;;
   set-node) cmd_set_node "$@" ;;
+  undone) cmd_undone "$@" ;;
   -h|--help) usage ;;
   *) echo "harness-threads: 未知子命令 ${cmd}" >&2; usage ;;
 esac

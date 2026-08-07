@@ -178,15 +178,22 @@ jq -e '.milestones.selftest_done' "$CTX/meta.json" >/dev/null && ok "乱序仍�
 grep -q '警告' "$err" && ok "乱序有警告" || bad "乱序有警告"
 rm -f "$err"
 
-echo "== progress：全齐 → 可交付 =="
+echo "== progress：六键齐 → 当前停在拉群求CR；status=done → 完成点亮 =="
 tmp=$(mktemp)
 jq '.milestones.dev_done="2026-08-03T00:00:00Z" | .milestones.cr_passed="2026-08-03T00:00:01Z"' \
   "$CTX/meta.json" > "$tmp" && mv "$tmp" "$CTX/meta.json"
 bash "$TH" mark --ctx-dir "$CTX" mr_created >/dev/null
 bash "$TH" mark --ctx-dir "$CTX" human_cr_done >/dev/null
 out=$(bash "$TH" progress --ctx-dir "$CTX")
-has "全齐后可交付点亮" '● 可交付' "$out"
-hasnt "全齐后无当前标记" '（当前）' "$out"
+has "六键齐后当前在拉群求CR" '◉ 拉群求CR（当前）' "$out"
+has "端点未亮" '○ 完成' "$out"
+bash "$TH" mark --ctx-dir "$CTX" cr_group_created >/dev/null
+out=$(bash "$TH" progress --ctx-dir "$CTX")
+hasnt "七键全齐无当前标记" '（当前）' "$out"
+has "status 非 done 端点仍未亮" '○ 完成' "$out"
+tmp=$(mktemp); jq '.status="done"' "$CTX/meta.json" > "$tmp" && mv "$tmp" "$CTX/meta.json"
+out=$(bash "$TH" progress --ctx-dir "$CTX")
+has "status=done 完成点亮" '● 完成' "$out"
 check_die "progress 缺 --ctx-dir" 'ctx-dir' bash "$TH" progress
 cleanup_env
 
@@ -206,7 +213,7 @@ has "legacy developing 当前在开发" '◉ 开发（当前）' "$out"
 has "legacy 前序位置点亮" '● 计划门' "$out"
 make_repo repo-p2 feat/olddone done
 out=$(bash "$TH" progress --ctx-dir "$CTX")
-has "legacy done 全亮可交付" '● 可交付' "$out"
+has "legacy done 全亮完成" '● 完成' "$out"
 make_repo repo-p3 feat/badstatus bogus
 out=$(bash "$TH" progress --ctx-dir "$CTX")
 has "未知 status 按全未完成" '◉ 计划门（当前）' "$out"
@@ -265,6 +272,8 @@ out=$(bash "$TH" list --json)
 echo "$out" | jq -e 'type == "array" and length == 1' >/dev/null && ok "输出 JSON 数组" || bad "输出 JSON 数组"
 echo "$out" | jq -e '.[0] | .ctx_dir and .branch and .status and .node and .progress and (.milestones | type == "object")' >/dev/null \
   && ok "字段齐全" || bad "字段齐全"
+echo "$out" | jq -e '.[0] | has("mr_id")' >/dev/null && ok "mr_id 字段在册" || bad "缺 mr_id"
+echo "$out" | jq -e '.[0].mr_id == null' >/dev/null && ok "无 MR 时 mr_id 为 null" || bad "mr_id: $(echo "$out" | jq -c '.[0].mr_id')"
 echo "$out" | jq -e '.[0].node == "开发中"' >/dev/null && ok "node 推导正确" || bad "node: $(echo "$out" | jq -r '.[0].node')"
 echo "$out" | jq -e '.[0].milestones.plan_gate' >/dev/null && ok "milestones 透传" || bad "milestones 透传"
 cleanup_env
@@ -288,26 +297,42 @@ echo "$out" | jq -e 'length == 2 and ([.[] | select(.branch=="feat/badmeta")][0]
 echo "$out" | jq -e '.[] | select(.branch=="feat/badmeta") | .node == "-"' >/dev/null && ok "空 meta 节点列降级 -" || bad "空 meta 节点列: $(echo "$out" | jq -r '.[] | select(.branch=="feat/badmeta") | .node')"
 cleanup_env
 
-echo "== set-node：绝对定位（推进/回退/delivered） =="
+echo "== set-node：绝对定位（推进/回退/done/undone/方向标记） =="
 make_env
 make_repo repo-u feat/setnode developing
-bash "$TH" set-node --ctx-dir "$CTX" cr_passed >/dev/null
+out=$(bash "$TH" set-node --ctx-dir "$CTX" cr_passed)
 jq -e '.milestones | has("plan_gate") and has("dev_done") and (has("cr_passed") | not)' "$CTX/meta.json" >/dev/null \
   && ok "推进：前序补点、目标及以后为空" || bad "推进结果: $(jq -c .milestones "$CTX/meta.json")"
+has "推进方向标记" '方向：推进' "$out"
 old=$(jq -r '.milestones.plan_gate' "$CTX/meta.json")
-bash "$TH" set-node --ctx-dir "$CTX" selftest_done >/dev/null
+bash "$TH" set-node --ctx-dir "$CTX" cr_group_created >/dev/null
 [ "$(jq -r '.milestones.plan_gate' "$CTX/meta.json")" = "$old" ] && ok "既有时间戳保留" || bad "既有时间戳被覆盖"
-jq -e '.milestones | has("human_cr_done") and (has("selftest_done") | not)' "$CTX/meta.json" >/dev/null \
-  && ok "推进到自测前全点亮" || bad "推进到自测: $(jq -c .milestones "$CTX/meta.json")"
-bash "$TH" set-node --ctx-dir "$CTX" dev_done >/dev/null
+jq -e '.milestones | has("selftest_done") and (has("cr_group_created") | not)' "$CTX/meta.json" >/dev/null \
+  && ok "推进到拉群求CR前全点亮" || bad "推进到拉群求CR: $(jq -c .milestones "$CTX/meta.json")"
+out=$(bash "$TH" set-node --ctx-dir "$CTX" dev_done)
 jq -e '.milestones == {"plan_gate": .milestones.plan_gate}' "$CTX/meta.json" >/dev/null \
   && ok "回退：目标及之后清除" || bad "回退结果: $(jq -c .milestones "$CTX/meta.json")"
-bash "$TH" set-node --ctx-dir "$CTX" delivered >/dev/null
-[ "$(jq -r '.milestones | length' "$CTX/meta.json")" = 6 ] && ok "delivered 六节点全点亮" || bad "delivered: $(jq -c .milestones "$CTX/meta.json")"
+has "回退方向标记" '方向：回退' "$out"
+bash "$TH" set-node --ctx-dir "$CTX" done >/dev/null
+[ "$(jq -r '.milestones | length' "$CTX/meta.json")" = 7 ] && ok "done 七节点全点亮" || bad "done: $(jq -c .milestones "$CTX/meta.json")"
+[ "$(jq -r '.status' "$CTX/meta.json")" = done ] && ok "done 置 status=done" || bad "status: $(jq -r .status "$CTX/meta.json")"
 out=$(bash "$TH" progress --ctx-dir "$CTX")
-has "delivered 后可交付点亮" '● 可交付' "$out"
+has "done 后完成点亮" '● 完成' "$out"
+out=$(bash "$TH" set-node --ctx-dir "$CTX" cr_group_created)
+has "从 done 回退是回退方向" '方向：回退' "$out"
+[ "$(jq -r '.status' "$CTX/meta.json")" = awaiting_human ] && ok "done 回退 status 回落 awaiting_human" \
+  || bad "status: $(jq -r .status "$CTX/meta.json")"
+bash "$TH" set-node --ctx-dir "$CTX" done >/dev/null
+bash "$TH" undone --ctx-dir "$CTX" >/dev/null
+[ "$(jq -r '.status' "$CTX/meta.json")" = awaiting_human ] && ok "undone 回落 awaiting_human" || bad "undone status"
+[ "$(jq -r '.milestones | length' "$CTX/meta.json")" = 7 ] && ok "undone 不动 milestones" || bad "undone 动了 milestones"
+out=$(bash "$TH" progress --ctx-dir "$CTX")
+has "undone 后回到待合入形态" '○ 完成' "$out"
 check_die "set-node 未知目标" '未知目标' bash "$TH" set-node --ctx-dir "$CTX" bogus
+check_die "delivered 目标已不存在" '未知目标' bash "$TH" set-node --ctx-dir "$CTX" delivered
 check_die "set-node 缺参数" '用法' bash "$TH" set-node --ctx-dir "$CTX"
+check_die "undone 缺 ctx" '用法' bash "$TH" undone
+check_die "undone --ctx-dir 缺值" '需要值' bash "$TH" undone --ctx-dir
 cleanup_env
 
 echo "== list --json：current/cr_rounds/resume 字段 =="
@@ -320,6 +345,25 @@ out=$(bash "$TH" list --json)
 echo "$out" | jq -e '.[0].current == "human_cr_done"' >/dev/null && ok "current 机器节点" || bad "current: $(echo "$out" | jq -r '.[0].current')"
 echo "$out" | jq -e '.[0].cr_rounds == 2' >/dev/null && ok "cr_rounds 计数" || bad "cr_rounds: $(echo "$out" | jq -r '.[0].cr_rounds')"
 echo "$out" | jq -e '.[0].resume | test("--resume sid-fields")' >/dev/null && ok "resume 命令含会话恢复" || bad "resume: $(echo "$out" | jq -r '.[0].resume')"
+cleanup_env
+
+echo "== 节点列：待拉群求CR / 待合入 / 已完成 =="
+make_env
+make_repo repo-w feat/tail developing
+mk_session sid-tail
+tmp=$(mktemp); jq '.mr_id = "9900123"' "$CTX/meta.json" > "$tmp" && mv "$tmp" "$CTX/meta.json"
+(cd "$REPO" && CLAUDE_CODE_SESSION_ID=sid-tail bash "$TH" register --ctx-dir "$CTX" --title '收尾段') >/dev/null
+bash "$TH" set-node --ctx-dir "$CTX" cr_group_created >/dev/null
+out=$(bash "$TH" list)
+has "节点列待拉群求CR" '· 待拉群求CR]' "$out"
+bash "$TH" mark --ctx-dir "$CTX" cr_group_created >/dev/null
+out=$(bash "$TH" list)
+has "七键齐节点列待合入" '· 待合入]' "$out"
+bash "$TH" set-node --ctx-dir "$CTX" done >/dev/null
+out=$(bash "$TH" list --all)
+has "done 节点列已完成" '· 已完成]' "$out"
+out=$(bash "$TH" list --json --all)
+echo "$out" | jq -e '.[0].mr_id == "9900123"' >/dev/null && ok "mr_id 透传原值" || bad "mr_id: $(echo "$out" | jq -c '.[0].mr_id')"
 cleanup_env
 
 # ---- archive / unarchive：看板视图开关，不动任何文件 ----
