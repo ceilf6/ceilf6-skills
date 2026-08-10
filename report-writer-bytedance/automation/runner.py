@@ -4,6 +4,8 @@ import argparse
 import json
 import os
 import re
+import selectors
+import signal
 import subprocess
 import sys
 import time
@@ -19,6 +21,9 @@ SPACE_ID = "7658115519924686035"
 PARENT_NODE_TOKEN = "ZDvbwhN4eiFRoHkUh1ocXSeInSb"
 PREFLIGHT_TIMEOUT_SECONDS = 120
 TRAE_TIMEOUT_SECONDS = 7200
+TRAE_STARTUP_TIMEOUT_SECONDS = 120
+TRAE_STARTUP_ATTEMPTS = 2
+TRAE_STARTUP_RETRY_DELAY_SECONDS = 5
 VERIFY_TIMEOUT_SECONDS = 120
 EXPECTED_SECTIONS = ("今日重点", "今日完成", "明日展望")
 SHANGHAI = ZoneInfo("Asia/Shanghai")
@@ -45,6 +50,10 @@ class DailyReportError(RuntimeError):
 
 
 class CommandError(DailyReportError):
+    pass
+
+
+class TraeStartupError(CommandError):
     pass
 
 
@@ -99,6 +108,7 @@ def build_env() -> Dict[str, str]:
             ),
             "LARKSUITE_CLI_NO_UPDATE_NOTIFIER": "1",
             "LARKSUITE_CLI_NO_SKILLS_NOTIFIER": "1",
+            "BYTEDCLI_NO_AUTO_UPGRADE": "1",
         }
     )
     return env
@@ -294,18 +304,17 @@ def render_prompt(target_date: str) -> str:
     return rendered
 
 
-def run_trae(
-    prompt: str,
-    last_message: Path,
-    env: Dict[str, str],
-    handle,
-) -> None:
-    argv = [
+def build_trae_argv(last_message: Path) -> List[str]:
+    return [
         str(TRAE),
-        "--dangerously-bypass-approvals-and-sandbox",
+        "exec",
+        "--permission-mode",
+        "bypass_permissions",
+        "--dangerously-bypass-hook-trust",
+        "--ignore-user-config",
+        "--ephemeral",
         "-c",
         "shell_environment_policy.inherit=all",
-        "exec",
         "--model",
         "gpt-5.6-sol",
         "--cd",
@@ -320,27 +329,127 @@ def run_trae(
         str(last_message),
         "-",
     ]
+
+
+def stop_process(process: subprocess.Popen) -> None:
+    if process.poll() is not None:
+        return
     try:
-        process = subprocess.run(
+        os.killpg(process.pid, signal.SIGTERM)
+        process.wait(timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        process.wait()
+
+
+def run_trae_attempt(
+    prompt: str,
+    last_message: Path,
+    env: Dict[str, str],
+    handle,
+) -> None:
+    argv = build_trae_argv(last_message)
+    try:
+        process = subprocess.Popen(
             argv,
-            input=prompt,
-            env=env,
-            text=True,
-            stdout=handle,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            timeout=TRAE_TIMEOUT_SECONDS,
-            check=False,
+            env=env,
+            start_new_session=True,
         )
-    except subprocess.TimeoutExpired as error:
-        raise CommandError(
-            "TRAE execution timed out after {}s".format(TRAE_TIMEOUT_SECONDS)
-        ) from error
     except OSError as error:
         raise CommandError("TRAE execution could not start: {}".format(error)) from error
+
+    assert process.stdin is not None
+    assert process.stdout is not None
+    try:
+        process.stdin.write(prompt.encode("utf-8"))
+        process.stdin.close()
+    except BrokenPipeError:
+        pass
+
+    started = time.monotonic()
+    saw_session_output = False
+    startup_probe = b""
+    selector = selectors.DefaultSelector()
+    selector.register(process.stdout, selectors.EVENT_READ)
+    try:
+        while True:
+            elapsed = time.monotonic() - started
+            if (
+                not saw_session_output
+                and elapsed >= TRAE_STARTUP_TIMEOUT_SECONDS
+            ):
+                stop_process(process)
+                raise TraeStartupError(
+                    "TRAE produced no thread.started event within {}s".format(
+                        TRAE_STARTUP_TIMEOUT_SECONDS
+                    )
+                )
+            if elapsed >= TRAE_TIMEOUT_SECONDS:
+                stop_process(process)
+                raise CommandError(
+                    "TRAE execution timed out after {}s".format(
+                        TRAE_TIMEOUT_SECONDS
+                    )
+                )
+
+            events = selector.select(timeout=0.5)
+            for key, _ in events:
+                chunk = os.read(key.fileobj.fileno(), 65536)
+                if chunk:
+                    if not saw_session_output:
+                        startup_probe = (startup_probe + chunk)[-4096:]
+                        saw_session_output = (
+                            b'"type":"thread.started"' in startup_probe
+                        )
+                    handle.write(chunk.decode("utf-8", errors="replace"))
+                    handle.flush()
+                else:
+                    selector.unregister(key.fileobj)
+
+            if process.poll() is not None and not selector.get_map():
+                break
+    finally:
+        selector.close()
+        process.stdout.close()
+
     if process.returncode != 0:
         raise CommandError(
             "TRAE execution failed with status {}".format(process.returncode)
         )
+    if not saw_session_output:
+        raise TraeStartupError(
+            "TRAE exited before producing a thread.started event"
+        )
+
+
+def run_trae(
+    prompt: str,
+    last_message: Path,
+    env: Dict[str, str],
+    handle,
+) -> None:
+    for attempt in range(1, TRAE_STARTUP_ATTEMPTS + 1):
+        try:
+            run_trae_attempt(prompt, last_message, env, handle)
+            return
+        except TraeStartupError as error:
+            if attempt == TRAE_STARTUP_ATTEMPTS:
+                raise
+            log_line(
+                handle,
+                "TRAE startup attempt {} failed: {}; retrying".format(
+                    attempt, error
+                ),
+            )
+            if last_message.exists():
+                last_message.unlink()
+            time.sleep(TRAE_STARTUP_RETRY_DELAY_SECONDS)
 
 
 def run_full(target_date: str, env: Dict[str, str]) -> int:
