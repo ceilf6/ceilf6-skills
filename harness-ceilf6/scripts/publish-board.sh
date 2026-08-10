@@ -11,7 +11,6 @@ die() { echo "publish-board: $*" >&2; exit 1; }
 command -v jq >/dev/null 2>&1 || die "缺少依赖：jq"
 [ -f "$BOARD" ] || die "缺看板页：$BOARD"
 CONF="${HARNESS_PUBLISH_CONF:-$HOME/.harness-ceilf6/publish.json}"
-CACHE="${HARNESS_MR_URL_CACHE:-$HOME/.harness-ceilf6/mr-urls.json}"
 BOT="${HARNESS_BOT_CONTROL:-http://127.0.0.1:7659}"
 [ -f "$CONF" ] || die "缺发布配置：${CONF}（{\"dest\":\"root@host:/path\",\"key\":\"~/.ssh/xx.pem\"}）"
 dest=$(jq -r '.dest // empty' "$CONF")
@@ -24,38 +23,22 @@ running=$(curl -s --max-time 5 "$BOT/api/tasks" 2>/dev/null || true)
 printf '%s' "$running" | jq -e '.tasks | type == "array"' >/dev/null 2>&1 \
   || running='{"tasks":[],"offline":true}'
 
-# 判内容而非判存在：0 字节缓存会让每轮全量重查且 mr_url 恒空，非 JSON / 非对象会让下面的
-# jq 在 set -e 下每轮硬失败、页面冻在旧快照——两种损坏都不会自己好，故先重建
-jq -e 'type == "object"' "$CACHE" >/dev/null 2>&1 \
-  || { mkdir -p "$(dirname "$CACHE")"; echo '{}' > "$CACHE"; }
-# mr_url：每个 MR 只解析一次（bytedcli 走网络且慢）；解析不到不入缓存，下轮再试，
-# 页面对空 mr_url 显示纯文本 MR 号
-for id in $(printf '%s' "$threads" | jq -r '.[].mr_id // empty' | sort -u); do
-  hit=$(jq -r --arg k "$id" '.[$k] // empty' "$CACHE")
-  [ -n "$hit" ] && continue
-  st=$(bytedcli bits mr status --mr-id "$id" --json 2>/dev/null || true)
-  url=$(printf '%s' "$st" | jq -r '.url // .web_url // .mr_url // empty' 2>/dev/null || true)
-  if [ -z "$url" ]; then
-    url=$(printf '%s' "$st" | jq -r '[.. | strings | select(startswith("https://"))][0] // empty' 2>/dev/null || true)
-  fi
-  [ -n "$url" ] || continue
-  tmp=$(mktemp)
-  jq --arg k "$id" --arg v "$url" '.[$k] = $v' "$CACHE" > "$tmp" && mv "$tmp" "$CACHE"
-done
-
 at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
-# 白名单式脱敏：对外只出页面真正消费的字段。threads 去掉需求短题与备注（线程对外由 MR 链接
-# 标识，备注是本机看板上的自留笔记）；
-# running 逐条收窄到 worktree/state，把 bot 控制端口带来的指令正文、agent 提问、会话与消息
-# 标识挡在本机——离线降级的 {tasks:[],offline:true} 过同一收窄仍成立
-printf '%s' "$threads" | jq --slurpfile urls "$CACHE" --argjson running "$running" --arg at "$at" '
-  {generated_at: $at,
-   threads: map(del(.title, .note) + {mr_url: (if .mr_id == null then ""
-                              else ($urls[0][(.mr_id | tostring)] // "") end)}),
-   running: {tasks: [($running.tasks // [])[] | select(type == "object") | {worktree, state}],
-             offline: ($running.offline // false)}}' > "$out/data.json"
+# 白名单式脱敏：对外只出枚举出的字段，别处一律不出——需求短题、备注、分支名、启动命令、
+# 本机路径（cwd/ctx_dir）、内部平台链接都留在本机；mr_id 裸编号保留是用户 2026-08-10 对
+# 自身红线的显式豁免（其余内部标识零出现）。running 徽标在此配对成线程序号后只发
+# {idx, state}，工作树路径不出；离线降级的 {tasks:[],offline:true} 过同一收窄仍成立。
+printf '%s' "$threads" | jq --argjson running "$running" --arg at "$at" '
+  . as $raw
+  | {generated_at: $at,
+     threads: map({idx, mr_id, status, node, current, cr_rounds, progress, archived, milestones}),
+     running: {tasks: [($running.tasks // [])[]
+                       | select(type == "object") | . as $t
+                       | ($raw | map(select(.cwd == $t.worktree)) | first) as $m
+                       | select($m != null) | {idx: $m.idx, state: $t.state}],
+               offline: ($running.offline // false)}}' > "$out/data.json"
 sed "s|<!--BOARD_CONFIG-->|<script>window.BOARD = {\"mode\": \"public\", \"generated_at\": \"$at\"}</script>|" \
   "$BOARD" > "$out/index.html"
 # BatchMode/ConnectTimeout：launchd 下无 TTY，口令提示或黑洞连接会把这轮发布永久挂住

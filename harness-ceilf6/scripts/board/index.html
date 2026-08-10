@@ -101,6 +101,7 @@
  .edit{width:100%;max-width:420px;padding:2px 6px;border:1px solid var(--now);border-radius:6px;
        background:var(--card);color:var(--ink);font:inherit}
  .edit:focus{outline:none}
+ .sub{font:12px/1.6 var(--sans);color:var(--dim)}
  .card b.ed{cursor:text;border-bottom:1px dashed transparent}
  .card b.ed:hover{border-bottom-color:var(--rail)}
  .note-row{margin-top:12px;font-size:12px;line-height:1.6;color:var(--dim);cursor:text}
@@ -246,7 +247,11 @@ async function loadRunning(){
   try { RUN = await (await fetch('/api/running')).json(); }
   catch(e){ RUN = {tasks: [], offline: true}; }
 }
-function runningOf(t){ return (RUN.tasks || []).find(x => x.worktree && x.worktree === t.cwd); }
+// 徽标配对：本地按工作树路径（本机数据有 cwd），对外按线程序号——公开快照不含任何路径，
+// 发布端已把 worktree 换算成 idx
+function runningOf(t){
+  return (RUN.tasks || []).find(x => PUB ? x.idx === t.idx : (x.worktree && x.worktree === t.cwd));
+}
 async function post(path, body){
   const r = await fetch(path, {method:'POST', body: JSON.stringify(body)});
   const out = await r.json().catch(() => ({}));
@@ -336,18 +341,21 @@ function titleOf(t){
       (v) => post('/api/title', {ctx_dir: t.ctx_dir, title: v}));
     return b;
   }
-  // 对外以 MR 链接为标识（打开需公司内网），不含需求描述；无 MR 降级分支名
-  if (t.mr_url){
-    const a = document.createElement('a');
-    a.href = t.mr_url; a.target = '_blank'; a.rel = 'noreferrer';
-    a.textContent = 'MR !' + t.mr_id;
-    b.appendChild(a);
-  } else if (t.mr_id){
-    b.textContent = 'MR !' + t.mr_id + ' · ' + t.branch;
+  // 对外标识两态：有 MR 显纯文本编号（不带链接——内部平台域名不落公开产物）；
+  // 无 MR 以序号暂代，占位小字说明缘由。需求描述、分支名一律不出。
+  if (t.mr_id){
+    b.textContent = 'MR ' + t.mr_id;
   } else {
-    b.textContent = t.branch;
+    b.textContent = '线程 #' + t.idx;
   }
   return b;
+}
+function subOf(t){
+  if (!PUB || t.mr_id) return null;
+  const s = document.createElement('span');
+  s.className = 'sub';
+  s.textContent = 'MR 尚未创建 · 标题以序号暂代，避免泄露内部信息';
+  return s;
 }
 function render(rows){
   const el = document.getElementById('list');
@@ -357,6 +365,8 @@ function render(rows){
     d.className = 'card';
     const h = document.createElement('div');
     h.appendChild(titleOf(t));
+    const sub = subOf(t);
+    if (sub) h.appendChild(sub);
     const r = runningOf(t);
     if (r){
       const badge = document.createElement('span');
@@ -397,7 +407,7 @@ async function load(){
     RUN = d.running || {tasks: [], offline: true};
     rows = d.threads;
     document.getElementById('note').textContent =
-      '线程以 MR 链接标识，可见性由 MR 平台的内网访问限制管控 · 数据截至 '
+      '脱敏视图 · 完整看板仅限当面演示，可联系本人 · 数据截至 '
       + stamp(d.generated_at || BOARD.generated_at);
     render(rows);
     return;
