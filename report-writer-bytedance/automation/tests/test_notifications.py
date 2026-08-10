@@ -27,10 +27,37 @@ class WarningParserTests(unittest.TestCase):
         self.assertEqual(warnings[0].source, "oncall")
         self.assertEqual(warnings[0].code, "not_logged_in")
 
-    def test_rejects_unknown_kind_and_unsafe_attributes(self):
+    def test_parses_source_unavailable_warning(self):
+        message = (
+            '<daily-report-warning kind="source_unavailable" '
+            'source="oncall" code="request_timeout" />'
+        )
+        warnings = parse_report_warnings(message)
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(warnings[0].kind, "source_unavailable")
+        self.assertEqual(warnings[0].source, "oncall")
+        self.assertEqual(warnings[0].code, "request_timeout")
+
+    def test_rejects_unknown_kind(self):
         invalid = (
             '<daily-report-warning kind="other" source="oncall" '
-            'code="$(touch /tmp/x)" />'
+            'code="not_logged_in" />'
+        )
+        with self.assertRaises(WarningParseError):
+            parse_report_warnings(invalid)
+
+    def test_rejects_unsafe_code_characters(self):
+        invalid = (
+            '<daily-report-warning kind="configuration_required" '
+            'source="oncall" code="$(touch /tmp/x)" />'
+        )
+        with self.assertRaises(WarningParseError):
+            parse_report_warnings(invalid)
+
+    def test_rejects_tab_after_warning_name(self):
+        invalid = (
+            '<daily-report-warning\tkind="configuration_required" '
+            'source="oncall" code="not_logged_in" />'
         )
         with self.assertRaises(WarningParseError):
             parse_report_warnings(invalid)

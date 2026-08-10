@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Callable, Tuple
 
 
-WARNING_PREFIX = "<daily-report-warning "
+WARNING_PREFIX = "<daily-report-warning"
 WARNING_RE = re.compile(
     r'^<daily-report-warning '
     r'kind="([a-z][a-z0-9_]{0,63})" '
