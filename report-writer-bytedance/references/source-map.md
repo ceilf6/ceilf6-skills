@@ -200,8 +200,8 @@ Rules:
   are recorded as skipped and do not stop the report.
 - For `not logged in`, emit exactly
   `<daily-report-warning kind="configuration_required" source="oncall" code="not_logged_in" />`
-  before the final result sentinel. Other Oncall query failures use
-  `kind="source_unavailable"` with a stable lowercase `code`.
+  before the final result sentinel. For other Oncall query failures, emit exactly
+  `<daily-report-warning kind="source_unavailable" source="oncall" code="<stable_lowercase_code>" />`.
 
 ## Planning Source For Tomorrow Outlook
 

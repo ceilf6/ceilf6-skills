@@ -19,9 +19,25 @@ class SourcePolicyContractTests(unittest.TestCase):
         self.assertIn("Oncall is optional", skill)
         self.assertIn("Oncall is optional", source_map)
         self.assertIn("Oncall 是可选来源", prompt)
-        self.assertIn('kind="configuration_required"', prompt)
-        self.assertIn('source="oncall"', prompt)
-        self.assertIn('code="not_logged_in"', prompt)
+        configuration_warning = (
+            '<daily-report-warning kind="configuration_required" '
+            'source="oncall" code="not_logged_in" />'
+        )
+        source_warning = (
+            '<daily-report-warning kind="source_unavailable" '
+            'source="oncall" code="<stable_lowercase_code>" />'
+        )
+        for content in (prompt, source_map):
+            self.assertIn(configuration_warning, content)
+            self.assertIn(source_warning, content)
+
+    def test_prompt_ends_with_complete_result_sentinel_block(self):
+        prompt = self.read("automation/prompt.md")
+        sentinel_block = """15. 最终回复的最后一个非空行必须是下列二者之一，不得在其后添加任何内容：
+    - 全部写入和回读验证成功：`<daily-report-result status="success" date="{{TARGET_DATE}}" />`
+    - 任一阶段失败或未发布：`<daily-report-result status="failed" date="{{TARGET_DATE}}" />`"""
+
+        self.assertTrue(prompt.rstrip().endswith(sentinel_block))
 
     def test_required_sources_remain_explicit(self):
         config = self.read("references/config.yaml")
