@@ -42,5 +42,9 @@ printf '%s' "$threads" | jq --argjson running "$running" --arg at "$at" '
 sed "s|<!--BOARD_CONFIG-->|<script>window.BOARD = {\"mode\": \"public\", \"generated_at\": \"$at\"}</script>|" \
   "$BOARD" > "$out/index.html"
 # BatchMode/ConnectTimeout：launchd 下无 TTY，口令提示或黑洞连接会把这轮发布永久挂住
+# 目标目录可能被站点部署的原子替换清掉、或以缺执行位的权限重建（nginx 进不了目录即 403）——
+# 每轮发布前自愈目录与权限，幂等
+rhost="${dest%%:*}"; rpath="${dest#*:}"
+ssh -q -o BatchMode=yes -o ConnectTimeout=10 -i "$key" "$rhost" "mkdir -p '$rpath' && chmod 755 '$rpath'"
 scp -q -o BatchMode=yes -o ConnectTimeout=10 -i "$key" "$out/index.html" "$out/data.json" "$dest/"
 echo "publish-board: 已发布 $(printf '%s' "$threads" | jq 'length') 条线程 → ${dest}（${at}）"
