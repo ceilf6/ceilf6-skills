@@ -1,5 +1,10 @@
 # 日报来源降级与配置提醒实施计划
 
+> 2026-08-10 身份修正：本文 Task 4 中 `--as user` 的 sender 设计已废止。
+> 通知必须由“王景宏的飞书 CLI”机器人发送；后续修正步骤以
+> `docs/superpowers/plans/2026-08-10-daily-report-bot-notification-identity.md`
+> 为准。不得申请或使用 `im:message.send_as_user`。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让 Oncall 独立鉴权失败降级为可观测的 skipped 来源，以去重飞书私聊提醒配置缺失，恢复 Git 真源并补生成 2026-08-07 日报。
