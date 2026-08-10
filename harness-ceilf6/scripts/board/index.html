@@ -407,7 +407,7 @@ async function load(){
     RUN = d.running || {tasks: [], offline: true};
     rows = d.threads;
     document.getElementById('note').textContent =
-      '脱敏视图 · 完整看板仅限当面演示，可联系本人 · 数据截至 '
+      '线程以 MR 号标识，可见性由 MR 平台的内网访问限制管控 · 数据截至 '
       + stamp(d.generated_at || BOARD.generated_at);
     render(rows);
     return;
