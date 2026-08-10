@@ -190,26 +190,41 @@ def run_preflight(env: Dict[str, str], handle=sys.stdout) -> None:
     if not os.access(str(TRAE), os.X_OK):
         raise DailyReportError("TRAE CLI is not executable: {}".format(TRAE))
 
-    checks = (
+    required_checks = (
         ("TRAE login", [str(TRAE), "login", "status"]),
         ("Lark auth", ["lark-cli", "auth", "status", "--json", "--verify"]),
         ("ByteCloud auth", ["bytedcli", "auth", "status"]),
         ("ByteDance user", ["bytedcli", "auth", "userinfo"]),
         ("Bits auth", ["bytedcli", "bits", "auth", "status"]),
         ("Meego auth", ["bytedcli", "meego", "status"]),
-        (
-            "local AI parser",
-            [
-                "python3",
-                str(SKILL_DIR / "scripts/collect-local-ai-context.py"),
-                "--help",
-            ],
-        ),
     )
-    for label, argv in checks:
+    for label, argv in required_checks:
         started = time.monotonic()
         log_line(handle, "preflight {} started".format(label))
         run_checked(label, argv, PREFLIGHT_TIMEOUT_SECONDS, env)
+        log_line(
+            handle,
+            "preflight {} passed in {:.1f}s".format(label, time.monotonic() - started),
+        )
+
+    label = "local AI parser"
+    argv = [
+        "python3",
+        str(SKILL_DIR / "scripts/collect-local-ai-context.py"),
+        "--help",
+    ]
+    started = time.monotonic()
+    log_line(handle, "preflight {} started".format(label))
+    try:
+        run_checked(label, argv, PREFLIGHT_TIMEOUT_SECONDS, env)
+    except CommandError as error:
+        log_line(
+            handle,
+            "optional preflight local AI parser skipped label={}: {}".format(
+                error.label, error
+            ),
+        )
+    else:
         log_line(
             handle,
             "preflight {} passed in {:.1f}s".format(label, time.monotonic() - started),

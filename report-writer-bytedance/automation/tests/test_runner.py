@@ -67,6 +67,63 @@ class PromptContractTests(unittest.TestCase):
 
 
 class SubprocessTests(unittest.TestCase):
+    def test_local_ai_parser_failure_is_optional(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            home = Path(temp_dir)
+            trae = home / "trae-cli"
+            prompt = home / "prompt.md"
+            skill = home / "skill"
+            trae.write_text("", encoding="utf-8")
+            trae.chmod(0o700)
+            prompt.write_text("", encoding="utf-8")
+            skill.mkdir()
+            (skill / "SKILL.md").write_text("", encoding="utf-8")
+            handle = io.StringIO()
+            successful = subprocess.CompletedProcess([], 0, "", "")
+            outcomes = [successful] * 6 + [
+                runner.CommandError(
+                    "local parser unavailable",
+                    label="local AI parser",
+                )
+            ]
+
+            with mock.patch.object(runner, "TRAE", trae), mock.patch.object(
+                runner, "PROMPT_FILE", prompt
+            ), mock.patch.object(runner, "SKILL_DIR", skill), mock.patch.object(
+                runner, "run_checked", side_effect=outcomes
+            ) as checked:
+                runner.run_preflight({}, handle)
+
+        self.assertEqual(checked.call_count, 7)
+        self.assertIn(
+            "optional preflight local AI parser skipped",
+            handle.getvalue(),
+        )
+        self.assertIn("local AI parser", handle.getvalue())
+
+    def test_required_preflight_failure_propagates(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            home = Path(temp_dir)
+            trae = home / "trae-cli"
+            prompt = home / "prompt.md"
+            skill = home / "skill"
+            trae.write_text("", encoding="utf-8")
+            trae.chmod(0o700)
+            prompt.write_text("", encoding="utf-8")
+            skill.mkdir()
+            (skill / "SKILL.md").write_text("", encoding="utf-8")
+            failure = runner.CommandError("login failed", label="TRAE login")
+
+            with mock.patch.object(runner, "TRAE", trae), mock.patch.object(
+                runner, "PROMPT_FILE", prompt
+            ), mock.patch.object(runner, "SKILL_DIR", skill), mock.patch.object(
+                runner, "run_checked", side_effect=failure
+            ):
+                with self.assertRaises(runner.CommandError) as raised:
+                    runner.run_preflight({}, io.StringIO())
+
+        self.assertIs(raised.exception, failure)
+
     def test_timeout_preserves_label_and_stable_error_code(self):
         with mock.patch.object(
             runner.subprocess,

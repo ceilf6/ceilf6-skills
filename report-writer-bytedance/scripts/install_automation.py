@@ -15,8 +15,8 @@ from typing import Iterable
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 AUTOMATION_DIR = SKILL_DIR / "automation"
-INSTALLED_SKILL_DIR = Path.home() / ".local/share/trae-skills/report-writer-bytedance"
 PLIST_SOURCE = AUTOMATION_DIR / "com.wangjinghong.trae-daily-report.plist"
+RUNTIME_RELATIVE_ROOT = Path(".local/lib/trae-daily-report")
 
 
 @dataclass(frozen=True)
@@ -162,19 +162,19 @@ def skill_source_files() -> dict[Path, Path]:
     return files
 
 
-def installed_skill_files() -> set[Path]:
-    validate_destination(INSTALLED_SKILL_DIR, INSTALLED_SKILL_DIR)
+def installed_skill_files(destination_root: Path) -> set[Path]:
+    validate_destination(destination_root, destination_root)
     installed = set()
     for fname in SKILL_SYNC_FILES:
         relative = Path(fname)
-        path = INSTALLED_SKILL_DIR / relative
-        validate_destination(INSTALLED_SKILL_DIR, path)
+        path = destination_root / relative
+        validate_destination(destination_root, path)
         if path.is_file():
             installed.add(relative)
 
     for dname in SKILL_SYNC_DIRS:
-        destination_dir = INSTALLED_SKILL_DIR / dname
-        validate_destination(INSTALLED_SKILL_DIR, destination_dir)
+        destination_dir = destination_root / dname
+        validate_destination(destination_root, destination_dir)
         if not destination_dir.exists():
             continue
         if not destination_dir.is_dir():
@@ -189,7 +189,7 @@ def installed_skill_files() -> set[Path]:
             current_dir = Path(current)
             for name in directories + filenames:
                 validate_destination(
-                    INSTALLED_SKILL_DIR, current_dir / name
+                    destination_root, current_dir / name
                 )
             for name in filenames:
                 item = current_dir / name
@@ -202,15 +202,16 @@ def installed_skill_files() -> set[Path]:
 
 def skill_drift(
     sources: dict[Path, Path],
+    destination_root: Path,
 ) -> tuple[list[Path], list[Path]]:
-    installed = installed_skill_files()
+    installed = installed_skill_files(destination_root)
     for relative in sources:
         validate_destination(
-            INSTALLED_SKILL_DIR, INSTALLED_SKILL_DIR / relative
+            destination_root, destination_root / relative
         )
 
     def source_differs(relative: Path, source: Path) -> bool:
-        destination = INSTALLED_SKILL_DIR / relative
+        destination = destination_root / relative
         source_mode = source.stat().st_mode & 0o777
         return (
             relative not in installed
@@ -230,21 +231,52 @@ def skill_drift(
 def sync_skill_files(
     changed: list[Path],
     stale: list[Path],
+    destination_root: Path,
 ) -> None:
     sources = skill_source_files()
     for relative in changed:
-        destination = INSTALLED_SKILL_DIR / relative
+        destination = destination_root / relative
         source = sources[relative]
         atomic_copy(
             source,
-            INSTALLED_SKILL_DIR,
+            destination_root,
             destination,
             source.stat().st_mode & 0o777,
         )
     for relative in stale:
-        destination = INSTALLED_SKILL_DIR / relative
-        validate_destination(INSTALLED_SKILL_DIR, destination)
+        destination = destination_root / relative
+        validate_destination(destination_root, destination)
         destination.unlink()
+
+
+def runtime_stale_files(home: Path) -> tuple[Path, list[Path]]:
+    runtime_root = home / RUNTIME_RELATIVE_ROOT
+    validate_destination(home, runtime_root)
+    if not runtime_root.exists():
+        return runtime_root, []
+    if not runtime_root.is_dir():
+        raise RuntimeError(
+            "managed runtime path is not a directory: {}".format(runtime_root)
+        )
+
+    installed = set()
+    for current, directories, filenames in os.walk(
+        runtime_root, followlinks=False
+    ):
+        current_dir = Path(current)
+        for name in directories + filenames:
+            validate_destination(runtime_root, current_dir / name)
+        for name in filenames:
+            item = current_dir / name
+            if item.is_file():
+                installed.add(item.relative_to(runtime_root))
+
+    expected = {
+        spec.relative_destination.relative_to(RUNTIME_RELATIVE_ROOT)
+        for spec in FILE_SPECS
+        if spec.relative_destination.is_relative_to(RUNTIME_RELATIVE_ROOT)
+    }
+    return runtime_root, sorted(installed - expected)
 
 
 def validate_plist(path: Path) -> None:
@@ -260,6 +292,10 @@ def validate_plist(path: Path) -> None:
 def run(home: Path, install: bool) -> tuple[dict, bool]:
     validate_plist(PLIST_SOURCE)
     home = absolute_path(home)
+    installed_skill_dir = (
+        home / ".local/share/trae-skills/report-writer-bytedance"
+    )
+    validate_destination(home, installed_skill_dir)
     destinations = [
         (spec, home / spec.relative_destination)
         for spec in FILE_SPECS
@@ -268,7 +304,10 @@ def run(home: Path, install: bool) -> tuple[dict, bool]:
         validate_destination(home, destination)
 
     skill_sources = skill_source_files()
-    changed_skill_files, stale_skill_files = skill_drift(skill_sources)
+    changed_skill_files, stale_skill_files = skill_drift(
+        skill_sources, installed_skill_dir
+    )
+    runtime_root, stale_runtime_files = runtime_stale_files(home)
     ledger = []
     has_drift = False
 
@@ -285,9 +324,19 @@ def run(home: Path, install: bool) -> tuple[dict, bool]:
             }
         )
 
-    has_drift = has_drift or bool(changed_skill_files or stale_skill_files)
+    has_drift = has_drift or bool(
+        changed_skill_files or stale_skill_files or stale_runtime_files
+    )
     if install:
-        sync_skill_files(changed_skill_files, stale_skill_files)
+        sync_skill_files(
+            changed_skill_files,
+            stale_skill_files,
+            installed_skill_dir,
+        )
+        for relative in stale_runtime_files:
+            destination = runtime_root / relative
+            validate_destination(runtime_root, destination)
+            destination.unlink()
 
     return {
         "mode": "install" if install else "check",
@@ -297,6 +346,7 @@ def run(home: Path, install: bool) -> tuple[dict, bool]:
         else [],
         "skill_drift": [str(path) for path in changed_skill_files],
         "skill_stale": [str(path) for path in stale_skill_files],
+        "runtime_stale": [str(path) for path in stale_runtime_files],
     }, has_drift
 
 

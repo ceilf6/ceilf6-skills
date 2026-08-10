@@ -186,6 +186,8 @@ from pathlib import Path
 
 runtime = Path("/Users/bytedance/.local/lib/trae-daily-report")
 sys.path.insert(0, str(runtime))
+from notifications import ReportWarning
+
 spec = importlib.util.spec_from_file_location("daily_report_runner", runtime / "runner.py")
 runner = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = runner
@@ -196,7 +198,7 @@ run_log = Path(
     "/Users/bytedance/Library/Logs/trae-daily-report/"
     "run-20260810-165913.log"
 )
-warning = runner.ReportWarning(
+warning = ReportWarning(
     kind="configuration_required",
     source="oncall",
     code="not_logged_in",

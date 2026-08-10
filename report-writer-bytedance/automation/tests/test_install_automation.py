@@ -1,9 +1,10 @@
 import importlib.util
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -15,6 +16,44 @@ SPEC.loader.exec_module(installer)
 
 
 class InstallerTests(unittest.TestCase):
+    def test_cli_home_controls_stable_skill_destination(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            requested_home = root / "requested-home"
+            process_home = root / "process-home"
+            sentinel = (
+                process_home
+                / ".local/share/trae-skills/report-writer-bytedance"
+                / "automation/sentinel.txt"
+            )
+            sentinel.parent.mkdir(parents=True)
+            sentinel.write_bytes(b"unchanged\n")
+            env = dict(os.environ)
+            env["HOME"] = str(process_home)
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(INSTALLER_PATH),
+                    "--home",
+                    str(requested_home),
+                    "--install",
+                ],
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertTrue(
+                (
+                    requested_home
+                    / ".local/share/trae-skills/report-writer-bytedance/SKILL.md"
+                ).is_file()
+            )
+            self.assertEqual(sentinel.read_bytes(), b"unchanged\n")
+
     def test_run_rejects_symlinked_destinations_without_touching_targets(self):
         placements = (
             "skill_root",
@@ -69,13 +108,10 @@ class InstallerTests(unittest.TestCase):
                             if path.is_file()
                         }
                         error = None
-                        with mock.patch.object(
-                            installer, "INSTALLED_SKILL_DIR", installed_skill
-                        ):
-                            try:
-                                installer.run(home, install=install)
-                            except RuntimeError as raised:
-                                error = raised
+                        try:
+                            installer.run(home, install=install)
+                        except RuntimeError as raised:
+                            error = raised
 
                         after = {
                             path.relative_to(outside): path.read_bytes()
@@ -101,22 +137,19 @@ class InstallerTests(unittest.TestCase):
             source_mode = source.stat().st_mode & 0o777
             drift_mode = 0o600 if source_mode != 0o600 else 0o644
 
-            with mock.patch.object(
-                installer, "INSTALLED_SKILL_DIR", installed_skill
-            ):
-                installer.run(home, install=True)
-                destination = installed_skill / "SKILL.md"
-                destination.chmod(drift_mode)
+            installer.run(home, install=True)
+            destination = installed_skill / "SKILL.md"
+            destination.chmod(drift_mode)
 
-                ledger, drift = installer.run(home, install=False)
-                self.assertTrue(drift)
-                self.assertIn("SKILL.md", ledger["skill_drift"])
+            ledger, drift = installer.run(home, install=False)
+            self.assertTrue(drift)
+            self.assertIn("SKILL.md", ledger["skill_drift"])
 
-                installer.run(home, install=True)
-                self.assertEqual(
-                    source_mode,
-                    destination.stat().st_mode & 0o777,
-                )
+            installer.run(home, install=True)
+            self.assertEqual(
+                source_mode,
+                destination.stat().st_mode & 0o777,
+            )
 
     def test_install_copies_notification_module_and_runner_tests(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -124,11 +157,8 @@ class InstallerTests(unittest.TestCase):
             installed_skill = (
                 home / ".local/share/trae-skills/report-writer-bytedance"
             )
-            with mock.patch.object(
-                installer, "INSTALLED_SKILL_DIR", installed_skill
-            ):
-                _ledger, drift = installer.run(home, install=True)
-                self.assertTrue(drift)
+            _ledger, drift = installer.run(home, install=True)
+            self.assertTrue(drift)
 
             runtime = home / ".local/lib/trae-daily-report"
             self.assertTrue((runtime / "notifications.py").is_file())
@@ -142,20 +172,14 @@ class InstallerTests(unittest.TestCase):
                 (ROOT / "SKILL.md").read_bytes(),
             )
 
-            with mock.patch.object(
-                installer, "INSTALLED_SKILL_DIR", installed_skill
-            ):
-                _ledger, drift = installer.run(home, install=False)
-                self.assertFalse(drift)
+            _ledger, drift = installer.run(home, install=False)
+            self.assertFalse(drift)
 
             (installed_skill / "SKILL.md").write_text(
                 "drift\n", encoding="utf-8"
             )
-            with mock.patch.object(
-                installer, "INSTALLED_SKILL_DIR", installed_skill
-            ):
-                _ledger, drift = installer.run(home, install=False)
-                self.assertTrue(drift)
+            _ledger, drift = installer.run(home, install=False)
+            self.assertTrue(drift)
 
     def test_check_detects_and_install_removes_stale_skill_file(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -163,20 +187,45 @@ class InstallerTests(unittest.TestCase):
             installed_skill = (
                 home / ".local/share/trae-skills/report-writer-bytedance"
             )
-            with mock.patch.object(
-                installer, "INSTALLED_SKILL_DIR", installed_skill
-            ):
-                installer.run(home, install=True)
-                stale = installed_skill / "automation/stale.py"
-                stale.parent.mkdir(parents=True, exist_ok=True)
-                stale.write_text("stale\n", encoding="utf-8")
+            installer.run(home, install=True)
+            stale = installed_skill / "automation/stale.py"
+            stale.parent.mkdir(parents=True, exist_ok=True)
+            stale.write_text("stale\n", encoding="utf-8")
 
-                ledger, drift = installer.run(home, install=False)
-                self.assertTrue(drift)
-                self.assertIn("automation/stale.py", ledger["skill_stale"])
+            ledger, drift = installer.run(home, install=False)
+            self.assertTrue(drift)
+            self.assertIn("automation/stale.py", ledger["skill_stale"])
 
-                installer.run(home, install=True)
-                self.assertFalse(stale.exists())
+            installer.run(home, install=True)
+            self.assertFalse(stale.exists())
+
+    def test_check_detects_and_install_removes_only_runtime_stale_files(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            installer.run(home, install=True)
+            runtime_stale = (
+                home / ".local/lib/trae-daily-report/tests/stale.sh"
+            )
+            runtime_stale.write_text("stale\n", encoding="utf-8")
+            unmanaged = (
+                home / ".local/bin/unmanaged",
+                home / ".config/trae-daily-report/unmanaged",
+                home / "Library/LaunchAgents/unmanaged.plist",
+            )
+            for path in unmanaged:
+                path.write_text("keep\n", encoding="utf-8")
+
+            ledger, drift = installer.run(home, install=False)
+            self.assertTrue(drift)
+            self.assertIn("tests/stale.sh", ledger["runtime_stale"])
+
+            installer.run(home, install=True)
+            self.assertFalse(runtime_stale.exists())
+            self.assertTrue(all(path.read_text() == "keep\n" for path in unmanaged))
+
+            ledger, drift = installer.run(home, install=False)
+            self.assertFalse(drift)
+            self.assertEqual(ledger["runtime_stale"], [])
 
 
 if __name__ == "__main__":

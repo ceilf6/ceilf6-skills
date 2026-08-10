@@ -50,7 +50,7 @@ def parse_report_warnings(message: str) -> Tuple[ReportWarning, ...]:
     warnings = []
     for raw_line in message.splitlines():
         line = raw_line.strip()
-        if not line.startswith(WARNING_PREFIX):
+        if WARNING_PREFIX not in line:
             continue
         match = WARNING_RE.fullmatch(line)
         if match is None:

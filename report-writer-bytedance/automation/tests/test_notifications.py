@@ -78,6 +78,22 @@ class WarningParserTests(unittest.TestCase):
         with self.assertRaises(WarningParseError):
             parse_report_warnings(invalid)
 
+    def test_rejects_quoted_warning(self):
+        invalid = (
+            '> <daily-report-warning kind="configuration_required" '
+            'source="oncall" code="not_logged_in" />'
+        )
+        with self.assertRaises(WarningParseError):
+            parse_report_warnings(invalid)
+
+    def test_rejects_prefixed_warning(self):
+        invalid = (
+            'prefix <daily-report-warning kind="configuration_required" '
+            'source="oncall" code="not_logged_in" />'
+        )
+        with self.assertRaises(WarningParseError):
+            parse_report_warnings(invalid)
+
     def test_idempotency_key_is_bounded(self):
         event = NotificationEvent(
             target_date="2026-08-07",
