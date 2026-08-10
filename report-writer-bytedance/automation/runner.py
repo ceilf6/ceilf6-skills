@@ -14,6 +14,14 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 from zoneinfo import ZoneInfo
 
+from notifications import (
+    NotificationEvent,
+    configuration_event,
+    failure_event,
+    parse_report_warnings,
+    send_once,
+)
+
 
 HOME = Path("/Users/bytedance")
 TRAE = HOME / ".local/bin/trae-cli"
@@ -25,6 +33,8 @@ TRAE_STARTUP_TIMEOUT_SECONDS = 120
 TRAE_STARTUP_ATTEMPTS = 2
 TRAE_STARTUP_RETRY_DELAY_SECONDS = 5
 VERIFY_TIMEOUT_SECONDS = 120
+FEISHU_OPEN_ID = "ou_c501034db06707b7116eb9ec11896a7d"
+NOTIFICATION_TIMEOUT_SECONDS = 30
 EXPECTED_SECTIONS = ("今日重点", "今日完成", "明日展望")
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 DEFAULT_SKILL_DIR = HOME / ".local/share/trae-skills/report-writer-bytedance"
@@ -50,7 +60,9 @@ class DailyReportError(RuntimeError):
 
 
 class CommandError(DailyReportError):
-    pass
+    def __init__(self, message: str, label: str = "command_error") -> None:
+        super().__init__(message)
+        self.label = label
 
 
 class TraeStartupError(CommandError):
@@ -121,6 +133,12 @@ def command_detail(process: subprocess.CompletedProcess) -> str:
     return detail
 
 
+def error_code(error: Exception) -> str:
+    label = getattr(error, "label", type(error).__name__)
+    normalized = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
+    return normalized or "unknown_error"
+
+
 def run_checked(
     label: str,
     argv: Sequence[str],
@@ -138,16 +156,21 @@ def run_checked(
         )
     except subprocess.TimeoutExpired as error:
         raise CommandError(
-            "{} timed out after {}s".format(label, timeout_seconds)
+            "{} timed out after {}s".format(label, timeout_seconds),
+            label=label,
         ) from error
     except OSError as error:
-        raise CommandError("{} could not start: {}".format(label, error)) from error
+        raise CommandError(
+            "{} could not start: {}".format(label, error),
+            label=label,
+        ) from error
 
     if process.returncode != 0:
         detail = command_detail(process)
         suffix = ": {}".format(detail) if detail else ""
         raise CommandError(
-            "{} failed with status {}{}".format(label, process.returncode, suffix)
+            "{} failed with status {}{}".format(label, process.returncode, suffix),
+            label=label,
         )
     return process
 
@@ -452,6 +475,57 @@ def run_trae(
             time.sleep(TRAE_STARTUP_RETRY_DELAY_SECONDS)
 
 
+def send_lark_dm(event: NotificationEvent, env: Dict[str, str]) -> None:
+    run_checked(
+        "Lark self notification",
+        [
+            "lark-cli",
+            "im",
+            "+messages-send",
+            "--as",
+            "user",
+            "--user-id",
+            FEISHU_OPEN_ID,
+            "--text",
+            event.text,
+            "--idempotency-key",
+            event.idempotency_key,
+            "--format",
+            "json",
+        ],
+        NOTIFICATION_TIMEOUT_SECONDS,
+        env,
+    )
+
+
+def notify_best_effort(
+    event: NotificationEvent,
+    env: Dict[str, str],
+    run_log: Path,
+    handle,
+) -> None:
+    try:
+        sent = send_once(
+            event,
+            LOG_DIR / "notifications",
+            lambda current: send_lark_dm(current, env),
+        )
+        log_line(
+            handle,
+            "notification {} key={} run_log={}".format(
+                "sent" if sent else "deduplicated",
+                event.idempotency_key,
+                run_log,
+            ),
+        )
+    except Exception as error:
+        log_line(handle, "notification failed: {}".format(error))
+        print(
+            "daily report notification failed: {}".format(error),
+            file=sys.stderr,
+        )
+
+
 def run_full(target_date: str, env: Dict[str, str]) -> int:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(SHANGHAI).strftime("%Y%m%d-%H%M%S")
@@ -462,8 +536,10 @@ def run_full(target_date: str, env: Dict[str, str]) -> int:
 
     with run_log.open("a", encoding="utf-8", buffering=1) as handle:
         log_line(handle, "daily report started target_date={} skill_dir={}".format(target_date, SKILL_DIR))
+        stage = "preflight"
         try:
             run_preflight(env, handle)
+            stage = "trae_execution"
             prompt = render_prompt(target_date)
             log_line(handle, "TRAE execution started")
             started = time.monotonic()
@@ -474,11 +550,14 @@ def run_full(target_date: str, env: Dict[str, str]) -> int:
                     time.monotonic() - started
                 ),
             )
+            stage = "result_contract"
             if not last_message.is_file():
                 raise VerificationError("TRAE did not write its final message")
             message = last_message.read_text(encoding="utf-8")
+            warnings = parse_report_warnings(message)
             if not has_success_sentinel(message, target_date):
                 raise VerificationError("TRAE final message lacks the success sentinel")
+            stage = "wiki_verification"
             verified = verify_wiki(target_date, env)
             log_line(
                 handle,
@@ -486,10 +565,29 @@ def run_full(target_date: str, env: Dict[str, str]) -> int:
                     verified["title"], verified["node_token"]
                 ),
             )
+            for warning in warnings:
+                if warning.kind == "configuration_required":
+                    notify_best_effort(
+                        configuration_event(target_date, warning, run_log),
+                        env,
+                        run_log,
+                        handle,
+                    )
             log_line(handle, "daily report finished status=0")
             return 0
         except DailyReportError as error:
             log_line(handle, "daily report failed: {}".format(error))
+            notify_best_effort(
+                failure_event(
+                    target_date,
+                    stage,
+                    error_code(error),
+                    run_log,
+                ),
+                env,
+                run_log,
+                handle,
+            )
             log_line(handle, "daily report finished status=1")
             return 1
         except Exception as error:
@@ -498,6 +596,17 @@ def run_full(target_date: str, env: Dict[str, str]) -> int:
                 "daily report failed with unexpected {}: {}".format(
                     type(error).__name__, error
                 ),
+            )
+            notify_best_effort(
+                failure_event(
+                    target_date,
+                    stage,
+                    error_code(error),
+                    run_log,
+                ),
+                env,
+                run_log,
+                handle,
             )
             log_line(handle, "daily report finished status=1")
             return 1

@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 
 RUNNER_PATH = Path(__file__).resolve().parents[1] / "runner.py"
+sys.path.insert(0, str(RUNNER_PATH.parent))
 SPEC = importlib.util.spec_from_file_location("daily_report_runner", RUNNER_PATH)
 runner = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = runner
@@ -190,10 +191,13 @@ class FullRunExitStatusTests(unittest.TestCase):
                 runner, "run_preflight"
             ), mock.patch.object(runner, "render_prompt", return_value="prompt"), mock.patch.object(
                 runner, "run_trae", side_effect=write_failed_message
-            ), mock.patch.object(runner, "verify_wiki") as verify:
+            ), mock.patch.object(runner, "verify_wiki") as verify, mock.patch.object(
+                runner, "notify_best_effort"
+            ) as notify:
                 status = runner.run_full("2026-07-20", {})
         self.assertEqual(status, 1)
         verify.assert_not_called()
+        notify.assert_called_once()
 
     def test_success_requires_sentinel_and_wiki_verification(self):
         def write_success_message(prompt, last_message, env, handle):
@@ -214,6 +218,132 @@ class FullRunExitStatusTests(unittest.TestCase):
             ):
                 status = runner.run_full("2026-07-20", {})
         self.assertEqual(status, 0)
+
+
+class NotificationIntegrationTests(unittest.TestCase):
+    def test_send_lark_dm_uses_user_private_message_command(self):
+        event = runner.NotificationEvent(
+            target_date="2026-08-07",
+            kind="failure",
+            source="preflight",
+            code="lark_auth",
+            text="failure text",
+        )
+        with mock.patch.object(runner, "run_checked") as checked:
+            runner.send_lark_dm(event, {"PATH": "/test"})
+
+        checked.assert_called_once_with(
+            "Lark self notification",
+            [
+                "lark-cli",
+                "im",
+                "+messages-send",
+                "--as",
+                "user",
+                "--user-id",
+                "ou_c501034db06707b7116eb9ec11896a7d",
+                "--text",
+                "failure text",
+                "--idempotency-key",
+                event.idempotency_key,
+                "--format",
+                "json",
+            ],
+            30,
+            {"PATH": "/test"},
+        )
+
+    def test_notification_failure_is_best_effort(self):
+        event = runner.NotificationEvent(
+            target_date="2026-08-07",
+            kind="failure",
+            source="preflight",
+            code="lark_auth",
+            text="failure text",
+        )
+        with tempfile.TemporaryDirectory() as temp_dir, mock.patch.object(
+            runner, "LOG_DIR", Path(temp_dir)
+        ), mock.patch.object(
+            runner, "send_once", side_effect=RuntimeError("send failed")
+        ), mock.patch.object(
+            runner.sys, "stderr", io.StringIO()
+        ):
+            runner.notify_best_effort(
+                event,
+                {},
+                Path(temp_dir) / "run.log",
+                io.StringIO(),
+            )
+
+    def test_success_with_configuration_warning_returns_zero_and_notifies(self):
+        def write_success(prompt, last_message, env, handle):
+            last_message.write_text(
+                '<daily-report-warning kind="configuration_required" '
+                'source="oncall" code="not_logged_in" />\n'
+                '<daily-report-result status="success" date="2026-08-07" />\n',
+                encoding="utf-8",
+            )
+
+        with tempfile.TemporaryDirectory() as temp_dir, mock.patch.object(
+            runner, "LOG_DIR", Path(temp_dir)
+        ), mock.patch.object(
+            runner, "run_preflight"
+        ), mock.patch.object(
+            runner, "render_prompt", return_value="prompt"
+        ), mock.patch.object(
+            runner, "run_trae", side_effect=write_success
+        ), mock.patch.object(
+            runner,
+            "verify_wiki",
+            return_value={"title": "26.08.07", "node_token": "node-07"},
+        ), mock.patch.object(
+            runner, "notify_best_effort"
+        ) as notify:
+            status = runner.run_full("2026-08-07", {})
+
+        self.assertEqual(status, 0)
+        self.assertEqual(notify.call_count, 1)
+        self.assertEqual(notify.call_args.args[0].source, "oncall")
+
+    def test_source_unavailable_warning_does_not_notify(self):
+        def write_success(prompt, last_message, env, handle):
+            last_message.write_text(
+                '<daily-report-warning kind="source_unavailable" '
+                'source="oncall" code="timeout" />\n'
+                '<daily-report-result status="success" date="2026-08-07" />\n',
+                encoding="utf-8",
+            )
+
+        with tempfile.TemporaryDirectory() as temp_dir, mock.patch.object(
+            runner, "LOG_DIR", Path(temp_dir)
+        ), mock.patch.object(runner, "run_preflight"), mock.patch.object(
+            runner, "render_prompt", return_value="prompt"
+        ), mock.patch.object(
+            runner, "run_trae", side_effect=write_success
+        ), mock.patch.object(
+            runner,
+            "verify_wiki",
+            return_value={"title": "26.08.07", "node_token": "node-07"},
+        ), mock.patch.object(runner, "notify_best_effort") as notify:
+            status = runner.run_full("2026-08-07", {})
+
+        self.assertEqual(status, 0)
+        notify.assert_not_called()
+
+    def test_hard_failure_notifies_and_stays_nonzero(self):
+        with tempfile.TemporaryDirectory() as temp_dir, mock.patch.object(
+            runner, "LOG_DIR", Path(temp_dir)
+        ), mock.patch.object(
+            runner,
+            "run_preflight",
+            side_effect=runner.CommandError("no auth", label="Lark auth"),
+        ), mock.patch.object(runner, "notify_best_effort") as notify:
+            status = runner.run_full("2026-08-07", {})
+
+        self.assertEqual(status, 1)
+        self.assertEqual(notify.call_count, 1)
+        self.assertEqual(notify.call_args.args[0].kind, "failure")
+        self.assertEqual(notify.call_args.args[0].code, "lark_auth")
 
 
 if __name__ == "__main__":
