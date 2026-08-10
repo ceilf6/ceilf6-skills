@@ -16,6 +16,7 @@ SPEC = importlib.util.spec_from_file_location("daily_report_runner", RUNNER_PATH
 runner = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = runner
 SPEC.loader.exec_module(runner)
+runner.PROMPT_FILE = RUNNER_PATH.parent / "prompt.md"
 
 
 class TargetDateTests(unittest.TestCase):
