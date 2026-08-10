@@ -189,10 +189,10 @@ has "六键齐后当前在拉群" '◉ 拉群（当前）' "$out"
 has "端点未亮" '○ 完成' "$out"
 bash "$TH" mark --ctx-dir "$CTX" cr_group_created >/dev/null
 out=$(bash "$TH" progress --ctx-dir "$CTX")
-has "拉群后当前在求CR" '◉ 求CR（当前）' "$out"
+has "拉群后当前在发起CR" '◉ 发起CR（当前）' "$out"
 bash "$TH" mark --ctx-dir "$CTX" cr_requested >/dev/null
 out=$(bash "$TH" progress --ctx-dir "$CTX")
-has "求CR 后当前在求QA" '◉ 求QA（当前）' "$out"
+has "发起CR 后当前在发起QA" '◉ 发起QA（当前）' "$out"
 bash "$TH" mark --ctx-dir "$CTX" qa_requested >/dev/null
 out=$(bash "$TH" progress --ctx-dir "$CTX")
 hasnt "九键全齐无当前标记" '（当前）' "$out"
@@ -324,6 +324,17 @@ bash "$TH" set-node --ctx-dir "$CTX" done >/dev/null
 [ "$(jq -r '.status' "$CTX/meta.json")" = done ] && ok "done 置 status=done" || bad "status: $(jq -r .status "$CTX/meta.json")"
 out=$(bash "$TH" progress --ctx-dir "$CTX")
 has "done 后完成点亮" '● 完成' "$out"
+
+echo "== 完成态凌驾：链条扩键前完成的历史线程，缺键也整条置绿 =="
+(cd "$REPO" && bash "$TH" register --ctx-dir "$CTX" --title '完成态凌驾') >/dev/null
+tmp=$(mktemp)
+jq 'del(.milestones.cr_requested, .milestones.qa_requested)' "$CTX/meta.json" > "$tmp" && mv "$tmp" "$CTX/meta.json"
+out=$(bash "$TH" progress --ctx-dir "$CTX")
+hasnt "完成态无当前标记" '（当前）' "$out"
+hasnt "完成态无未完成节点" '○' "$out"
+has "端点仍亮" '● 完成' "$out"
+out=$(bash "$TH" list --all)
+has "完成态节点列已完成" '· 已完成]' "$out"
 out=$(bash "$TH" set-node --ctx-dir "$CTX" cr_group_created)
 has "从 done 回退是回退方向" '方向：回退' "$out"
 [ "$(jq -r '.status' "$CTX/meta.json")" = awaiting_human ] && ok "done 回退 status 回落 awaiting_human" \
@@ -353,7 +364,7 @@ echo "$out" | jq -e '.[0].cr_rounds == 2' >/dev/null && ok "cr_rounds 计数" ||
 echo "$out" | jq -e '.[0].resume | test("--resume sid-fields")' >/dev/null && ok "resume 命令含会话恢复" || bad "resume: $(echo "$out" | jq -r '.[0].resume')"
 cleanup_env
 
-echo "== 节点列：待拉群 / 待求CR / 待求QA / 待合入 / 已完成 =="
+echo "== 节点列：待拉群 / 待发起CR / 待发起QA / 待合入 / 已完成 =="
 make_env
 make_repo repo-w feat/tail developing
 mk_session sid-tail
@@ -364,10 +375,10 @@ out=$(bash "$TH" list)
 has "节点列待拉群" '· 待拉群]' "$out"
 bash "$TH" mark --ctx-dir "$CTX" cr_group_created >/dev/null
 out=$(bash "$TH" list)
-has "拉群后节点列待求CR" '· 待求CR]' "$out"
+has "拉群后节点列待发起CR" '· 待发起CR]' "$out"
 bash "$TH" mark --ctx-dir "$CTX" cr_requested >/dev/null
 out=$(bash "$TH" list)
-has "求CR 后节点列待求QA" '· 待求QA]' "$out"
+has "发起CR 后节点列待发起QA" '· 待发起QA]' "$out"
 bash "$TH" mark --ctx-dir "$CTX" qa_requested >/dev/null
 out=$(bash "$TH" list)
 has "九键齐节点列待合入" '· 待合入]' "$out"

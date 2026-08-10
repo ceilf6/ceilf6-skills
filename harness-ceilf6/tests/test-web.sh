@@ -53,8 +53,8 @@ echo "$page" | grep -q '先停止该任务' && ok "禁用态提示指向停止" 
 echo "$page" | grep -q '启动中' && ok "starting 状态标签在册" || bad "缺 starting 标签"
 echo "$page" | grep -q '已滞留' && ok "stranded 状态标签在册" || bad "缺 stranded 标签"
 echo "$page" | grep -Fq "cr_group_created:'拉群'" && ok "拉群标签在册" || bad "缺拉群标签"
-echo "$page" | grep -Fq "cr_requested:'求CR'" && ok "求CR 标签在册" || bad "缺求CR 标签"
-echo "$page" | grep -Fq "qa_requested:'求QA'" && ok "求QA 标签在册" || bad "缺求QA 标签"
+echo "$page" | grep -Fq "cr_requested:'发起CR'" && ok "发起CR 标签在册" || bad "缺发起CR 标签"
+echo "$page" | grep -Fq "qa_requested:'发起QA'" && ok "发起QA 标签在册" || bad "缺发起QA 标签"
 echo "$page" | grep -Fq "chip('完成'" && ok "端点完成在册" || bad "缺完成端点"
 echo "$page" | grep -Fq '<script>window.BOARD = {"mode": "local"}</script>' \
   && ok "local 配置已注入" || bad "local 配置未注入"
@@ -158,9 +158,9 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/
   -d "{\"ctx_dir\": \"$CTX\"}")
 [ "$code" = 400 ] && ok "无 MR 求CR 400" || bad "无 MR 求CR: $code"
 curl -s -X POST "http://127.0.0.1:${PORT}/api/cr-request" -d "{\"ctx_dir\": \"$CTX\"}" \
-  | jq -e '.error == "无 MR，未求CR"' >/dev/null && ok "无 MR 求CR 错误文案" || bad "无 MR 求CR 错误文案"
+  | jq -e '.error == "无 MR，未发起CR"' >/dev/null && ok "无 MR 求CR 错误文案" || bad "无 MR 求CR 错误文案"
 curl -s -X POST "http://127.0.0.1:${PORT}/api/cr-qa" -d "{\"ctx_dir\": \"$CTX\"}" \
-  | jq -e '.error == "无 MR，未求QA"' >/dev/null && ok "无 MR 求QA 错误文案" || bad "无 MR 求QA 错误文案"
+  | jq -e '.error == "无 MR，未发起QA"' >/dev/null && ok "无 MR 求QA 错误文案" || bad "无 MR 求QA 错误文案"
 
 # 有 MR：拉群只建群拉人（不发消息），求CR 才发消息并摘 WIP
 tmp=$(mktemp); jq '.mr_id = "8300100"' "$CTX/meta.json" > "$tmp" && mv "$tmp" "$CTX/meta.json"

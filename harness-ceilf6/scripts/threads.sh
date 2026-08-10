@@ -35,12 +35,14 @@ milestone_label() { # 节点内部名 → 进度图段名
     human_cr_done) echo "人工CR" ;;
     selftest_done) echo "自测" ;;
     cr_group_created) echo "拉群" ;;
-    cr_requested) echo "求CR" ;;
-    qa_requested) echo "求QA" ;;
+    cr_requested) echo "发起CR" ;;
+    qa_requested) echo "发起QA" ;;
   esac
 }
 
-node_label() { # <当前节点> <status> → 列表「节点」列文案；九键全齐后由 status 决定待合入/已完成
+node_label() { # <当前节点> <status> → 列表「节点」列文案。status=done 一律「已完成」——完成态凌驾于
+               # 逐节点记录：链条扩键前完成的历史线程 milestones 少于当前键集，按缺键渲染会自相矛盾
+  if [ "${2:-}" = done ]; then echo "已完成"; return 0; fi
   case "$1" in
     plan_gate) echo "规划中" ;;
     dev_done) echo "开发中" ;;
@@ -49,9 +51,9 @@ node_label() { # <当前节点> <status> → 列表「节点」列文案；九�
     human_cr_done) echo "待人工CR" ;;
     selftest_done) echo "待自测" ;;
     cr_group_created) echo "待拉群" ;;
-    cr_requested) echo "待求CR" ;;
-    qa_requested) echo "待求QA" ;;
-    "") if [ "${2:-}" = done ]; then echo "已完成"; else echo "待合入"; fi ;;
+    cr_requested) echo "待发起CR" ;;
+    qa_requested) echo "待发起QA" ;;
+    "") echo "待合入" ;;
   esac
 }
 
@@ -81,6 +83,10 @@ progress_line() { # <meta.json> → 一行进度图；机审CR 段带已有轮�
   ctx=$(dirname "$meta")
   cur=$(current_node "$meta")
   [ "$cur" = "-" ] && cur="plan_gate"   # meta 不可解析 / status 不识别时按全未完成渲染
+  st=$(jq -r '.status // ""' "$meta" 2>/dev/null || echo "")
+  # 完成态凌驾于逐节点记录：链条扩键前完成的历史线程 milestones 少于当前键集，逐键渲染会画出
+  # 「已完成却有节点未绿」。cur 置空后无节点命中「当前」，整条按已完成着色
+  [ "$st" = done ] && cur=""
   for m in $MILESTONES; do
     label=$(milestone_label "$m")
     if [ "$m" = cr_passed ]; then
@@ -94,7 +100,6 @@ progress_line() { # <meta.json> → 一行进度图；机审CR 段带已有轮�
     parts="${parts}${sym} ${label}"
     [ "$m" = "$cur" ] && parts="${parts}（当前）"
   done
-  st=$(jq -r '.status // ""' "$meta" 2>/dev/null || echo "")
   if [ "$st" = done ]; then parts="${parts} → ● 完成"; else parts="${parts} → ○ 完成"; fi
   printf '%s\n' "$parts"
 }

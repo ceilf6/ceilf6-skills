@@ -8,7 +8,7 @@ threads.sh 保证。写一律用 --ctx-dir 直指：序号与关键词定位只�
 仅绑 127.0.0.1，无鉴权；/api/mark 只放行人工节点，/api/set-node 是看板手控的
 绝对定位入口（推进/回退，目标校验仍在 threads.sh）。
 看板页本体在 board/index.html（本地/对外共用单文件），本文件只注入 local 模式配置后返回。
-拉群、求CR、求QA 与 WIP 走 cr-group.sh：bytedcli / lark-cli 一律不在本文件直调。
+拉群、发起CR、发起QA 与 WIP 走 cr-group.sh：bytedcli / lark-cli 一律不在本文件直调。
 运行态与停止不经 threads.sh：转调 bot 控制端口，bot 不在时看板照常渲染静态进度。
 """
 import argparse
@@ -26,12 +26,12 @@ MANUAL_NODES = ("human_cr_done", "selftest_done")
 SET_TARGETS = ("plan_gate", "dev_done", "cr_passed", "mr_created", "human_cr_done", "selftest_done",
                "cr_group_created", "cr_requested", "qa_requested", "done")
 
-# 收尾段三步各自一个端点：拉群、求CR、求QA。值为 (cr-group.sh 子命令, 无 MR 时的错误文案)——
+# 收尾段三步各自一个端点：拉群、发起CR、发起QA。值为 (cr-group.sh 子命令, 无 MR 时的错误文案)——
 # 无 MR 是契约码 exit 3，文案按步区分才说得清是哪一步没做成。
 CR_STEPS = {
     "/api/cr-group": ("group", "无 MR，未拉群"),
-    "/api/cr-request": ("request", "无 MR，未求CR"),
-    "/api/cr-qa": ("qa", "无 MR，未求QA"),
+    "/api/cr-request": ("request", "无 MR，未发起CR"),
+    "/api/cr-qa": ("qa", "无 MR，未发起QA"),
 }
 
 # bot 控制端口：看板的停止按钮转调它。bot 未运行时看板只是少了运行态信息，不是错误。

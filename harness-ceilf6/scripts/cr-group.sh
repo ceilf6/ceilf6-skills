@@ -7,7 +7,7 @@
 # 拆成独立子命令是因为返工只需重新喊人：群一旦建成就长期有效，回退到开发再走一遍时不必重建。
 # 名单不设配置：现读 MR 上建 MR 时自动配置的 reviewer（bits mr reviewer info）。
 # 完成判据分两类——group 宽容（群多半已在，建群失败、拉人失败都只告警）；request 与 qa 严格
-# （提醒或消息没送达就不标完成，节点留黄可重试），否则「已求CR」「已求QA」会掩盖没人收到消息。
+# （提醒或消息没送达就不标完成，节点留黄可重试），否则「已发起CR」「已发起QA」会掩盖没人收到消息。
 # 群标识落 meta.cr_chat_id：建群那次拿到的 chat_id 是后续发消息的唯一入口。
 # 无 MR 一律 exit 3（契约码，web.py 据此回 400）；meta 缺失阻断。
 # 全部 bytedcli / lark-cli 调用收敛在本脚本，web.py 只转调。
@@ -115,7 +115,7 @@ case "$sub" in
     ;;
 
   request)
-    if [ -z "$mr" ]; then echo "cr-group: 无 MR，未求CR"; exit 3; fi
+    if [ -z "$mr" ]; then echo "cr-group: 无 MR，未发起CR"; exit 3; fi
     if [ "$dry" = 1 ]; then
       echo "DRY: lark-cli im +messages-send --chat-id <meta.cr_chat_id 或现取> --text ${msg}"
       echo "DRY: threads.sh mark --ctx-dir ${ctx} cr_requested"
@@ -139,7 +139,7 @@ case "$sub" in
     ;;
 
   qa)
-    if [ -z "$mr" ]; then echo "cr-group: 无 MR，未求QA"; exit 3; fi
+    if [ -z "$mr" ]; then echo "cr-group: 无 MR，未发起QA"; exit 3; fi
     if [ "$dry" = 1 ]; then
       echo "DRY: bytedcli bits mr remind-qa --mr-id ${mr}"
       echo "DRY: lark-cli im +messages-send --chat-id <meta.cr_chat_id> --text ${msg}"

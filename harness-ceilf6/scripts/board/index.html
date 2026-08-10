@@ -130,7 +130,7 @@ const ORDER = ['plan_gate','dev_done','cr_passed','mr_created','human_cr_done','
                'cr_group_created','cr_requested','qa_requested'];
 const LABEL = {plan_gate:'计划门', dev_done:'开发', cr_passed:'机审CR', mr_created:'建MR',
                human_cr_done:'人工CR', selftest_done:'自测', cr_group_created:'拉群',
-               cr_requested:'求CR', qa_requested:'求QA'};
+               cr_requested:'发起CR', qa_requested:'发起QA'};
 async function setNode(ctx, target, silent){
   const r = await fetch('/api/set-node', {method:'POST', body: JSON.stringify({ctx_dir: ctx, target: target})});
   const out = await r.json().catch(() => ({}));
@@ -184,6 +184,8 @@ function renderNodes(t){
   let cur = ORDER.indexOf(t.current);
   if (t.current === '') cur = ORDER.length;   // 九键全齐：停在端点前（待合入）
   if (t.current === '-') cur = 0;             // 未知：按全未完成
+  // 完成态凌驾于逐节点记录：链条扩键前完成的历史线程 milestones 少于当前键集
+  if (t.status === 'done') cur = ORDER.length;
   ORDER.forEach((n, j) => {
     let label = LABEL[n];
     if (n === 'cr_passed' && t.cr_rounds > 0) label += '(' + t.cr_rounds + '轮)';
@@ -208,7 +210,7 @@ function renderNodes(t){
           tip = '点击一键提醒 QA 并在群里知会';
           act = () => crQa(t.ctx_dir);
         } else if (n === 'selftest_done'){
-          tip = '点击标记自测完成，随后自动拉群、求CR、求QA';
+          tip = '点击标记自测完成，随后自动拉群、发起CR、发起QA';
           act = () => finishSelftest(t.ctx_dir);
         } else {
           tip = '点击标记「' + LABEL[n] + '」完成';

@@ -115,10 +115,10 @@ rc=0; out=$(bash "$CG" group --ctx-dir "$CTX") || rc=$?
 has "group 契约文案" '无 MR，未拉群' "$out"
 rc=0; out=$(bash "$CG" request --ctx-dir "$CTX") || rc=$?
 [ "$rc" = 3 ] && ok "request exit 3" || bad "request rc=$rc"
-has "request 契约文案" '无 MR，未求CR' "$out"
+has "request 契约文案" '无 MR，未发起CR' "$out"
 rc=0; out=$(bash "$CG" qa --ctx-dir "$CTX") || rc=$?
 [ "$rc" = 3 ] && ok "qa exit 3" || bad "qa rc=$rc"
-has "qa 契约文案" '无 MR，未求QA' "$out"
+has "qa 契约文案" '无 MR，未发起QA' "$out"
 jq -e '.milestones | has("cr_group_created") | not' "$CTX/meta.json" >/dev/null && ok "未 mark" || bad "误 mark"
 [ ! -f "$STUB_STATE/calls.log" ] && ok "零外部调用" || bad "有外部调用: $(cat "$STUB_STATE/calls.log")"
 teardown
