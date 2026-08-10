@@ -67,15 +67,43 @@ class PromptContractTests(unittest.TestCase):
 
 
 class SubprocessTests(unittest.TestCase):
-    def test_timeout_becomes_preflight_error(self):
+    def test_timeout_preserves_label_and_stable_error_code(self):
         with mock.patch.object(
             runner.subprocess,
             "run",
             side_effect=subprocess.TimeoutExpired(["slow"], 3),
         ):
             with self.assertRaises(runner.CommandError) as raised:
-                runner.run_checked("slow check", ["slow"], 3, {})
+                runner.run_checked("Lark Auth", ["slow"], 3, {})
         self.assertIn("timed out", str(raised.exception))
+        self.assertEqual(raised.exception.label, "Lark Auth")
+        self.assertEqual(runner.error_code(raised.exception), "lark_auth")
+
+    def test_oserror_preserves_label_and_stable_error_code(self):
+        with mock.patch.object(
+            runner.subprocess,
+            "run",
+            side_effect=OSError("missing executable"),
+        ):
+            with self.assertRaises(runner.CommandError) as raised:
+                runner.run_checked("ByteCloud Auth", ["missing"], 3, {})
+        self.assertIn("could not start", str(raised.exception))
+        self.assertEqual(raised.exception.label, "ByteCloud Auth")
+        self.assertEqual(runner.error_code(raised.exception), "bytecloud_auth")
+
+    def test_nonzero_exit_preserves_label_and_stable_error_code(self):
+        failed = subprocess.CompletedProcess(
+            ["false"],
+            7,
+            stdout="",
+            stderr="denied",
+        )
+        with mock.patch.object(runner.subprocess, "run", return_value=failed):
+            with self.assertRaises(runner.CommandError) as raised:
+                runner.run_checked("Bits Auth", ["false"], 3, {})
+        self.assertIn("failed with status 7", str(raised.exception))
+        self.assertEqual(raised.exception.label, "Bits Auth")
+        self.assertEqual(runner.error_code(raised.exception), "bits_auth")
 
     def test_verify_wiki_fetches_unique_document(self):
         node_result = subprocess.CompletedProcess(
@@ -215,9 +243,10 @@ class FullRunExitStatusTests(unittest.TestCase):
                 runner,
                 "verify_wiki",
                 return_value={"title": "26.07.20", "node_token": "node-20"},
-            ):
+            ), mock.patch.object(runner, "notify_best_effort") as notify:
                 status = runner.run_full("2026-07-20", {})
         self.assertEqual(status, 0)
+        notify.assert_not_called()
 
 
 class NotificationIntegrationTests(unittest.TestCase):
@@ -304,6 +333,38 @@ class NotificationIntegrationTests(unittest.TestCase):
         self.assertEqual(status, 0)
         self.assertEqual(notify.call_count, 1)
         self.assertEqual(notify.call_args.args[0].source, "oncall")
+
+    def test_configuration_warning_with_wiki_failure_only_notifies_failure(self):
+        def write_success(prompt, last_message, env, handle):
+            last_message.write_text(
+                '<daily-report-warning kind="configuration_required" '
+                'source="oncall" code="not_logged_in" />\n'
+                '<daily-report-result status="success" date="2026-08-07" />\n',
+                encoding="utf-8",
+            )
+
+        with tempfile.TemporaryDirectory() as temp_dir, mock.patch.object(
+            runner, "LOG_DIR", Path(temp_dir)
+        ), mock.patch.object(
+            runner, "run_preflight"
+        ), mock.patch.object(
+            runner, "render_prompt", return_value="prompt"
+        ), mock.patch.object(
+            runner, "run_trae", side_effect=write_success
+        ), mock.patch.object(
+            runner,
+            "verify_wiki",
+            side_effect=runner.VerificationError("wiki unavailable"),
+        ), mock.patch.object(
+            runner, "notify_best_effort"
+        ) as notify:
+            status = runner.run_full("2026-08-07", {})
+
+        self.assertEqual(status, 1)
+        notify.assert_called_once()
+        event = notify.call_args.args[0]
+        self.assertEqual(event.kind, "failure")
+        self.assertEqual(event.source, "wiki_verification")
 
     def test_source_unavailable_warning_does_not_notify(self):
         def write_success(prompt, last_message, env, handle):
