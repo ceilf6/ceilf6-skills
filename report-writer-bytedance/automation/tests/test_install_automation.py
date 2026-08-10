@@ -15,6 +15,109 @@ SPEC.loader.exec_module(installer)
 
 
 class InstallerTests(unittest.TestCase):
+    def test_run_rejects_symlinked_destinations_without_touching_targets(self):
+        placements = (
+            "skill_root",
+            "skill_directory",
+            "skill_file",
+            "runtime_directory",
+            "runtime_file",
+        )
+        for placement in placements:
+            for install in (False, True):
+                with self.subTest(placement=placement, install=install):
+                    with tempfile.TemporaryDirectory() as temp:
+                        home = Path(temp)
+                        installed_skill = (
+                            home
+                            / ".local/share/trae-skills/report-writer-bytedance"
+                        )
+                        runtime = home / ".local/lib/trae-daily-report"
+                        outside = home / "outside"
+                        outside.mkdir()
+                        (outside / "sentinel").write_bytes(b"outside\n")
+
+                        if placement == "skill_root":
+                            installed_skill.parent.mkdir(parents=True)
+                            installed_skill.symlink_to(
+                                outside, target_is_directory=True
+                            )
+                        elif placement == "skill_directory":
+                            installed_skill.mkdir(parents=True)
+                            (installed_skill / "automation").symlink_to(
+                                outside, target_is_directory=True
+                            )
+                        elif placement == "skill_file":
+                            installed_skill.mkdir(parents=True)
+                            (installed_skill / "SKILL.md").symlink_to(
+                                outside / "sentinel"
+                            )
+                        elif placement == "runtime_directory":
+                            runtime.parent.mkdir(parents=True)
+                            runtime.symlink_to(
+                                outside, target_is_directory=True
+                            )
+                        else:
+                            runtime.mkdir(parents=True)
+                            (runtime / "runner.py").symlink_to(
+                                outside / "sentinel"
+                            )
+
+                        before = {
+                            path.relative_to(outside): path.read_bytes()
+                            for path in outside.rglob("*")
+                            if path.is_file()
+                        }
+                        error = None
+                        with mock.patch.object(
+                            installer, "INSTALLED_SKILL_DIR", installed_skill
+                        ):
+                            try:
+                                installer.run(home, install=install)
+                            except RuntimeError as raised:
+                                error = raised
+
+                        after = {
+                            path.relative_to(outside): path.read_bytes()
+                            for path in outside.rglob("*")
+                            if path.is_file()
+                        }
+                        self.assertIsNotNone(
+                            error,
+                            "installer accepted {} symlink; "
+                            "install={}; outside_changed={}".format(
+                                placement, install, before != after
+                            ),
+                        )
+                        self.assertEqual(before, after)
+
+    def test_skill_manifest_detects_and_repairs_mode_only_drift(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            installed_skill = (
+                home / ".local/share/trae-skills/report-writer-bytedance"
+            )
+            source = ROOT / "SKILL.md"
+            source_mode = source.stat().st_mode & 0o777
+            drift_mode = 0o600 if source_mode != 0o600 else 0o644
+
+            with mock.patch.object(
+                installer, "INSTALLED_SKILL_DIR", installed_skill
+            ):
+                installer.run(home, install=True)
+                destination = installed_skill / "SKILL.md"
+                destination.chmod(drift_mode)
+
+                ledger, drift = installer.run(home, install=False)
+                self.assertTrue(drift)
+                self.assertIn("SKILL.md", ledger["skill_drift"])
+
+                installer.run(home, install=True)
+                self.assertEqual(
+                    source_mode,
+                    destination.stat().st_mode & 0o777,
+                )
+
     def test_install_copies_notification_module_and_runner_tests(self):
         with tempfile.TemporaryDirectory() as temp:
             home = Path(temp)

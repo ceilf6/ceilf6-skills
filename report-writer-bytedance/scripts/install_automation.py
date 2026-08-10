@@ -7,7 +7,6 @@ import argparse
 import json
 import os
 import plistlib
-import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -79,22 +78,70 @@ SKILL_SYNC_DIRS = ("agents", "automation", "references", "scripts", "tests")
 SKILL_SYNC_FILES = ("SKILL.md",)
 
 
+def absolute_path(path: Path) -> Path:
+    return Path(os.path.abspath(path))
+
+
+def validate_destination(root: Path, destination: Path) -> None:
+    root = absolute_path(root)
+    destination = absolute_path(destination)
+    try:
+        relative = destination.relative_to(root)
+    except ValueError as error:
+        raise RuntimeError(
+            "destination escapes install root: {}".format(destination)
+        ) from error
+
+    current = root
+    paths = [root]
+    for part in relative.parts:
+        current = current / part
+        paths.append(current)
+    for path in paths:
+        if path.is_symlink():
+            raise RuntimeError(
+                "unsafe symlink in install destination: {}".format(path)
+            )
+
+    resolved_root = root.resolve(strict=False)
+    resolved_destination = destination.resolve(strict=False)
+    try:
+        resolved_destination.relative_to(resolved_root)
+    except ValueError as error:
+        raise RuntimeError(
+            "resolved destination escapes install root: {}".format(
+                destination
+            )
+        ) from error
+
+
 def differs(source: Path, destination: Path, mode: int) -> bool:
     if not destination.exists():
         return True
     try:
-        return source.read_bytes() != destination.read_bytes() or (destination.stat().st_mode & 0o777) != mode
+        return (
+            source.read_bytes() != destination.read_bytes()
+            or (destination.stat().st_mode & 0o777) != mode
+        )
     except OSError:
         return True
 
 
-def atomic_copy(source: Path, destination: Path, mode: int) -> None:
+def atomic_copy(
+    source: Path,
+    root: Path,
+    destination: Path,
+    mode: int,
+) -> None:
+    validate_destination(root, destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    validate_destination(root, destination)
     with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as handle:
         temporary = Path(handle.name)
         handle.write(source.read_bytes())
     try:
         os.chmod(temporary, mode)
+        validate_destination(root, destination)
         os.replace(temporary, destination)
     finally:
         if temporary.exists():
@@ -115,29 +162,67 @@ def skill_source_files() -> dict[Path, Path]:
     return files
 
 
-def skill_drift() -> tuple[list[Path], list[Path]]:
-    sources = skill_source_files()
+def installed_skill_files() -> set[Path]:
+    validate_destination(INSTALLED_SKILL_DIR, INSTALLED_SKILL_DIR)
+    installed = set()
+    for fname in SKILL_SYNC_FILES:
+        relative = Path(fname)
+        path = INSTALLED_SKILL_DIR / relative
+        validate_destination(INSTALLED_SKILL_DIR, path)
+        if path.is_file():
+            installed.add(relative)
+
+    for dname in SKILL_SYNC_DIRS:
+        destination_dir = INSTALLED_SKILL_DIR / dname
+        validate_destination(INSTALLED_SKILL_DIR, destination_dir)
+        if not destination_dir.exists():
+            continue
+        if not destination_dir.is_dir():
+            raise RuntimeError(
+                "managed skill path is not a directory: {}".format(
+                    destination_dir
+                )
+            )
+        for current, directories, filenames in os.walk(
+            destination_dir, followlinks=False
+        ):
+            current_dir = Path(current)
+            for name in directories + filenames:
+                validate_destination(
+                    INSTALLED_SKILL_DIR, current_dir / name
+                )
+            for name in filenames:
+                item = current_dir / name
+                if item.is_file() and not item.name.startswith("."):
+                    installed.add(
+                        Path(dname) / item.relative_to(destination_dir)
+                    )
+    return installed
+
+
+def skill_drift(
+    sources: dict[Path, Path],
+) -> tuple[list[Path], list[Path]]:
+    installed = installed_skill_files()
+    for relative in sources:
+        validate_destination(
+            INSTALLED_SKILL_DIR, INSTALLED_SKILL_DIR / relative
+        )
+
+    def source_differs(relative: Path, source: Path) -> bool:
+        destination = INSTALLED_SKILL_DIR / relative
+        source_mode = source.stat().st_mode & 0o777
+        return (
+            relative not in installed
+            or source.read_bytes() != destination.read_bytes()
+            or (destination.stat().st_mode & 0o777) != source_mode
+        )
+
     changed = [
         relative
         for relative, source in sources.items()
-        if not (INSTALLED_SKILL_DIR / relative).is_file()
-        or source.read_bytes()
-        != (INSTALLED_SKILL_DIR / relative).read_bytes()
+        if source_differs(relative, source)
     ]
-    installed = set()
-    for fname in SKILL_SYNC_FILES:
-        path = INSTALLED_SKILL_DIR / fname
-        if path.is_file():
-            installed.add(Path(fname))
-    for dname in SKILL_SYNC_DIRS:
-        destination_dir = INSTALLED_SKILL_DIR / dname
-        if not destination_dir.is_dir():
-            continue
-        for item in destination_dir.rglob("*"):
-            if item.is_file() and not item.name.startswith("."):
-                installed.add(
-                    Path(dname) / item.relative_to(destination_dir)
-                )
     stale = sorted(installed - set(sources))
     return sorted(changed), stale
 
@@ -149,10 +234,17 @@ def sync_skill_files(
     sources = skill_source_files()
     for relative in changed:
         destination = INSTALLED_SKILL_DIR / relative
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(sources[relative], destination)
+        source = sources[relative]
+        atomic_copy(
+            source,
+            INSTALLED_SKILL_DIR,
+            destination,
+            source.stat().st_mode & 0o777,
+        )
     for relative in stale:
-        (INSTALLED_SKILL_DIR / relative).unlink()
+        destination = INSTALLED_SKILL_DIR / relative
+        validate_destination(INSTALLED_SKILL_DIR, destination)
+        destination.unlink()
 
 
 def validate_plist(path: Path) -> None:
@@ -167,15 +259,24 @@ def validate_plist(path: Path) -> None:
 
 def run(home: Path, install: bool) -> tuple[dict, bool]:
     validate_plist(PLIST_SOURCE)
+    home = absolute_path(home)
+    destinations = [
+        (spec, home / spec.relative_destination)
+        for spec in FILE_SPECS
+    ]
+    for _spec, destination in destinations:
+        validate_destination(home, destination)
+
+    skill_sources = skill_source_files()
+    changed_skill_files, stale_skill_files = skill_drift(skill_sources)
     ledger = []
     has_drift = False
 
-    for spec in FILE_SPECS:
-        destination = home / spec.relative_destination
+    for spec, destination in destinations:
         changed = differs(spec.source, destination, spec.mode)
         has_drift = has_drift or changed
         if install and changed:
-            atomic_copy(spec.source, destination, spec.mode)
+            atomic_copy(spec.source, home, destination, spec.mode)
         ledger.append(
             {
                 "destination": str(destination),
@@ -184,7 +285,6 @@ def run(home: Path, install: bool) -> tuple[dict, bool]:
             }
         )
 
-    changed_skill_files, stale_skill_files = skill_drift()
     has_drift = has_drift or bool(changed_skill_files or stale_skill_files)
     if install:
         sync_skill_files(changed_skill_files, stale_skill_files)
