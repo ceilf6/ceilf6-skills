@@ -483,7 +483,7 @@ def send_lark_dm(event: NotificationEvent, env: Dict[str, str]) -> None:
             "im",
             "+messages-send",
             "--as",
-            "user",
+            "bot",
             "--user-id",
             FEISHU_OPEN_ID,
             "--text",

@@ -250,7 +250,7 @@ class FullRunExitStatusTests(unittest.TestCase):
 
 
 class NotificationIntegrationTests(unittest.TestCase):
-    def test_send_lark_dm_uses_user_private_message_command(self):
+    def test_send_lark_dm_uses_bot_private_message_command(self):
         event = runner.NotificationEvent(
             target_date="2026-08-07",
             kind="failure",
@@ -268,7 +268,7 @@ class NotificationIntegrationTests(unittest.TestCase):
                 "im",
                 "+messages-send",
                 "--as",
-                "user",
+                "bot",
                 "--user-id",
                 "ou_c501034db06707b7116eb9ec11896a7d",
                 "--text",
