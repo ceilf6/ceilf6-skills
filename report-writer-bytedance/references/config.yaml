@@ -46,6 +46,15 @@ profiles:
       skip_attendance_by_default: true
       include_local_ai_sources: true
       local_ai_parser: "report-writer-bytedance/scripts/collect-local-ai-context.py"
+      source_failure_policy:
+        required:
+          - lark
+          - bytedcli_core
+          - bits
+          - meego
+        optional:
+          oncall: skip_and_notify
+          local_ai: skip
       local_ai_sources:
         claude: "~/.claude/projects/**/*.jsonl"
         codex:

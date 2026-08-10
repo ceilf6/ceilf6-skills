@@ -16,8 +16,12 @@
 8. 先检查日结父 Wiki 的同名子页面；存在则更新，不存在才创建，确保同一天重复执行不会创建重复页面。
 9. 严格执行 mentor → 主管 → HR 的串行评审与最多两轮修订。两轮后仍有 blocking finding 时停止发布。
 10. 写入后必须重新获取文档并验证标题、日期和预期章节；按技能规则处理 SOP/成长沉淀库。
-11. 不发送任何 IM、邮件、群消息、机器人或 webhook 通知。
-12. 最终输出必须完整满足技能的 Output Contract；失败时输出失败阶段、具体错误和是否发生任何写入。
-13. 最终回复的最后一个非空行必须是下列二者之一，不得在其后添加任何内容：
+11. 本 agent 不得发送任何 IM、邮件、群消息、机器人或 webhook 通知。
+12. Oncall 是可选来源。Oncall 未登录、令牌过期或查询失败时，记录 skipped 并继续生成日报，不得仅因此停止发布。`not logged in` 时，在最终 sentinel 前输出：
+    `<daily-report-warning kind="configuration_required" source="oncall" code="not_logged_in" />`
+    其他瞬时失败使用 `kind="source_unavailable"` 和稳定的小写错误码。
+13. 仅 runner 可向当前用户发送配置提醒或失败提醒；本 agent 不得发送群消息、邮件、广播或常规成功通知。
+14. 最终输出必须完整满足技能的 Output Contract；失败时输出失败阶段、具体错误和是否发生任何写入。
+15. 最终回复的最后一个非空行必须是下列二者之一，不得在其后添加任何内容：
     - 全部写入和回读验证成功：`<daily-report-result status="success" date="{{TARGET_DATE}}" />`
     - 任一阶段失败或未发布：`<daily-report-result status="failed" date="{{TARGET_DATE}}" />`

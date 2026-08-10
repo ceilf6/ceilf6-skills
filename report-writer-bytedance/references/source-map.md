@@ -196,6 +196,12 @@ bytedcli --json oncall flow list --handler "<username>" --page-size 20
 Rules:
 - Include only user-owned handled, created, or followed-up records.
 - Empty results belong in the assistant response coverage summary, not the report body.
+- Oncall is optional. `not logged in`, expired credentials, or query failures
+  are recorded as skipped and do not stop the report.
+- For `not logged in`, emit exactly
+  `<daily-report-warning kind="configuration_required" source="oncall" code="not_logged_in" />`
+  before the final result sentinel. Other Oncall query failures use
+  `kind="source_unavailable"` with a stable lowercase `code`.
 
 ## Planning Source For Tomorrow Outlook
 

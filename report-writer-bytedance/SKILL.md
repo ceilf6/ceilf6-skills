@@ -27,7 +27,15 @@ When creating or updating Feishu docs, also read the current embedded Lark docs 
 1. Resolve the profile from `config.yaml`; use `active_profile` unless the user explicitly provides another profile.
 2. Resolve the target date in the profile timezone. If the user says today, use the actual current date in `Asia/Shanghai`.
 3. Compute the report title from `title.pattern`, e.g. `26.07.08`.
-4. Perform the tool and auth preflight from `source-map.md` before collecting data, including local parser availability with `python3`. If `lark-cli`, `bytedcli`, or a required ByteDance auth flow is unavailable, stop and ask the user to authorize/install instead of silently continuing with partial ByteDance coverage. If the local AI parser is missing or cannot run, mark local AI sources skipped with the concrete reason and continue ByteDance source collection unless the user explicitly required local AI coverage.
+4. Perform the tool and auth preflight from `source-map.md` before collecting data.
+   Apply `profiles.<profile>.sources.source_failure_policy` exactly:
+   `lark`, `bytedcli_core`, `bits`, and `meego` are required; a required
+   capability failure stops publication. Oncall is optional: any Oncall auth
+   or query failure is recorded as skipped and must not stop the report.
+   Oncall `not logged in` additionally emits
+   `<daily-report-warning kind="configuration_required" source="oncall" code="not_logged_in" />`
+   before the final result sentinel. The local AI parser remains optional as
+   documented in `local-ai-sources.md`.
 5. Inspect the parent wiki and list its children before writing. If a child with the target title exists, update that document; otherwise create a new document under the parent wiki.
 6. Collect all available target-date user activity from ByteDance sources in `source-map.md` and local AI assistant sources in `local-ai-sources.md`. Start from explicit user links, then use broad user/date queries. Read underlying source content before deciding relevance.
 7. Read `report.plan_reference.url` only for `明日展望`. Treat it as a backlog or planning source, not evidence of completed work.
@@ -48,6 +56,11 @@ When creating or updating Feishu docs, also read the current embedded Lark docs 
 - Treat local AI assistant sources as sensitive. Summarize work-relevant facts only; do not copy raw prompts or raw assistant transcripts into the report.
 - Treat calendar events as supporting evidence only. Include a meeting as work only when it produced a user-owned decision, action item, blocker resolution, review, or follow-up.
 - Treat empty query results as coverage evidence, not report content.
+- Oncall is optional. Record unavailable Oncall coverage as skipped with the
+  concrete reason. Never stop publication solely because Oncall is unavailable.
+- Only the runner may send a self-DM for configuration or task failure.
+  The report agent must not send group messages, mail, broadcasts, or routine
+  success notifications.
 - Do not guess unclear platform mappings. If a source name, project, repo, or ownership is uncertain after querying available tools, ask the user.
 
 ## Safety Checks
