@@ -70,7 +70,14 @@ def configuration_event(
     run_log: Path,
 ) -> NotificationEvent:
     if warning.source == "oncall" and warning.code == "not_logged_in":
-        action = "请执行 oncall-cli auth login；完成后后续日报会恢复 Oncall 覆盖。"
+        action = (
+            "Oncall 是可选来源。如提示 command not found，请先执行：\n"
+            "npx --registry=https://bnpm.byted.org "
+            "@bytedance-dev/oncall-cli@latest install\n"
+            "然后执行：\n"
+            "oncall-cli auth login\n"
+            "完成后以 flow list 查询成功为恢复依据。"
+        )
     else:
         action = "请查看运行日志并补齐对应配置。"
     return NotificationEvent(

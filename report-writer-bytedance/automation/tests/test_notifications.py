@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from notifications import (
     NotificationEvent,
+    ReportWarning,
     WarningParseError,
     configuration_event,
     parse_report_warnings,
@@ -103,6 +104,25 @@ class WarningParserTests(unittest.TestCase):
             text="需要执行 oncall-cli auth login",
         )
         self.assertLessEqual(len(event.idempotency_key), 50)
+
+    def test_oncall_configuration_event_includes_install_and_login_steps(self):
+        warning = ReportWarning(
+            kind="configuration_required",
+            source="oncall",
+            code="not_logged_in",
+        )
+        event = configuration_event(
+            "2026-08-10",
+            warning,
+            Path("/tmp/run.log"),
+        )
+        self.assertIn("Oncall 是可选来源", event.text)
+        self.assertIn(
+            "npx --registry=https://bnpm.byted.org "
+            "@bytedance-dev/oncall-cli@latest install",
+            event.text,
+        )
+        self.assertIn("oncall-cli auth login", event.text)
 
     def test_send_once_marks_only_after_success(self):
         event = NotificationEvent(
