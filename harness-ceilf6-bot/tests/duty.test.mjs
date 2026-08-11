@@ -61,6 +61,7 @@ test('runDutyTask：skip 也不清场——检出与分支必须保留', async (
   assert.ok(existsSync(repo), '检出被删了');
   const branches = execFileSync('git', ['-C', repo, 'branch', '--list', 'feat/x']).toString();
   assert.ok(branches.includes('feat/x'), '需求分支被删了');
+  delete process.env.STUB_VERDICT;
   rmFixture(root);
 });
 
@@ -72,6 +73,7 @@ test('runDutyTask：ask 挂起 → resumeTask 续跑后 skip 仍不清场', asyn
   delete process.env.STUB_VERDICT;
   process.env.STUB_TURNS = 'ask:MR 处置拿不准';
   const config = makeConfig(root, repo);
+  // 不 await：killSession 后该会话走 suspendClose，这个 promise 预期不 resolve
   runDutyTask(TASK, config, fakeLark([]), { onAsk: (i) => asks.push(i) }, {
     cwd: repo, branch: 'feat/x', title: 'MR 9 评论处置', firstMessage: 'x',
   });
@@ -88,6 +90,7 @@ test('runDutyTask：ask 挂起 → resumeTask 续跑后 skip 仍不清场', asyn
   assert.ok(existsSync(repo), '续跑后的 skip 删掉了用户检出');
   const branches = execFileSync('git', ['-C', repo, 'branch', '--list', 'feat/x']).toString();
   assert.ok(branches.includes('feat/x'), '续跑后的 skip 删掉了需求分支');
+  delete process.env.STUB_VERDICT;
   rmFixture(root);
 });
 

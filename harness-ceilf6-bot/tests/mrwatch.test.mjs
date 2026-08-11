@@ -80,6 +80,18 @@ test('检出被占（脏）：私信 + mark 不带 count-trigger，不起任务'
   assert.ok(markCall && !markCall.join(' ').includes('--count-trigger'));
 });
 
+test('mark 退出非零：log 留因（带 stderr 首行），私信照发不中断', async () => {
+  const { row } = fixture();
+  const { deps, calls } = makeDeps(row, { gitDirty: ' M a.ts\n' });
+  const inner = deps.run;
+  deps.run = async (bin, args) => (args.join(' ').includes(' mark ')
+    ? (calls.run.push([bin, ...args]), { code: 1, stdout: '', stderr: 'mark boom\n详情' })
+    : inner(bin, args));
+  await makeMrWatch(deps).tick();
+  assert.ok(calls.log.some((l) => l.includes('mark 失败') && l.includes('mark boom')));
+  assert.equal(calls.dm.length, 1, '被占私信不因 mark 失败而丢');
+});
+
 test('分支漂移同被占；已有任务在跑则完全跳过（不 mark）', async () => {
   const { row } = fixture();
   const drift = makeDeps(row, { gitBranch: 'other' });
@@ -114,6 +126,22 @@ test('熔断：trigger_count 达上限 → disable + 私信一次', async () => 
 test('auto_disabled/closed 水位：直接跳过（连 fetch 都不发）', async () => {
   const { row, ctx } = fixture();
   writeFileSync(join(ctx, 'mr-comments.json'), JSON.stringify({ auto_disabled: true }));
+  const { deps, calls } = makeDeps(row);
+  await makeMrWatch(deps).tick();
+  assert.ok(!calls.run.some((c) => c.join(' ').includes('fetch')));
+});
+
+test('closed 水位但 mr_id 已变（MR 重建）：不静默，fetch 照发恢复巡检', async () => {
+  const { row, ctx } = fixture();
+  writeFileSync(join(ctx, 'mr-comments.json'), JSON.stringify({ closed: true, mr_id: '8' }));
+  const { deps, calls } = makeDeps(row); // row.mr_id='9'
+  await makeMrWatch(deps).tick();
+  assert.ok(calls.run.some((c) => c.join(' ').includes('fetch')), '重建后须交给 fetch 重置水位');
+});
+
+test('closed 水位且 mr_id 一致：连 fetch 都不发', async () => {
+  const { row, ctx } = fixture();
+  writeFileSync(join(ctx, 'mr-comments.json'), JSON.stringify({ closed: true, mr_id: '9' }));
   const { deps, calls } = makeDeps(row);
   await makeMrWatch(deps).tick();
   assert.ok(!calls.run.some((c) => c.join(' ').includes('fetch')));

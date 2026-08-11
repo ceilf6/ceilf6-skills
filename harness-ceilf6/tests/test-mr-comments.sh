@@ -151,6 +151,9 @@ rc=0; bash "$MC" reply --ctx-dir "$ctx" --thread t3 --message-file <(printf 'x')
 [ "$rc" != 0 ] && ok "回复失败非零退出" || bad "失败被吞"
 [ "$(jq -r '.threads.t3.handled // "null"' "$ctx/mr-comments.json")" = null ] && ok "失败不落 handled" || bad "handled 误落"
 rm -f "$STUB_STATE/reply_fail"
+rc=0; bash "$MC" reply --ctx-dir "$ctx" --thread t3 --message-file <(printf 'x') --handled bogus >/dev/null 2>&1 || rc=$?
+[ "$rc" != 0 ] && ok "非法 handled 值 die" || bad "非法 handled 被放行"
+[ "$(jq -r '.threads.t3.handled // "null"' "$ctx/mr-comments.json")" = null ] && ok "非法 handled 不落位" || bad "非法 handled 误落"
 
 echo "== enable / disable =="
 bash "$MC" disable --ctx-dir "$ctx" >/dev/null

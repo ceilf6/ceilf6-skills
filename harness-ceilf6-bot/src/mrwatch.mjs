@@ -69,7 +69,9 @@ export function makeMrWatch(deps) {
 
   async function handleThread(row) {
     const wm = readWatermark(row.ctx_dir);
-    if (wm.auto_disabled || wm.closed) return;
+    if (wm.auto_disabled) return; // 熔断跨 MR 重建生效：复位只走人工 enable
+    // closed 只对同一个 MR 静默：meta.mr_id 已变说明 MR 重建过，须放行 fetch 让脚本重置水位
+    if (wm.closed && String(wm.mr_id) === String(row.mr_id)) return;
     const f = await run('bash', [mc, 'fetch', '--ctx-dir', row.ctx_dir]);
     if (f.code === 3) return; // 无 MR（防御：枚举层已滤）
     const errLine = f.stderr.trim().split('\n')[0] ?? '';
@@ -91,8 +93,10 @@ export function makeMrWatch(deps) {
     let snap;
     try { snap = JSON.parse(f.stdout); } catch { log(`fetch 输出不可解析（${row.ctx_dir}）`); return; }
     if (snap.closed) {
-      if (!notified.closed.has(row.ctx_dir)) {
-        notified.closed.add(row.ctx_dir);
+      // 键带 mr_id：同一线程重建出的新 MR 到达 closed 时要能再提醒一次
+      const closedKey = `${row.ctx_dir}|${row.mr_id}`;
+      if (!notified.closed.has(closedKey)) {
+        notified.closed.add(closedKey);
         await lark.sendDm(config.dmOpenId,
           `【bot】MR ${row.mr_id} 已合入/关闭，但线程 #${row.idx} 未点「完成」——请去看板收束（人工节点不代点）。该 MR 评论巡检已停。`);
       }
@@ -113,7 +117,9 @@ export function makeMrWatch(deps) {
     if (why) {
       // 通知即交付：mark（不计熔断配额）后不再重复提醒；人工经 mr-comments.sh 处理，水位同源
       const snapPath = writeSnapshot(row, snap);
-      await run('bash', [mc, 'mark', '--ctx-dir', row.ctx_dir, '--from-snapshot', snapPath]);
+      const m = await run('bash', [mc, 'mark', '--ctx-dir', row.ctx_dir, '--from-snapshot', snapPath]);
+      // mark 失败即水位未推进，同批评论下轮会再次提醒——log 留因，流程照走
+      if (m.code !== 0) log(`MR ${row.mr_id} mark 失败（exit ${m.code}）：${m.stderr.trim().split('\n')[0] ?? ''}`);
       await lark.sendDm(config.dmOpenId,
         `【bot】MR ${row.mr_id} 有 ${snap.new.length} 条新 CR 评论，但线程检出${why}，未自动处置——请人工处理。快照：${snapPath}`);
       return;
@@ -123,7 +129,8 @@ export function makeMrWatch(deps) {
     const sent = await lark.sendToChat(config.chatId, anchorText);
     if (!sent?.messageId) { log(`锚点消息发送失败（MR ${row.mr_id}），本轮放弃`); return; }
     const snapPath = writeSnapshot(row, snap);
-    await run('bash', [mc, 'mark', '--ctx-dir', row.ctx_dir, '--from-snapshot', snapPath, '--count-trigger']);
+    const mk = await run('bash', [mc, 'mark', '--ctx-dir', row.ctx_dir, '--from-snapshot', snapPath, '--count-trigger']);
+    if (mk.code !== 0) log(`MR ${row.mr_id} mark 失败（exit ${mk.code}）：${mk.stderr.trim().split('\n')[0] ?? ''}`);
     const task = {
       messageId: sent.messageId, threadId: sent.threadId ?? '', senderOpenId: config.dmOpenId,
       text: anchorText, receivedAt: new Date().toISOString(),

@@ -67,7 +67,7 @@ export function validateConfig(config) {
   // mrWatch 可省略（省略即 mrwatch.mjs 的 DEFAULTS）；给了就必须形状合法——半错配置比没配置更难排查。
   if (config.mrWatch !== undefined) {
     const w = config.mrWatch;
-    if (typeof w !== 'object' || w === null) errs.push('mrWatch（需对象或省略）');
+    if (typeof w !== 'object' || w === null || Array.isArray(w)) errs.push('mrWatch（需对象或省略）');
     else {
       if (w.enabled !== undefined && typeof w.enabled !== 'boolean') errs.push('mrWatch.enabled（需布尔）');
       for (const k of ['intervalMs', 'maxTriggersPerThread']) {

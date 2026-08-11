@@ -1172,4 +1172,5 @@ test('validateConfig：mrWatch 非法值被点名', () => {
   assert.ok(validateConfig({ ...base, mrWatch: { intervalMs: 0 } }).some((e) => e.includes('mrWatch.intervalMs')));
   assert.ok(validateConfig({ ...base, mrWatch: { enabled: 'yes' } }).some((e) => e.includes('mrWatch.enabled')));
   assert.ok(validateConfig({ ...base, mrWatch: 3 }).some((e) => e.includes('mrWatch')));
+  assert.ok(validateConfig({ ...base, mrWatch: [] }).some((e) => e.includes('mrWatch（需对象或省略）')));
 });
