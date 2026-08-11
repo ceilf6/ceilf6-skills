@@ -60,6 +60,7 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 3. 实现最小改动让测试转绿，重跑记录通过输出。测试写法遵循仓库自身的测试技能与规范（如 unit-test、storybook 等），本技能只管纪律不管框架。
 4. 红绿证据（每个行为点：测试文件、红灯命令+失败摘要、绿灯命令+通过摘要）落 `$CTX/tdd-evidence.md`，按需求进展追加。
 5. **豁免规则**：纯文案、样式微调等确无可断言行为的变更可豁免红绿，但豁免理由必须写进 tdd-evidence.md——不可测是性质判断，不是成本判断。
+6. **MR 范围纪律**：本次 MR 只装与 plan.md 目标（即 harness-context 的需求目标）紧密相关的改动。开发或 CR 过程中发现的存量问题（既有 bug、顺手可改的坏味道、范围外重构）一律不掺入——判据是「不改它，本次验收是否受影响」，不受影响即范围外。范围外发现追加记入 `$CTX/out-of-scope.md`（位置 / 现象 / 一句处置建议），处理路径固定为另开 harness 线程（新需求分支 + harness-context init，可把该条目文本 add 作种子），不在本线程顺手修；是否立刻开线程由用户定。
 
 完成自检（typecheck、全量相关测试）后 bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh mark --ctx-dir "$CTX" dev_done（转发进度图），进入阶段 2。
 
@@ -74,13 +75,13 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
      1. **squash**：把 commit message 写入临时文件后 `bash ~/.claude/skills/harness-ceilf6/scripts/squash-branch.sh --dir "$CTX" --message-file <文件>`。message 实质性规则：描述改了什么行为、为什么，从 plan.md 目标 + 实际改动提炼；禁止「处理CR意见」「修复评审问题」「harness 自动开发」这类过程叙事；续入时重写为覆盖全部范围的最终表述。旧状态在 `harness-backup/<分支>` 引用可回退。
      2. **rebase**：`bash ~/.claude/skills/harness-ceilf6/scripts/rebase-base.sh --dir "$CTX"`——fetch 后把分支变基到 base 远端最新（本地跟踪 ref 常年滞后，脚本 fetch 失败即停、不降级），MR 必须基于最新 base 才能干净合入。已在最新上则空转通过。放在 squash 之后：单提交重放，冲突至多解一次。发生变基 → push 前重跑自检（typecheck + 相关测试），挂了回阶段 1 修复后从收尾第 1 步重来；解过冲突 → 冲突解决属未经机审的新改动，记入 `$CTX/cr/round-N/fixes.md` 并建议补一轮 cr-round 复核（通过后继续收尾，squash 无需重做——变基不新增提交）。冲突由会话解决；无人值守下解法拿不准按「模式」节关键决策分叉走 ask。
      3. **push**：`git push --force-with-lease origin <分支>`。force-with-lease 仅限 harness 需求分支——2026-07-30 用户裁定方案 A（MR 恒单 commit），是既有自动 push 豁免（2026-07-29）的延伸。
-     4. **MR**：调用 bytedcli-bits-mr 建 MR——标题 = 需求短题，描述必含：任务来源（bot 场景带 chat/message id）、plan 四段摘要、CR 轮次表、遗留 minor/nit 清单。**Meego 硬门**：绑定空间的仓库里 meta 缺 meego_id → 先按阶段 0 第 5 步补 resolve/create，补建仍失败则停在建 MR 之前（交互如实报告 / 无人值守 ask），不降级建非正规 MR。建 MR 用 create-mr-with-meego.js 带 `--meego <meta.meego_id>`，`--meego-type` 按 meta.meego_type 映射（story→feature、issue→bug；缺失按分支前缀 feat/fix 兜底）。MR 建成后 `bash ~/.claude/skills/bytedcli-meego/scripts/meego.sh comment --ctx-dir "$CTX" --message-file <(MR 链接 + 一句变更摘要)`。**续入不重复建 MR**：当前分支已存在开放 MR 时只在既有 MR 追加一条评论（本轮变更摘要 + 新增 CR 轮次 + 注明历史已重写），MR 链接沿用；既有 MR 若缺 meego 绑定（meego 集成前建的存量 MR），补 meego 后用 `bytedcli --json bits mr update --mr-id <meta.mr_id> --meego <meta.meego_url>` 原地补绑即可——2026-08-11 实测非正规（optimize）MR 也可绑，应答 `meego_bindings[].status=="success"` 即校验通过，不必重建 MR；补绑后把 mr_id 回写 meta（`jq '.mr_id="<id>"'`，meego.sh comment 的 qa preset 依赖它）。建成后 bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh mark --ctx-dir "$CTX" mr_created。
+     4. **MR**：调用 bytedcli-bits-mr 建 MR——标题 = 需求短题，描述必含：任务来源（bot 场景带 chat/message id）、plan 四段摘要、CR 轮次表、遗留 minor/nit 清单、范围外存量清单（out-of-scope.md 非空时）。**Meego 硬门**：绑定空间的仓库里 meta 缺 meego_id → 先按阶段 0 第 5 步补 resolve/create，补建仍失败则停在建 MR 之前（交互如实报告 / 无人值守 ask），不降级建非正规 MR。建 MR 用 create-mr-with-meego.js 带 `--meego <meta.meego_id>`，`--meego-type` 按 meta.meego_type 映射（story→feature、issue→bug；缺失按分支前缀 feat/fix 兜底）。MR 建成后 `bash ~/.claude/skills/bytedcli-meego/scripts/meego.sh comment --ctx-dir "$CTX" --message-file <(MR 链接 + 一句变更摘要)`。**续入不重复建 MR**：当前分支已存在开放 MR 时只在既有 MR 追加一条评论（本轮变更摘要 + 新增 CR 轮次 + 注明历史已重写），MR 链接沿用；既有 MR 若缺 meego 绑定（meego 集成前建的存量 MR），补 meego 后用 `bytedcli --json bits mr update --mr-id <meta.mr_id> --meego <meta.meego_url>` 原地补绑即可——2026-08-11 实测非正规（optimize）MR 也可绑，应答 `meego_bindings[].status=="success"` 即校验通过，不必重建 MR；补绑后把 mr_id 回写 meta（`jq '.mr_id="<id>"'`，meego.sh comment 的 qa preset 依赖它）。建成后 bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh mark --ctx-dir "$CTX" mr_created。
      5. **自测矩阵**：在 meta.wiki_url 需求子文档追加「自测场景矩阵」，结构与随附说明**必读并遵循 references/selftest-matrix.md**——先列分发面（哪些产品线 × 哪些端会加载这份代码，vc-ai 为视频会议/妙记/豆包/文档空间四条线），两级列头（首行 = 产品线分组，次行 = 该线下用户可感知场景），行 = 端/环境；格子状态（待测留白 / 未涉及 / 测后 ✅/❌）、表前填写约定、表后「环境准入与版本确认」均按该文件执行。该矩阵是阶段 3 自测节点的执行清单。
      6. **沉淀**：harness-context 供料 + lark-sediment 流程——需求结论、CR 往返要点、踩坑追加到 meta.wiki_url 需求子文档（wiki_url 为空则先按阶段 0 第 4 步补建）；同批产出 B 线四问叙事节（lark-sediment「两条沉淀线」）追加到**同一篇**需求子文档；跨需求通用经验按 lark-sediment 正常去重、分类落位，不塞进需求文档；写 `$CTX/sediment.md` 台账。沉淀失败如实报告后继续汇总（MR 已建，不因沉淀失败回滚）。无人值守模式沉淀全程不需人工。沉淀完成后 `… meego.sh comment --ctx-dir "$CTX" --message-file <(需求 wiki 子文档链接)`——meego 成为 wiki（自测矩阵与沉淀）的入口，失败如实报告不回滚。
      7. 输出收尾汇总（模板见下，首行进度图、次行未自测警示，MR 为过程产物行）。
 
      失败/熔断/超时**不 squash、不 rebase、不 push、不建 MR、不沉淀**——半成品不进团队远端视野、不上 wiki。
-   - `pass=false` → **逐条处置**每个 finding，三选一：**修复**；**书面不采纳**（finding 本身不成立）；**接受为已知边界**（finding 为真但仅在运行包络外可触发——引用包络说明为何不改代码，追加记入 `$CTX/cr/known-limits.md`，该处置不计入僵局熔断）。判据是「这个场景在真实流程里会不会发生」，不是「能不能构造出来」；为不会发生的场景修复所付出的复杂度，由之后每个读代码的人偿还。全部 blocker/major 处置完后写 `$CTX/cr/round-N/fixes.md`（格式见下），回到第 1 步。
+   - `pass=false` → **逐条处置**每个 finding，四选一：**修复**；**书面不采纳**（finding 本身不成立）；**接受为已知边界**（finding 为真但仅在运行包络外可触发——引用包络说明为何不改代码，追加记入 `$CTX/cr/known-limits.md`，该处置不计入僵局熔断）；**范围外存量**（finding 为真但问题在本次改动之前就存在、且修复超出 plan.md 范围——按阶段 1 的 MR 范围纪律记入 `$CTX/out-of-scope.md`，不在本 MR 修，该处置不计入僵局熔断）。判据是「这个场景在真实流程里会不会发生」，不是「能不能构造出来」；为不会发生的场景修复所付出的复杂度，由之后每个读代码的人偿还。全部 blocker/major 处置完后写 `$CTX/cr/round-N/fixes.md`（格式见下），回到第 1 步。
 4. **僵局熔断**（会话判断）：同一条 finding，评审员连续两轮坚持、你连续两轮书面不采纳 → 停止循环；**自激熔断**：连续两轮 findings 全部落在上一轮修复自身引入的代码上（评审循环在消费自己的输出而非需求缺陷）→ 同样停止循环。两者都执行 `bash ~/.claude/skills/harness-context/scripts/ctx-dir.sh set-status awaiting_human`，把分歧点整理给用户裁决。
 5. 脚本自身失败（两次尝试后）→ 停止并如实报告 stderr，不静默重试第三次。
 
@@ -92,8 +93,8 @@ meta.max_rounds 非 null 时，达到该轮数也停下交用户（默认 null �
 # Round N 处置
 
 ## F1 <severity> <file>:<line>
-- 处置：修复 | 不采纳 | 接受为已知边界
-- 说明：修复→改了什么、在哪个提交；不采纳→理由与依据；已知边界→引用包络 + known-limits 记录位置
+- 处置：修复 | 不采纳 | 接受为已知边界 | 范围外存量
+- 说明：修复→改了什么、在哪个提交；不采纳→理由与依据；已知边界→引用包络 + known-limits 记录位置；范围外存量→为何属存量 + out-of-scope.md 记录位置
 ```
 
 **收尾汇总模板**（pass 或熔断后输出给用户；首行进度图取 `threads.sh progress` 实际输出）：
@@ -108,6 +109,7 @@ meta.max_rounds 非 null 时，达到该轮数也停下交用户（默认 null �
 - 改动概览：<一段话>
 - 轮次记录：cr/round-1..N（verdict / fixes 齐全）
 - 遗留 minor/nit：<清单，含文件位置>（修不修由你定）
+- 范围外存量：<out-of-scope.md 条目摘要>（不进本 MR，另开 harness 线程处理；无则省略本行）
 - 下一步（两步闭环）：① 人工 CR ② 自测（按需求子文档中的自测场景矩阵逐格验证、填结果贴截图）。每完成一步就确认——会话里说「人工 CR 完成 / 自测完成」，或 `ht mark <序号> human-cr|selftest`，或 web 看板按钮。两步齐后输出「可交付版汇总」，那才是可外发版本。发现问题用 harness-context add 存入后喊我续跑
 ```
 
