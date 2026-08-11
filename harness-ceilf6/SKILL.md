@@ -35,7 +35,7 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 
 ### 阶段 0：计划门（开发不允许直接开始）
 
-出口统一为 `$CTX/plan.md`（目标 / 范围 / 改法 / 验收标准 四段）。三条路径：
+出口统一为 `$CTX/plan.md`（目标 / 范围 / 改法 / 验收标准 四段；可选第五节「运行包络」——声明执行环境的结构性事实以约束 CR 循环的 finding 准入，缺省时评审按默认包络裁决）。三条路径：
 
 1. **续入路径**：`$CTX/plan.md` 已存在 → 跳过门。本轮新增问题以「## 验收增补（<日期>）」小节追加进 plan.md。同时重置里程碑：`jq 'del(.milestones.dev_done, .milestones.cr_passed, .milestones.human_cr_done, .milestones.selftest_done)' "$CTX/meta.json" > "$CTX/tmp" && mv "$CTX/tmp" "$CTX/meta.json"`（`plan_gate`/`mr_created` 保留——计划门跳过、MR 复用）。同时同步 base：`bash ~/.claude/skills/harness-ceilf6/scripts/rebase-base.sh --dir "$CTX"`——续入通常隔着人工 CR / QA 等待期，base 前进最多；发生变基则阶段 1 第一件事是重跑自检确认上游未破坏现状，冲突按脚本回显指引处置。随后输出进度图。用户明确说「重新规划」才走重规划：旧内容整体降级为「## 历史版本（<日期>归档）」小节保留于文件尾部，新四段写在文件头。
 2. **轻量路径（默认，自动过门）**：能从上下文复述出可信的目标/范围/改法/验收四段 → 写入 plan.md 并向用户播报（交互场景你在场，随时可打断修正），**不等待确认直接过门**——用户 2026-07-29 裁定：只有实在不明确的需求才需要人工协商。plan.md 头部加一行「> 计划门自动通过（<日期>）」。
@@ -79,8 +79,8 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
      7. 输出收尾汇总（模板见下，首行进度图、次行未自测警示，MR 为过程产物行）。
 
      失败/熔断/超时**不 squash、不 rebase、不 push、不建 MR、不沉淀**——半成品不进团队远端视野、不上 wiki。
-   - `pass=false` → **逐条处置**每个 finding：修复，或书面不采纳。全部 blocker/major 处置完后写 `$CTX/cr/round-N/fixes.md`（格式见下），回到第 1 步。
-4. **僵局熔断**（会话判断）：同一条 finding，评审员连续两轮坚持、你连续两轮书面不采纳 → 停止循环，`bash ~/.claude/skills/harness-context/scripts/ctx-dir.sh set-status awaiting_human`，把分歧点整理给用户裁决。
+   - `pass=false` → **逐条处置**每个 finding，三选一：**修复**；**书面不采纳**（finding 本身不成立）；**接受为已知边界**（finding 为真但仅在运行包络外可触发——引用包络说明为何不改代码，追加记入 `$CTX/cr/known-limits.md`，该处置不计入僵局熔断）。判据是「这个场景在真实流程里会不会发生」，不是「能不能构造出来」；为不会发生的场景修复所付出的复杂度，由之后每个读代码的人偿还。全部 blocker/major 处置完后写 `$CTX/cr/round-N/fixes.md`（格式见下），回到第 1 步。
+4. **僵局熔断**（会话判断）：同一条 finding，评审员连续两轮坚持、你连续两轮书面不采纳 → 停止循环；**自激熔断**：连续两轮 findings 全部落在上一轮修复自身引入的代码上（评审循环在消费自己的输出而非需求缺陷）→ 同样停止循环。两者都执行 `bash ~/.claude/skills/harness-context/scripts/ctx-dir.sh set-status awaiting_human`，把分歧点整理给用户裁决。
 5. 脚本自身失败（两次尝试后）→ 停止并如实报告 stderr，不静默重试第三次。
 
 meta.max_rounds 非 null 时，达到该轮数也停下交用户（默认 null 不限）。每轮结束向用户回显脚本输出的「第 N 轮 / 耗时」信息。
@@ -91,8 +91,8 @@ meta.max_rounds 非 null 时，达到该轮数也停下交用户（默认 null �
 # Round N 处置
 
 ## F1 <severity> <file>:<line>
-- 处置：修复 | 不采纳
-- 说明：修复→改了什么、在哪个提交；不采纳→理由与依据
+- 处置：修复 | 不采纳 | 接受为已知边界
+- 说明：修复→改了什么、在哪个提交；不采纳→理由与依据；已知边界→引用包络 + known-limits 记录位置
 ```
 
 **收尾汇总模板**（pass 或熔断后输出给用户；首行进度图取 `threads.sh progress` 实际输出）：
