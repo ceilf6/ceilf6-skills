@@ -45,8 +45,9 @@ listener 内置定时巡检（`config.mrWatch`，出厂 `{enabled:true, interval
 读 `~/.harness-ceilf6/threads.jsonl` 里有 MR、未完成、未归档的线程，经 `mr-comments.sh fetch` 发现新
 CR 评论后在任务大厅发【bot】锚点消息并起值班任务（占 concurrency 槽，/tasks、/stop、看板徽标全部适用）。
 
-- **依赖**：`CLIENT_BITS_TOKEN` 环境变量（launchd plist 里配）或 repoPath 下 `.bits_client_config.json`；
-  两者都缺时巡检自禁用（listener 日志一条），不影响接单主职。
+- **依赖**：BITS 凭据二选一——`CLIENT_BITS_TOKEN` 环境变量（launchd plist 里自行加键，模板出厂只带
+  `PATH`），或 repoPath 下 `.bits_client_config.json`（推荐，token 不进 plist 明文）；配法见下文
+  「一次性：本机绑定与配置」第 5 步。两者都缺时巡检自禁用（listener 日志一条），不影响接单主职。
 - **水位**：`$CTX/mr-comments.json`，只由 `harness-ceilf6/scripts/mr-comments.sh` 写。会话手动处理评论
   也走它（fetch/reply/mark），bot 不会重复触发。
 - **熔断**：同线程自动触发达上限即停并私信；人工确认后
@@ -64,7 +65,9 @@ CR 评论后在任务大厅发【bot】锚点消息并起值班任务（占 conc
 - [ ] ≤5 分钟内任务大厅出现【bot】锚点消息、任务起跑（`/tasks` 里看得见）。
 - [ ] 会话回复评论带【bot】前缀、`dispositions.md` 落盘、RESULT 收轮、私信到达。
 - [ ] 再留一条只回「收到」的跟评，验证环路速判不再修复。
-- [ ] `/stop` 一次值班任务，确认线程检出与分支完好（skip 不清场的现场验证）。
+- [ ] `/stop` 一次值班任务，确认线程检出与分支完好（停止路径现场保留的验证）。
+
+skip 清场保护是防御性守卫——值班会话按契约不产出 skip，真机演练不可触发，由 `tests/duty.test.mjs` 的突变用例守护。
 
 ## 一次性：创建飞书应用（约 5 分钟，人工）
 
