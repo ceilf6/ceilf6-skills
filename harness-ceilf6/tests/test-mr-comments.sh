@@ -46,9 +46,28 @@ snap=$(bash "$MC" fetch --ctx-dir "$ctx")
 [ "$(printf '%s' "$snap" | jq -r '.new[0].id')" = t1 ] && ok "resolved(t2)/本人(t3) 被滤" || bad "new[0]: $(printf '%s' "$snap" | jq -c '.new[0]')"
 [ "$(printf '%s' "$snap" | jq '.loop_suspect')" = false ] && ok "loop_suspect=false" || bad "loop_suspect"
 [ "$(jq '.consecutive_failures' "$ctx/mr-comments.json")" = 0 ] && ok "连败清零" || bad "连败计数"
+# iid 是字符串：消费方一路当 CLI 参数用，数字化会在 -R 后面拼出别的东西
+printf '%s' "$snap" | jq -e '.iid == "1678"' >/dev/null && ok "iid 保持字符串" || bad "iid: $(printf '%s' "$snap" | jq -c '.iid')"
+grep -q 'comment list -R lark/byteview-web 1678' "$STUB_STATE/calls.log" && ok "comment list 带上 repo/iid" || bad "comment list 参数: $(grep 'comment list' "$STUB_STATE/calls.log")"
 # 二拉（水位未 mark）：new 仍在——fetch 只读水位
 snap2=$(bash "$MC" fetch --ctx-dir "$ctx")
 [ "$(printf '%s' "$snap2" | jq '.new | length')" = 1 ] && ok "fetch 不推水位" || bad "fetch 推了水位"
+[ "$(grep -c 'code-review gitlab' "$STUB_STATE/calls.log")" = 1 ] && ok "repo/iid 只解析一次" || bad "gitlab 解析次数: $(grep -c 'code-review gitlab' "$STUB_STATE/calls.log")"
+cleanup
+
+echo "== meta.mr_id 变更（MR 重建）：重置 repo/iid 与线程水位 =="
+make_fixture
+std_comments
+bash "$MC" fetch --ctx-dir "$ctx" >/dev/null
+# 手工推一次水位（mark 是 Task 2 的活），模拟 t1 已被处理过
+jq '.threads = {"t1":{reply_count:1, handled:"fixed"}}' "$ctx/mr-comments.json" > "$ctx/tmp" && mv "$ctx/tmp" "$ctx/mr-comments.json"
+snap=$(bash "$MC" fetch --ctx-dir "$ctx")
+[ "$(printf '%s' "$snap" | jq '.new | length')" = 0 ] && ok "水位内的线程不再算 new" || bad "new: $(printf '%s' "$snap" | jq -c '.new')"
+jq '.mr_id = "9000001"' "$ctx/meta.json" > "$ctx/tmp" && mv "$ctx/tmp" "$ctx/meta.json"
+snap=$(bash "$MC" fetch --ctx-dir "$ctx")
+[ "$(grep -c 'code-review gitlab' "$STUB_STATE/calls.log")" = 2 ] && ok "换 MR 后重解析 repo/iid" || bad "gitlab 解析次数: $(grep -c 'code-review gitlab' "$STUB_STATE/calls.log")"
+[ "$(jq -r '.mr_id' "$ctx/mr-comments.json")" = 9000001 ] && ok "水位 mr_id 跟着换" || bad "水位 mr_id: $(jq -r '.mr_id' "$ctx/mr-comments.json")"
+[ "$(printf '%s' "$snap" | jq '.new | length')" = 1 ] && ok "换 MR 后线程水位清零" || bad "new: $(printf '%s' "$snap" | jq -c '.new')"
 cleanup
 
 echo "== 拉取失败：exit 4 计连败；status=merged 时转 closed =="
@@ -56,13 +75,43 @@ make_fixture
 std_comments
 touch "$STUB_STATE/list_fail"
 jq -n '{state:"opened"}' > "$STUB_STATE/status.json"
-rc=0; bash "$MC" fetch --ctx-dir "$ctx" >/dev/null 2>&1 || rc=$?
+rc=0; err=$(bash "$MC" fetch --ctx-dir "$ctx" 2>&1 >/dev/null) || rc=$?
 [ "$rc" = 4 ] && ok "拉取失败 exit 4" || bad "exit $rc"
 [ "$(jq '.consecutive_failures' "$ctx/mr-comments.json")" = 1 ] && ok "连败 +1" || bad "连败: $(jq '.consecutive_failures' "$ctx/mr-comments.json")"
+# 无人值守时这行诊断是唯一现场：bytedcli 说了什么必须带出来
+case "$err" in *"list failed"*) ok "诊断带上 bytedcli stderr" ;; *) bad "诊断丢了 stderr：${err}" ;; esac
 jq -n '{state:"merged"}' > "$STUB_STATE/status.json"
 out=$(bash "$MC" fetch --ctx-dir "$ctx")
 [ "$(printf '%s' "$out" | jq '.closed')" = true ] && ok "merged → closed 快照" || bad "closed 快照"
 [ "$(jq '.closed' "$ctx/mr-comments.json")" = true ] && ok "closed 落水位" || bad "closed 未落水位"
+cleanup
+
+echo "== bytedcli 吐非 JSON（鉴权过期横幅）：三条路径都守住 exit 4 与连败 =="
+# gitlab 解析
+make_fixture
+std_comments
+printf 'ERROR: token expired, run bytedcli login\n' > "$STUB_STATE/gitlab.json"
+rc=0; err=$(bash "$MC" fetch --ctx-dir "$ctx" 2>&1 >/dev/null) || rc=$?
+[ "$rc" = 4 ] && ok "gitlab 非 JSON exit 4" || bad "exit $rc"
+[ "$(jq '.consecutive_failures' "$ctx/mr-comments.json")" = 1 ] && ok "gitlab 非 JSON 计连败" || bad "连败: $(jq '.consecutive_failures' "$ctx/mr-comments.json")"
+case "$err" in *"token expired"*) ok "诊断带上原文" ;; *) bad "诊断无原文：${err}" ;; esac
+cleanup
+# comment list 输出
+make_fixture
+printf 'ERROR: token expired\n' > "$STUB_STATE/comments.json"
+rc=0; bash "$MC" fetch --ctx-dir "$ctx" >/dev/null 2>&1 || rc=$?
+[ "$rc" = 4 ] && ok "comment list 非 JSON exit 4" || bad "exit $rc"
+[ "$(jq '.consecutive_failures' "$ctx/mr-comments.json")" = 1 ] && ok "comment list 非 JSON 计连败" || bad "连败: $(jq '.consecutive_failures' "$ctx/mr-comments.json")"
+cleanup
+# mr status 探测
+make_fixture
+std_comments
+touch "$STUB_STATE/list_fail"
+printf 'ERROR: token expired\n' > "$STUB_STATE/status.json"
+rc=0; bash "$MC" fetch --ctx-dir "$ctx" >/dev/null 2>&1 || rc=$?
+[ "$rc" = 4 ] && ok "status 非 JSON 仍 exit 4" || bad "exit $rc"
+[ "$(jq '.consecutive_failures' "$ctx/mr-comments.json")" = 1 ] && ok "status 非 JSON 计连败" || bad "连败: $(jq '.consecutive_failures' "$ctx/mr-comments.json")"
+[ "$(jq '.closed' "$ctx/mr-comments.json")" = false ] && ok "状态不可解析不误判 closed" || bad "误判 closed"
 cleanup
 
 echo; echo "PASS=$PASS FAIL=$FAIL"

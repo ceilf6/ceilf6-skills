@@ -45,10 +45,12 @@ mr=$(jq -r '.mr_id // empty' "$meta")
 if [ -z "$mr" ]; then echo "mr-comments: 无 MR"; exit 3; fi
 WM="$ctx/mr-comments.json"
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
-
-# 首次使用即初始化空水位：MR 建成时可能已有机器人评论，它们也要走一遍 new 判定
-[ -f "$WM" ] || jq -n --arg m "$mr" \
-  '{mr_id:$m, threads:{}, trigger_count:0, auto_disabled:false, closed:false, consecutive_failures:0}' > "$WM"
+# 外部调用的 stderr 收在这里：无人值守时 fail4 那行诊断是唯一现场，stderr 丢了就只剩一个 exit 4
+ERRF=$(mktemp)
+trap 'rm -f "$ERRF"' EXIT
+err_tail() { tr -d '\r' < "$ERRF" | tail -3 | tr '\n' ' ' | cut -c1-300; }
+# 应答不是 JSON（鉴权过期横幅之类）时截一段原文进诊断：jq 的解析错误本身说不出是谁吐的
+snippet() { printf '%s' "${1:-}" | tr -d '\r' | tr '\n' ' ' | cut -c1-200; }
 
 wm_write() { # <jq 参数...>：原子改写水位（tmp+mv，与 meta.json 同手法）
   local tmp; tmp=$(mktemp)
@@ -57,28 +59,51 @@ wm_write() { # <jq 参数...>：原子改写水位（tmp+mv，与 meta.json 同�
 }
 fail4() { wm_write '.consecutive_failures += 1'; echo "mr-comments: $*" >&2; exit 4; }
 
+# 首次使用即初始化空水位：MR 建成时可能已有机器人评论，它们也要走一遍 new 判定
+if [ ! -f "$WM" ]; then
+  wm_init=$(mktemp)
+  jq -n --arg m "$mr" \
+    '{mr_id:$m, threads:{}, trigger_count:0, auto_disabled:false, closed:false, consecutive_failures:0}' \
+    > "$wm_init" || die "水位初始化失败：$WM"
+  mv "$wm_init" "$WM"
+fi
+# MR 重建（旧的关掉重开）后，水位里的 repo/iid/threads/closed 仍指着上一个 MR——不清掉，回复会发到旧 MR 上。
+# 熔断计数与 auto_disabled 不跟着清：换 MR 不该成为绕过熔断的口子。
+wm_mr=$(jq -r '.mr_id // empty' "$WM" 2>/dev/null || true)
+if [ "$wm_mr" != "$mr" ]; then
+  wm_write --arg m "$mr" \
+    '.mr_id = $m | del(.repo, .iid) | .threads = {} | .closed = false | .consecutive_failures = 0'
+fi
+
 case "$sub" in
   fetch)
     repo=$(jq -r '.repo // empty' "$WM"); iid=$(jq -r '.iid // empty' "$WM")
     if [ -z "$repo" ] || [ -z "$iid" ]; then
-      gl=$(bytedcli --json bits mr code-review gitlab --mr-id "$mr" 2>/dev/null) || fail4 "GitLab MR 解析调用失败（mr ${mr}）"
-      # 应答形状按真机为准（同 cr-group.sh parse_chat_id 手法）：递归找第一个命中的键；真机不符只改本段
-      repo=$(printf '%s' "$gl" | jq -r 'first(.. | objects | (.project_path? // .path_with_namespace? // empty)) // empty')
-      iid=$(printf '%s' "$gl" | jq -r 'first(.. | objects | (.iid? // empty)) // empty' | head -1)
-      { [ -n "$repo" ] && [ -n "$iid" ]; } || fail4 "GitLab MR 解析不出 repo/iid（输出形状不符？）"
+      gl=$(bytedcli --json bits mr code-review gitlab --mr-id "$mr" 2>"$ERRF") \
+        || fail4 "GitLab MR 解析调用失败（mr ${mr}）：$(err_tail)"
+      # 应答形状按真机为准（同 cr-group.sh parse_chat_id 手法）：递归找第一个命中的键；真机不符只改本段。
+      # jq 的失败必须收进 fail4：裸 jq 会带着自己的退出码掀掉整个脚本，连败计数与 exit 4 契约都落空
+      repo=$(printf '%s' "$gl" | jq -r 'first(.. | objects | (.project_path? // .path_with_namespace? // empty)) // empty' 2>/dev/null) \
+        || fail4 "GitLab MR 应答不是 JSON（mr ${mr}）：$(snippet "$gl")"
+      iid=$(printf '%s' "$gl" | jq -r 'first(.. | objects | (.iid? // empty)) // empty' 2>/dev/null) \
+        || fail4 "GitLab MR 应答不是 JSON（mr ${mr}）：$(snippet "$gl")"
+      { [ -n "$repo" ] && [ -n "$iid" ]; } || fail4 "GitLab MR 解析不出 repo/iid（输出形状不符？）：$(snippet "$gl")"
       wm_write --arg r "$repo" --arg i "$iid" '.repo = $r | .iid = $i'
     fi
-    out=$(bytedcli --json codebase mr comment list -R "$repo" "$iid" 2>/dev/null) || {
+    out=$(bytedcli --json codebase mr comment list -R "$repo" "$iid" 2>"$ERRF") || {
+      list_err=$(err_tail)
       # 拉取失败先探一次 MR 状态：合入/关闭是正常终点，不是故障
-      st=$(bytedcli --json bits mr status --mr-id "$mr" 2>/dev/null || true)
-      state=$(printf '%s' "$st" | jq -r 'first(.. | objects | (.state? // .status? // empty)) // empty' 2>/dev/null | head -1 | tr '[:upper:]' '[:lower:]')
+      st=$(bytedcli --json bits mr status --mr-id "$mr" 2>"$ERRF" || true)
+      st_err=$(err_tail)
+      # 状态探测是尽力而为：应答不可解析时落空串，照常按拉取失败计连败，不能反过来掀掉 exit 4 契约
+      state=$(printf '%s' "$st" | jq -r 'first(.. | objects | (.state? // .status? // empty)) // empty' 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)
       case "$state" in
         merged|closed)
           wm_write '.closed = true'
           jq -n --arg m "$mr" '{mr_id:$m, closed:true}'
           exit 0 ;;
       esac
-      fail4 "comment list 拉取失败（repo ${repo} iid ${iid}）"
+      fail4 "comment list 拉取失败（repo ${repo} iid ${iid}）：${list_err}${st_err:+ | mr status: ${st_err}}"
     }
     # 本人 username 从需求仓 git 配置读（ctx 固定在 <检出>/.harness-ceilf6/<分支> 两层之下，同 cr-group.sh）
     repo_root=$(cd "$ctx/../.." && pwd -P)
@@ -91,8 +116,8 @@ case "$sub" in
             resolved: ((((.resolved // .Resolved // "") | tostring) | ascii_downcase) == "true"),
             replies: [ (.comments // .Comments // .notes)[]
                        | { author: ((.author.username? // .author.name? // .author? // "") | tostring),
-                           body: ((.body // .Body // .content // "") | tostring) } ] } ]') \
-      || fail4 "comment list 输出无法归一"
+                           body: ((.body // .Body // .content // "") | tostring) } ] } ]' 2>/dev/null) \
+      || fail4 "comment list 输出无法归一（非 JSON 或形状不符）：$(snippet "$out")"
     snapshot=$(printf '%s' "$norm" | jq --arg me "$me" --arg m "$mr" --arg r "$repo" --arg i "$iid" \
       --arg at "$(now)" --slurpfile wm "$WM" '
       ($wm[0].threads) as $seen
@@ -103,7 +128,8 @@ case "$sub" in
                  | select((.replies | length) > $known)
                  | { id, handled_before: ($seen[.id].handled // null), new_replies: .replies[$known:] }
                  | select([.new_replies[].author] | any(. != $me)) ] }
-      | .loop_suspect = ((.new | length) > 0 and ([.new[] | .handled_before != null] | all))')
+      | .loop_suspect = ((.new | length) > 0 and ([.new[] | .handled_before != null] | all))') \
+      || fail4 "快照构建失败（水位 ${WM} 不可解析？）"
     wm_write '.consecutive_failures = 0'
     printf '%s\n' "$snapshot"
     ;;
