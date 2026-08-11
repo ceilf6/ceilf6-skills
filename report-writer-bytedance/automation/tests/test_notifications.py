@@ -123,6 +123,7 @@ class WarningParserTests(unittest.TestCase):
             event.text,
         )
         self.assertIn("oncall-cli auth login", event.text)
+        self.assertIn("flow list", event.text)
 
     def test_send_once_marks_only_after_success(self):
         event = NotificationEvent(
