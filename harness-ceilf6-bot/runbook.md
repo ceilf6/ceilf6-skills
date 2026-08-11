@@ -39,6 +39,33 @@ bot 跑起来后随时可用，**控制命令由 listener 直接执行、不进�
 - **后台运行中不打扰你**：会话把活丢给自己布的后台工作（pre-commit 全仓测试、机审 CR）时以 `verdict=working` 收轮，**不发私信、群里保持 👍**，后台跑完的自唤醒轮自动续上。这段时间它在 `/tasks` 与看板上显示「后台运行中」，进展跟在列表那一行下面。它**不吃私信直发的自由文本**（直发只会落到真正在等你回复的那个任务上），要推它一步用 `/resume`。
 - 控制端口：`config.json` 的 `controlPort`，出厂值 7659（可省略，省略即用 7659）；绑 127.0.0.1，端口被占时 bot 启动即响亮失败退出。看板的停止按钮走它。
 
+## MR 评论巡检（mrwatch）
+
+listener 内置定时巡检（`config.mrWatch`，出厂 `{enabled:true, intervalMs:300000, maxTriggersPerThread:5}`）：
+读 `~/.harness-ceilf6/threads.jsonl` 里有 MR、未完成、未归档的线程，经 `mr-comments.sh fetch` 发现新
+CR 评论后在任务大厅发【bot】锚点消息并起值班任务（占 concurrency 槽，/tasks、/stop、看板徽标全部适用）。
+
+- **依赖**：`CLIENT_BITS_TOKEN` 环境变量（launchd plist 里配）或 repoPath 下 `.bits_client_config.json`；
+  两者都缺时巡检自禁用（listener 日志一条），不影响接单主职。
+- **水位**：`$CTX/mr-comments.json`，只由 `harness-ceilf6/scripts/mr-comments.sh` 写。会话手动处理评论
+  也走它（fetch/reply/mark），bot 不会重复触发。
+- **熔断**：同线程自动触发达上限即停并私信；人工确认后
+  `bash ~/.claude/skills/harness-ceilf6/scripts/mr-comments.sh enable --ctx-dir <ctx>` 复位。
+- **现场被占**（分支漂移/未提交改动）：不抢占，私信一次，评论标记为已见——人工处理，不会反复提醒。
+- **任务失败/被 /stop**：水位不回退、不自动重试，失败私信是唯一兜底；补处置走人工或下次新评论触发。
+- **发现延迟**：最坏 = intervalMs；bot 未运行期间静默，评论不丢（回来首轮即发现）。
+
+### 待演练清单（真机，人工执行）
+
+按序验证，每项演练后在该行末尾补「日期 + 结论」一句：
+
+- [ ] 起 bot，`logs/launchd.err.log` 出现「评论巡检启动」。
+- [ ] 挑一个有开放 MR 的 harness 线程，在 MR 上人工留一条评论。
+- [ ] ≤5 分钟内任务大厅出现【bot】锚点消息、任务起跑（`/tasks` 里看得见）。
+- [ ] 会话回复评论带【bot】前缀、`dispositions.md` 落盘、RESULT 收轮、私信到达。
+- [ ] 再留一条只回「收到」的跟评，验证环路速判不再修复。
+- [ ] `/stop` 一次值班任务，确认线程检出与分支完好（skip 不清场的现场验证）。
+
 ## 一次性：创建飞书应用（约 5 分钟，人工）
 
 1. 开发者后台（open.larkoffice.com）新建自建应用，命名如 `harness-ceilf6-bot`。
@@ -70,7 +97,8 @@ bot 跑起来后随时可用，**控制命令由 listener 直接执行、不进�
    **两条路径都必须带 `--profile taskhall`**：open_id 是 **app 维度**的，不带它会拿到另一个应用下同样合法的 `ou_` 值——正好穿过 install 脚本的 `ou_` 前缀守卫，装出一个 reaction 正常、私信全投空的半哑 bot。2026-07-30 首次部署实测：同一个人在默认 app 下是 `ou_c50103…`、在 taskhall app 下是 `ou_19c19d…`，毫无相似性可供肉眼识别。
    install 脚本会用 config 里的 profile 反查真值做交叉校验：**不一致直接拒装**；反查不到（未授权或离线）只告警放行，此时本步骤就是唯一防线。
    `config.json` 是 git 跟踪文件：填进去的是你的个人 open_id，**别提交**；日后升级拉取如报冲突，先 `git stash` 再拉，拉完 `git stash pop`。
-5. `bash harness-ceilf6-bot/install.sh`。
+5. **MR 评论巡检的 BITS 凭据**（不配就只是没有巡检，接单主职照常）：巡检经 `bytedcli` 读 MR 评论，需要 `CLIENT_BITS_TOKEN` 环境变量或 repoPath 下的 `.bits_client_config.json`。plist 模板的 `EnvironmentVariables` 只写 `PATH`，**推荐用 `.bits_client_config.json`**——token 不进 plist 明文；确要走环境变量就在 `com.ceilf6.harness-ceilf6-bot.plist.tpl` 的 `EnvironmentVariables` 里加一对 `CLIENT_BITS_TOKEN` 键值再重跑 install。
+6. `bash harness-ceilf6-bot/install.sh`。
 
 ## 验收演练（对应 spec 验收方式）
 
