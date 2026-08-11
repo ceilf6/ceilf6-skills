@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 官方安装并登录独立 `oncall-cli`，让日报使用已验证的独立入口采集可选 Oncall 来源，并给出从未安装到已登录的完整提醒。
+**Goal:** 官方安装并登录独立 `oncall-cli`，验证日报现有 Oncall 入口恢复，并给出从未安装到已登录的完整提醒。
 
-**Architecture:** 使用 Oncall CLI 官方 installer 和独立凭据目录，不为 bytedcli 托管缓存建软链接。日报的其他 ByteDance 来源继续使用 `bytedcli`，仅 Oncall 改用独立 `oncall-cli`；通知层只负责给出可执行的安装/登录步骤。
+**Architecture:** 使用 Oncall CLI 官方 installer 和独立凭据目录，不为 bytedcli 托管缓存建软链接。认证后独立 CLI 与 `bytedcli oncall` 均已通过真实查询，因此日报保留现有 `bytedcli` 入口；代码只修正通知层的安装/登录步骤。
 
 **Tech Stack:** Node.js 24、内部 npm registry、`oncall-cli`、Python 3.9、`unittest`、现有自动化安装器。
 
@@ -15,8 +15,7 @@
   `npx --registry=https://bnpm.byted.org @bytedance-dev/oncall-cli@latest install`。
 - 禁止为 `~/.local/share/bytedcli/dependency/oncall` 创建 PATH 软链接。
 - 禁止把 JWT、access token、登录 complete token 写入 Git、日报或运行日志。
-- 日报 Oncall 查询固定使用独立 `oncall-cli ... --format json`。
-- Codebase、Bits、Meego、Cloud Ticket 继续使用 `bytedcli`。
+- 日报现有 `bytedcli oncall` 查询已通过真实验证，不修改来源路由。
 - 不运行日报 full run，不重复创建或更新目标日文档。
 - 所有代码修改先 RED 后 GREEN，通知测试不得发送真实消息。
 
@@ -131,23 +130,20 @@ bytedcli --json oncall flow list \
   --page-size 1
 ```
 
-Expected: 记录真实结果。无论此命令成功与否，日报 Oncall 都使用 Task 1 已验证的
-独立 CLI，避免把 bridge 兼容性带入日报主链路。
+Expected: exit 0；与独立 CLI 返回同类成功结果。两条入口均验证成功，因此保留
+日报现有 `bytedcli oncall` 路由。
 
 ---
 
-### Task 3: TDD 修正提醒与来源路由
+### Task 3: TDD 修正提醒文案
 
 **Files:**
 - Modify: `report-writer-bytedance/automation/notifications.py`
 - Modify: `report-writer-bytedance/automation/tests/test_notifications.py`
-- Modify: `report-writer-bytedance/references/source-map.md`
-- Modify: `report-writer-bytedance/SKILL.md`
-- Modify: `report-writer-bytedance/automation/tests/test_policy_contract.py`
 
 **Interfaces:**
-- Consumes: `configuration_event()` 与日报来源契约
-- Produces: 自包含安装/登录提醒、独立 Oncall 查询命令
+- Consumes: `configuration_event()`
+- Produces: 自包含安装/登录提醒
 
 - [ ] **Step 1: 写提醒文案红灯测试**
 
@@ -174,31 +170,7 @@ def test_oncall_configuration_event_includes_install_and_login_steps(self):
     self.assertIn("oncall-cli auth login", event.text)
 ```
 
-- [ ] **Step 2: 写来源路由红灯测试**
-
-Extend `test_policy_contract.py`:
-
-```python
-def test_oncall_uses_standalone_cli_while_other_sources_keep_bytedcli(self):
-    skill = self.read("SKILL.md")
-    source_map = self.read("references/source-map.md")
-
-    self.assertIn(
-        'oncall-cli flow list --originator "<username>" '
-        "--page-size 20 --format json",
-        source_map,
-    )
-    self.assertIn(
-        'oncall-cli flow list --handler "<username>" '
-        "--page-size 20 --format json",
-        source_map,
-    )
-    self.assertNotIn("bytedcli --json oncall flow list", source_map)
-    self.assertIn("Use standalone `oncall-cli` for Oncall", skill)
-    self.assertIn("Use `bytedcli` for Codebase, Bits, Meego, and Cloud Ticket", skill)
-```
-
-- [ ] **Step 3: 运行 focused 测试确认 RED**
+- [ ] **Step 2: 运行 focused 测试确认 RED**
 
 Run:
 
@@ -206,15 +178,11 @@ Run:
 python3 -m unittest discover \
   -s report-writer-bytedance/automation/tests \
   -p 'test_notifications.py' -v
-python3 -m unittest discover \
-  -s report-writer-bytedance/automation/tests \
-  -p 'test_policy_contract.py' -v
 ```
 
-Expected: 新增两项均失败，原因分别为提醒缺安装步骤、来源仍使用
-`bytedcli oncall`。
+Expected: 新增测试失败，原因是提醒缺少安装步骤和“可选来源”说明。
 
-- [ ] **Step 4: 最小修改提醒文案**
+- [ ] **Step 3: 最小修改提醒文案**
 
 Replace the Oncall action in `notifications.py` with:
 
@@ -229,32 +197,7 @@ action = (
 )
 ```
 
-- [ ] **Step 5: 修改来源路由**
-
-In `references/source-map.md`, replace the two Oncall commands with:
-
-```bash
-oncall-cli flow list --originator "<username>" --page-size 20 --format json
-oncall-cli flow list --handler "<username>" --page-size 20 --format json
-```
-
-Add rules:
-
-```markdown
-- Use standalone `oncall-cli` for Oncall. If the executable or authentication
-  is unavailable, record the source as skipped and emit the configured warning.
-- Do not fall back to a failing `bytedcli oncall` bridge during the same report run.
-```
-
-In `SKILL.md`, replace the ByteDance source rule with:
-
-```markdown
-- Use `bytedcli` for Codebase, Bits, Meego, and Cloud Ticket.
-- Use standalone `oncall-cli` for Oncall; missing executable, authentication,
-  or query failures remain optional-source skips.
-```
-
-- [ ] **Step 6: 运行 GREEN 与全量回归**
+- [ ] **Step 4: 运行 GREEN 与全量回归**
 
 Run:
 
@@ -266,16 +209,13 @@ python3 -m unittest discover \
 git diff --check
 ```
 
-Expected: automation `49/49`、local AI `24/24` 全部通过，无空白错误。
+Expected: automation `48/48`、local AI `24/24` 全部通过，无空白错误。
 
-- [ ] **Step 7: 提交代码修正**
+- [ ] **Step 5: 提交代码修正**
 
 ```bash
 git add report-writer-bytedance/automation/notifications.py \
-  report-writer-bytedance/automation/tests/test_notifications.py \
-  report-writer-bytedance/automation/tests/test_policy_contract.py \
-  report-writer-bytedance/references/source-map.md \
-  report-writer-bytedance/SKILL.md
+  report-writer-bytedance/automation/tests/test_notifications.py
 git commit -m "fix(report): 补全 Oncall CLI 安装与认证路径"
 ```
 
@@ -285,11 +225,10 @@ git commit -m "fix(report): 补全 Oncall CLI 安装与认证路径"
 
 **Files:**
 - Deploy: `~/.local/lib/trae-daily-report/notifications.py`
-- Deploy: `~/.local/share/trae-skills/report-writer-bytedance/`
 
 **Interfaces:**
 - Consumes: Task 3 提交
-- Produces: 零漂移运行副本与可执行的 Oncall 只读查询
+- Produces: 零漂移运行副本与自包含提醒文案
 
 - [ ] **Step 1: 部署**
 
@@ -310,11 +249,9 @@ Run:
 ```bash
 cmp report-writer-bytedance/automation/notifications.py \
   /Users/bytedance/.local/lib/trae-daily-report/notifications.py
-cmp report-writer-bytedance/references/source-map.md \
-  /Users/bytedance/.local/share/trae-skills/report-writer-bytedance/references/source-map.md
 ```
 
-Expected: 两条 exit 0。
+Expected: exit 0。
 
 - [ ] **Step 3: 最终只读验收**
 
@@ -333,5 +270,5 @@ python3 -m unittest discover \
 git status --short
 ```
 
-Expected: Oncall auth/query exit 0；automation `49/49`、local AI `24/24`；
+Expected: Oncall auth/query exit 0；automation `48/48`、local AI `24/24`；
 Git 工作树干净。不得执行日报 full run。
