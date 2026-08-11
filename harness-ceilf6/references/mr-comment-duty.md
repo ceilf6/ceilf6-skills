@@ -11,7 +11,7 @@
 1. **环路速判**（`loop_suspect=true` 时先做）：逐条看 new_replies——若全部只是机器人对我们既有【bot】回复的跟评、不含新 finding，在 dispositions.md 记「环路，未处置」后直接收轮，不回复、不修复。
 2. **逐条三分法评判**：确凿需修复 / 确凿不成立 / 有疑点。判定依据：评论指向的代码现场 + plan.md 验收标准；作者是机器人还是人工按 author 与内容判断。
 3. **确凿需修复** → 走 harness-ceilf6 续入路径闭环（plan.md 验收增补、重置里程碑、TDD 修复、机审 CR 循环、squash → rebase → force-with-lease push 更新 MR），全部修完再统一回复。
-4. **回复出口表**（一律经 `mr-comments.sh reply`，脚本会强制【bot】前缀；`--handled` 同时落台账）：
+4. **回复出口表**（一律经 `mr-comments.sh reply`，脚本会强制【bot】前缀）：
 
 | 作者 | 判定 | 动作 | 回复模板 | --handled |
 |---|---|---|---|---|
@@ -23,9 +23,12 @@
 
 对人工评审者，自动「不采纳」等于替开发者拍板，**不允许**——那一行只存在于机器人作者。
 
+`--handled` 把处置结论写进水位文件（`mr-comments.json` 的 `threads[<id>].handled`，是下一轮环路判定的依据）；dispositions.md 台账是另一份，仍须按第 5 步手写。
+
 5. **台账**：`$CTX/mr-cr/<时间戳>/dispositions.md`，逐条记：线程 id / 作者类别 / 判定 / 理由 / 回复内容（或「环路，未处置」）。
 6. **待裁决私信**：存在 pending_user 时，把清单（线程 id + 疑点一句话 + MR 链接）汇总为一条私信发给开发者（bot 场景由 RESULT summary 携带并在收轮私信中呈现；交互场景直接口头汇报）。
-7. **禁令**：人工节点里程碑（human_cr_done / selftest_done）不代 mark；不 resolve 评论线程（留给评论者/开发者）；不动 cr/round-*/ 历史产物。
+7. **水位推进（仅交互路径）**：手动自取快照处置完毕后执行 `bash ~/.claude/skills/harness-ceilf6/scripts/mr-comments.sh mark --ctx-dir "$CTX" --from-snapshot <快照文件>`——不推进水位，bot 下一轮巡检会把同批评论再次当新评论触发。bot 触发的值班任务**无需执行**：mrwatch 已在起任务时推进过。
+8. **禁令**：人工节点里程碑（human_cr_done / selftest_done）不代 mark；不 resolve 评论线程（留给评论者/开发者）；不动 cr/round-*/ 历史产物。
 
 ## 收轮（bot 场景）
 
