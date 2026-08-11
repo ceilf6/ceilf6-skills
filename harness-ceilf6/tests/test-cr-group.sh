@@ -46,10 +46,16 @@ hasnt "排除本人" 'chat add --mr-id 8300001 --username wangjinghong.ceilf6' "
 has "收尾行带实际拉人数" '拉入 2 人' "$out"
 jq -e '.milestones.cr_group_created' "$CTX/meta.json" >/dev/null && ok "拉群节点已 mark" || bad "拉群节点未 mark"
 jq -e '.cr_chat_id == "oc_stub_1"' "$CTX/meta.json" >/dev/null && ok "群标识落 meta" || bad "群标识未落盘"
-# 拉群不碰消息与 WIP：那是求CR 那一步的事
+# 拉群不发消息；常态也不摘 WIP（仅 start 被 WIP 挡的重试路径例外，见后面专节）
 hasnt "拉群不发消息" 'messages-send' "$calls"
-hasnt "拉群不摘 WIP" '--wip false' "$calls"
+hasnt "拉群常态不摘 WIP" '--wip false' "$calls"
 jq -e '.milestones | has("cr_requested") | not' "$CTX/meta.json" >/dev/null && ok "拉群不标求CR" || bad "拉群误标求CR"
+# 名单来自平台按规则的评审发起：不 start 名单里只有全局 QA/RD 位，建群只剩本人
+has "拉群前发起代码评审" 'code-review start --mr-id 8300001' "$calls"
+s_line=$(grep -n 'code-review start' "$STUB_STATE/calls.log" | head -1 | cut -d: -f1 || true)
+r_line=$(grep -n 'reviewer info' "$STUB_STATE/calls.log" | head -1 | cut -d: -f1 || true)
+[ -n "$s_line" ] && [ -n "$r_line" ] && [ "$s_line" -lt "$r_line" ] \
+  && ok "start 先于读名单" || bad "顺序: start@${s_line:-无} reviewer@${r_line:-无}"
 
 echo "== request：发消息、标节点、摘 WIP =="
 : > "$STUB_STATE/calls.log"
@@ -251,6 +257,33 @@ rc=0; bash "$CG" bogus --ctx-dir "$CTX" 2>/dev/null || rc=$?
 [ "$rc" != 0 ] && ok "未知子命令非零退出" || bad "未知子命令 exit 0"
 rc=0; bash "$CG" group --ctx-dir "$T/nonexist" 2>/dev/null || rc=$?
 [ "$rc" != 0 ] && ok "缺 meta 非零退出" || bad "缺 meta exit 0"
+teardown
+
+echo "== group：评审已发起（start 报已运行）——幂等放行不告警 =="
+setup 8300021
+: > "$STUB_STATE/start_started"
+err=$(bash "$CG" group --ctx-dir "$CTX" 2>&1 >/dev/null) || true
+hasnt "已发起不告警" '发起代码评审失败' "$err"
+has "照常建群" 'chat create' "$(cat "$STUB_STATE/calls.log")"
+teardown
+
+echo "== group：start 被 WIP 挡——摘 WIP 重试一次后静默成功 =="
+setup 8300022
+: > "$STUB_STATE/start_wip"
+err=$(bash "$CG" group --ctx-dir "$CTX" 2>&1 >/dev/null) || true
+calls=$(cat "$STUB_STATE/calls.log")
+has "先摘 WIP" 'mr update --mr-id 8300022 --wip false' "$calls"
+[ "$(grep -c 'code-review start' "$STUB_STATE/calls.log")" = 2 ] && ok "start 重试一次" || bad "start 次数: $(grep -c 'code-review start' "$STUB_STATE/calls.log")"
+hasnt "重试成功不告警" '仍失败' "$err"
+teardown
+
+echo "== group：start 持续失败——告警但拉群继续 =="
+setup 8300023
+: > "$STUB_STATE/start_fail"
+rc=0; bash "$CG" group --ctx-dir "$CTX" >/dev/null 2>"$T/err" || rc=$?
+[ "$rc" = 0 ] && ok "拉群继续 exit 0" || bad "exit $rc"
+has "失败告警" '发起代码评审失败' "$(cat "$T/err")"
+has "照常建群" 'chat create' "$(cat "$STUB_STATE/calls.log")"
 teardown
 
 echo; echo "PASS=$PASS FAIL=$FAIL"

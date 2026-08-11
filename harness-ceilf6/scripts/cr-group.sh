@@ -72,6 +72,7 @@ case "$sub" in
   group)
     if [ -z "$mr" ]; then echo "cr-group: 无 MR，未拉群"; exit 3; fi
     if [ "$dry" = 1 ]; then
+      echo "DRY: bytedcli --json bits mr code-review start --mr-id ${mr}"
       echo "DRY: bytedcli bits mr reviewer info --mr-id ${mr} --json"
       echo "DRY: bytedcli bits mr chat create --mr-id ${mr} --json"
       echo "DRY: bytedcli bits mr chat add --mr-id ${mr} --username <各 reviewer> --member-type reviewer"
@@ -82,6 +83,23 @@ case "$sub" in
     # 不依赖调用方 cwd——web.py 的工作目录不定
     repo_root=$(cd "$ctx/../.." && pwd -P)
     me=$(git -C "$repo_root" config user.name 2>/dev/null || true)
+    # 拉群前确保平台代码评审已发起：分支代码评审人由平台按默认规则在 start 时拉取
+    # （start_type=MANUALLY_BEGIN、fetch_mode=DEFAULT_RULE），未发起时 reviewer info 里只有
+    # 全局 QA/RD 位，建群会只剩本人。已发起的重复 start 按幂等放行；平台 allow_review_wip=false，
+    # WIP 挡住 start 时先摘 WIP 重试一次（走到拉群意味着自测已完成、代码已定，提前摘除站得住，
+    # 「发起CR」步的摘 WIP 由此成幂等复核）。错误分类按文案匹配、形状按真机为准：不符只改本段。
+    if ! start_err=$(bytedcli --json bits mr code-review start --mr-id "$mr" 2>&1); then
+      case "$start_err" in
+        *RUNNING*|*running*|*已发起*|*already*)
+          : ;;
+        *WIP*|*wip*|*Wip*)
+          bytedcli bits mr update --mr-id "$mr" --wip false >/dev/null 2>&1 || true
+          bytedcli --json bits mr code-review start --mr-id "$mr" >/dev/null 2>&1 \
+            || echo "cr-group: 警告——摘 WIP 后发起代码评审仍失败，名单可能不全，可平台手点后重跑拉群" >&2 ;;
+        *)
+          echo "cr-group: 警告——发起代码评审失败（$(printf '%s' "$start_err" | tr '\n' ' ' | cut -c1-160)），名单可能不全" >&2 ;;
+      esac
+    fi
     rev=$(bytedcli bits mr reviewer info --mr-id "$mr" --json 2>/dev/null || echo '[]')
     reviewers=$(printf '%s' "$rev" | jq -r --arg me "$me" \
       '[.[]?.username // empty] | unique | .[] | select(. != "" and . != $me)' 2>/dev/null || true)
