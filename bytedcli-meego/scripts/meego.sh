@@ -183,8 +183,11 @@ case "$sub" in
     node_key=$(printf '%s' "$nodes" | jq -r --arg n "$SN" 'first(.list[]? | .basic | select(.name == $n) | .node_key) // empty')
     [ -n "$node_key" ] || die "条目 ${id} 无「${SN}」节点（节点流与配置不符，需重跑首次映射）"
     OWNER=$(printf '%s' "$rc_cfg" | jq -r '.dev_owner_key // empty')
-    # 排期 JSON 字段名按真机为准（首次真机在测试条目上回填一次核对）：形状漂移只改本段
-    sched=$(jq -n -c --arg s "$start" --arg d "$due" --arg p "${points:-}" \
+    # 排期 JSON 形状按真机 update_node schema（2026-08-11 实测核对）：estimate_*_date 为
+    # 按时区 00:00:00 的毫秒级时间戳（number），字符串日期会被 thrift 拒收；points 单位为天
+    start_ms=$(( $(date -j -f "%Y-%m-%d %H:%M:%S" "$start 00:00:00" +%s 2>/dev/null || date -d "$start 00:00:00" +%s) * 1000 ))
+    due_ms=$(( $(date -j -f "%Y-%m-%d %H:%M:%S" "$due 00:00:00" +%s 2>/dev/null || date -d "$due 00:00:00" +%s) * 1000 ))
+    sched=$(jq -n -c --argjson s "$start_ms" --argjson d "$due_ms" --arg p "${points:-}" \
       '{estimate_start_date:$s, estimate_end_date:$d} + (if $p != "" then {points:($p|tonumber)} else {} end)')
     if [ -n "$OWNER" ]; then
       out=$(bytedcli --json meego node update --project-key "$PK" --work-item-id "$id" \
