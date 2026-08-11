@@ -1,0 +1,107 @@
+bytedcli-meego/scripts/meego.sh
+  s_d49f89bd4f8559::t_817c2a2d277518 107-132,134-139,142-149
+  s_91b8695bcb6b2f::t_013799e5adda2e 224,226,245-249
+  s_2289d8cccead5e::t_bb78d69d5c991a 150-170,172,174-185,188-199
+  s_73f6c8799c25b8::t_2d89ead5805afd 1-53,59-61,64-106,280-281
+  s_2289d8cccead5e::t_48010b8f05359e 173,187
+  s_91b8695bcb6b2f::t_aea80fed0c67dd 200-223,225,227-244,250-259,272-279
+  s_2ab8384a4c70f4::t_c551ad3668457e 171,186,260-271
+  s_d49f89bd4f8559::t_e4f6ffce40210c 54-58,62-63,133,140-141
+harness-ceilf6/SKILL.md
+  s_d34af013c868d8::t_b0e16173f17884 50-52,77,79,120-121,135
+harness-ceilf6/scripts/board/index.html
+  s_32db94f3cfd14a::t_d5e9ad28468e5f 146
+install-harness.sh
+  s_d34af013c868d8::t_5c75b2900a4939 9
+harness-ceilf6/tests/test-web.sh
+  s_32db94f3cfd14a::t_86c5f6e43f19f5 54,87-90,284-290
+  s_32db94f3cfd14a::t_3d1f931cb64e94 47-53,55-56,60-62,271-283,291-301,311
+  s_2ab8384a4c70f4::t_e68188ce2fefd2 33-44,57-59,302-310
+bytedcli-meego/SKILL.md
+  s_d34af013c868d8::t_7e91f3910bdc82 1-56
+bytedcli-meego/tests/test-meego.sh
+  s_d49f89bd4f8559::t_2bf52640cebd2a 67-99
+  s_2ab8384a4c70f4::t_f61e4093dd0ff2 168-171,275-288
+  s_91b8695bcb6b2f::t_ce30e6ca79938c 110,172,174-181,183-203,219-237,244-246,259-274,289-293
+  s_2289d8cccead5e::t_6548207be8938c 119-120,143-144,146-148,153-167
+  s_d49f89bd4f8559::t_d6b8e523563539 100-109
+  s_73f6c8799c25b8::t_43a463f4056293 1-66,294-295
+  s_2289d8cccead5e::t_f900a7a4e636c3 112-118,121-142,145,149-152
+  s_91b8695bcb6b2f::t_c31ea28934b2d9 182,204-218,238-243,247-258
+  s_91b8695bcb6b2f::t_6e5caea2c98efb 173
+  s_2ab8384a4c70f4::t_ec9de1445469c5 111
+bytedcli-meego/tests/stubs/bytedcli
+  s_d49f89bd4f8559::t_45aafdc9f92e5c 6,32
+  s_91b8695bcb6b2f::t_3699c2dbe797cb 18-19
+  s_73f6c8799c25b8::t_b3a3f46fc1842b 1-5,7-17,20-31,33-36
+harness-ceilf6/scripts/web.py
+  s_2ab8384a4c70f4::t_01d47090b8fbd3 227-231,233
+  s_32db94f3cfd14a::t_1fedfa880401d3 162-167,169,171,221-226
+  s_32db94f3cfd14a::t_40db1d29d282d2 25-27,80-84,157-161,168,170,172-176,184-189,219-220,232,234
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c4e674b3e966af2fb3fff231e21cec9908187586",
+  "prompts": {},
+  "sessions": {
+    "s_2289d8cccead5e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a7ec6c1f9717f59ab",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_2ab8384a4c70f4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-adcbd71812941b9d5",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_32db94f3cfd14a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a6b4fb7f7b2a11f3f",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_73f6c8799c25b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a10af5f6260c2e7e5",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_91b8695bcb6b2f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-aa6810f60ae909edb",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_d34af013c868d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-abb6d6842b2fe552e",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    },
+    "s_d49f89bd4f8559": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a9242c9c01a723318",
+        "model": "unknown"
+      },
+      "human_author": "wangjinghong.ceilf6 <wangjinghong.ceilf6@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
