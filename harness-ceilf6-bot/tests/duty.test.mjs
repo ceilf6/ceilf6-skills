@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync, readFileSync, rmSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync, realpathSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { runDutyTask, resumeTask, killSession } from '../src/runner.mjs';
+import { scanStranded } from '../src/stranded.mjs';
 
 const CLAUDE_STUB = resolve(import.meta.dirname, 'stubs/claude');
 
@@ -87,5 +88,28 @@ test('runDutyTask：ask 挂起 → resumeTask 续跑后 skip 仍不清场', asyn
   assert.ok(existsSync(repo), '续跑后的 skip 删掉了用户检出');
   const branches = execFileSync('git', ['-C', repo, 'branch', '--list', 'feat/x']).toString();
   assert.ok(branches.includes('feat/x'), '续跑后的 skip 删掉了需求分支');
+  rmFixture(root);
+});
+
+// 滞留扫描链路：值班任务「从未 ask 过、活跃轮次中被 bot 重启收割」时，滞留登记的唯一来源是
+// onWorktreeReady 存进线程表的 info。preserveWorktree 在任何一环掉队，重启后 /resume + skip
+// 就会删掉用户的检出与需求分支。
+test('runDutyTask：onWorktreeReady 带 preserveWorktree，scanStranded 原样透传', async () => {
+  const { root, repo } = makeFixture();
+  const wtInfos = [];
+  process.env.STUB_VERDICT = 'pass';
+  await runDutyTask(TASK, makeConfig(root, repo), fakeLark([]), { onWorktreeReady: (i) => wtInfos.push(i) }, {
+    cwd: repo, branch: 'feat/x', title: 'MR 9 评论处置', firstMessage: 'x',
+  });
+  assert.equal(wtInfos.length, 1);
+  assert.equal(wtInfos[0].preserveWorktree, true, 'onWorktreeReady 载荷必须带 preserveWorktree');
+  // 模拟重启后的启动扫描：候选就是线程表里那份 info，日志停在活跃轮次（有会话 id、无终态 RESULT）
+  const logsDir = join(root, 'scan-logs');
+  mkdirSync(logsDir, { recursive: true });
+  writeFileSync(join(logsDir, `task-${TASK.messageId}.log`),
+    JSON.stringify({ type: 'system', subtype: 'init', session_id: 'sess_duty' }) + '\n');
+  const out = scanStranded([wtInfos[0]], { logsDir, isSettled: () => false, findAwaiting: () => null });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].preserveWorktree, true, 'scanStranded 重塑产出对象时必须透传 preserveWorktree');
   rmFixture(root);
 });

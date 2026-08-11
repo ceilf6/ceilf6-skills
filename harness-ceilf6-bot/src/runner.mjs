@@ -387,7 +387,9 @@ export async function runDutyTask(task, config, lark, hooks = {}, opts) {
   mkdirSync(config.logsDir, { recursive: true });
   const logPath = join(config.logsDir, `task-${task.messageId}.log`);
   try {
-    hooks.onWorktreeReady?.({ threadId: task.threadId ?? '', branch: opts.branch, worktree: opts.cwd, messageId: task.messageId });
+    // preserveWorktree 随线程登记落盘：滞留扫描凭它重建的登记才带免清场保护，缺了它
+    // 「从未 ask 过、活跃轮次中被收割」的值班任务经 /resume + skip 会删掉用户检出。
+    hooks.onWorktreeReady?.({ threadId: task.threadId ?? '', branch: opts.branch, worktree: opts.cwd, messageId: task.messageId, preserveWorktree: true });
   } catch (e) {
     console.error(`[runner] onWorktreeReady 回调失败：${e.message}`);
   }

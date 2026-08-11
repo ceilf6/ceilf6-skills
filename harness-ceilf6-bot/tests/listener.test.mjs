@@ -6,6 +6,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Store } from '../src/state.mjs';
+import { validateConfig } from '../src/listener.mjs';
 
 const SRC = resolve(import.meta.dirname, '../src/listener.mjs');
 const LARK_STUB = resolve(import.meta.dirname, 'stubs/lark-cli');
@@ -720,6 +721,38 @@ test('端到端（stub）：活跃轮次中被重启的任务，重启后自动�
   rmFixture(root);
 });
 
+// 值班任务从未 ask 过、活跃轮次中被 bot 重启收割：滞留登记的来源是线程表里 onWorktreeReady
+// 存下的 info。手拼 recordAsk 载荷时 preserveWorktree 一旦掉队，登记出来的就是「不带保护」的
+// 滞留条目——之后 /resume + skip 会删掉用户的检出与需求分支。
+test('端到端（stub）：带 preserveWorktree 的线程登记，滞留登记条目仍带免清场保护', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-strandduty-')));
+  const repo = makeRepo(root);
+  const cfgPath = writeConfig(root, repo);
+  mkdirSync(join(root, 'state'), { recursive: true });
+  mkdirSync(join(root, 'logs'), { recursive: true });
+  // 线程表条目即 runDutyTask onWorktreeReady 存的形状：值班任务跑在既有检出上，带免清场标记
+  writeFileSync(join(root, 'state', 'threads.jsonl'), JSON.stringify({
+    threadId: 'omt_duty', info: {
+      threadId: 'omt_duty', messageId: 'om_dutystrand1', branch: 'feat/x', worktree: repo, preserveWorktree: true,
+    },
+  }) + '\n');
+  // 日志停在活跃轮次：有会话 id、无终态 RESULT——正是滞留判据
+  writeFileSync(join(root, 'logs', 'task-om_dutystrand1.log'),
+    JSON.stringify({ type: 'system', subtype: 'init', session_id: 'sess_duty1' }) + '\n');
+  const awaitingPath = join(root, 'state', 'awaiting.jsonl');
+  const { ok } = await runListener({
+    cfgPath, root, turns: 'pass',
+    events: [dmLine({ message_id: 'om_dm_dstrand1', content: '/tasks' })],
+    until: () => existsSync(awaitingPath) && readFileSync(awaitingPath, 'utf8').includes('"kind":"stranded"'),
+  });
+  assert.ok(ok, '带 preserveWorktree 的线程登记应照常被扫成滞留条目');
+  const entry = JSON.parse(readFileSync(awaitingPath, 'utf8').trim().split('\n')[0]);
+  assert.equal(entry.messageId, 'om_dutystrand1');
+  assert.equal(entry.preserveWorktree, true,
+    '滞留登记必须透传 preserveWorktree，否则 /resume + skip 会清掉用户检出');
+  rmFixture(root);
+});
+
 test('端到端（stub）：working 态零私信；bot 重启后 /tasks 仍显示后台运行中', async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-bg-')));
   const cfgPath = writeConfig(root, makeRepo(root));
@@ -1125,4 +1158,18 @@ test('启动校验：controlPort 可省略，但给了坏值仍响亮失败', as
     assert.ok(out.err.includes('controlPort'), `stderr 应点名 controlPort，实际：${out.err}`);
   }
   rmFixture(root);
+});
+
+test('validateConfig：mrWatch 非法值被点名', () => {
+  const base = {
+    chatId: 'c', profile: 'p', repoPath: '/r', worktreesDir: '/w', stateDir: '/s', logsDir: '/l',
+    dmOpenId: 'o', claudeBin: 'claude', larkBin: 'lark-cli',
+    concurrency: 1, taskTimeoutMs: 1000, minTextLength: 10,
+    reactions: { claimed: 'a', done: 'b', failed: 'c', escalate: 'd', skipped: 'e', context: 'f', stopped: 'g' },
+  };
+  assert.equal(validateConfig({ ...base }).length, 0);
+  assert.equal(validateConfig({ ...base, mrWatch: { intervalMs: 300000, maxTriggersPerThread: 5 } }).length, 0);
+  assert.ok(validateConfig({ ...base, mrWatch: { intervalMs: 0 } }).some((e) => e.includes('mrWatch.intervalMs')));
+  assert.ok(validateConfig({ ...base, mrWatch: { enabled: 'yes' } }).some((e) => e.includes('mrWatch.enabled')));
+  assert.ok(validateConfig({ ...base, mrWatch: 3 }).some((e) => e.includes('mrWatch')));
 });

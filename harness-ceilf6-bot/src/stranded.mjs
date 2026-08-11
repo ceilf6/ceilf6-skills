@@ -74,6 +74,8 @@ export function scanStranded(threads, { logsDir, isSettled, findAwaiting }) {
     out.push({
       messageId: t.messageId, threadId: t.threadId ?? '', branch: t.branch ?? '',
       worktree: t.worktree, sessionId: tail.sessionId, logPath,
+      // 免清场标记必须随产出透传：值班任务的滞留登记丢了它，续跑后一个 skip 就删掉用户检出。
+      preserveWorktree: t.preserveWorktree ?? false,
     });
   }
   return out;

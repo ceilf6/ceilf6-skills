@@ -9,9 +9,10 @@ import { decide } from './filter.mjs';
 import { appendContextEntry } from './context.mjs';
 import { Store } from './state.mjs';
 import { makeLark } from './lark.mjs';
-import { runTask, resumeTask, injectReply, killSession, killActiveChildren, taskSnapshot, stopLive } from './runner.mjs';
+import { runTask, runDutyTask, resumeTask, injectReply, killSession, killActiveChildren, taskSnapshot, stopLive } from './runner.mjs';
 import { parseDmReply, mergeFlags, parseControl, SUPPORTED_HINT } from './commands.mjs';
 import { scanStranded } from './stranded.mjs';
+import { makeMrWatch } from './mrwatch.mjs';
 import { startControlServer } from './control.mjs';
 
 // 控制端口出厂值：config 省略 controlPort 即用它（spec 与 runbook 以此为准）。
@@ -44,7 +45,7 @@ export function unregisterThread(store, task) {
 
 // 启动即全量校验：lark.mjs/runner 假定 config 合法，缺键会退化成
 // `--profile undefined` 这类静默错参——必须在 boot 时一次性响亮失败，而非带病常驻。
-function validateConfig(config) {
+export function validateConfig(config) {
   const errs = [];
   for (const k of ['chatId', 'profile', 'repoPath', 'worktreesDir', 'stateDir', 'logsDir', 'dmOpenId', 'claudeBin', 'larkBin']) {
     if (typeof config[k] !== 'string' || config[k] === '') errs.push(`${k}（需非空字符串）`);
@@ -62,6 +63,17 @@ function validateConfig(config) {
   }
   for (const k of ['claimed', 'done', 'failed', 'escalate', 'skipped', 'context', 'stopped']) {
     if (typeof config.reactions?.[k] !== 'string' || config.reactions[k] === '') errs.push(`reactions.${k}（需非空字符串）`);
+  }
+  // mrWatch 可省略（省略即 mrwatch.mjs 的 DEFAULTS）；给了就必须形状合法——半错配置比没配置更难排查。
+  if (config.mrWatch !== undefined) {
+    const w = config.mrWatch;
+    if (typeof w !== 'object' || w === null) errs.push('mrWatch（需对象或省略）');
+    else {
+      if (w.enabled !== undefined && typeof w.enabled !== 'boolean') errs.push('mrWatch.enabled（需布尔）');
+      for (const k of ['intervalMs', 'maxTriggersPerThread']) {
+        if (w[k] !== undefined && !(Number.isInteger(w[k]) && w[k] > 0)) errs.push(`mrWatch.${k}（需正整数）`);
+      }
+    }
   }
   return errs;
 }
@@ -135,6 +147,19 @@ if (isMain) {
           releaseSlot(task.messageId);
         });
     }
+  }
+
+  // 值班任务与队列任务共用 concurrency 槽：评论处置跑机审/测试时同样是重负载。
+  // 容量由 mrwatch 在触发前经 hasCapacity 预检，此处返回 false 仅剩并发竞争窗口。
+  function launchDuty(task, opts) {
+    if (running >= config.concurrency) return false;
+    running++;
+    counted.add(task.messageId);
+    runDutyTask(task, config, lark, taskHooks, opts)
+      .then(settleTask(task))
+      .catch((e) => console.error(`[listener] 值班任务异常：${e.message}`))
+      .finally(() => releaseSlot(task.messageId));
+    return true;
   }
 
   function admit(ev) {
@@ -582,9 +607,17 @@ if (isMain) {
       threadId: info.threadId, branch: info.branch, worktree: info.worktree, sessionId: info.sessionId,
       question: `活跃轮次中被 bot 重启收割，现场与会话历史完好；/resume 即接着跑，/stop 作废。日志：${info.logPath}`,
       title: info.branch, kind: 'stranded',
+      // 免清场标记必须落进登记：值班任务的滞留条目丢了它，/resume 后一个 skip 就删掉用户检出。
+      preserveWorktree: info.preserveWorktree ?? false,
     });
     console.error(`[listener] 发现滞留任务 ${info.messageId.slice(-6)}（${info.branch}），已登记为可续跑`);
   }
+  makeMrWatch({
+    config, lark, launchDuty,
+    hasCapacity: () => running < config.concurrency,
+    // 有 worktree 归属的在册任务（运行/等待/后台/滞留/启动中）都算占用；queued 无 worktree 不会误配
+    hasActiveTaskAt: (cwd) => registry().some((t) => t.worktree === cwd),
+  }).start();
   startConsumer();
   pump(); // 处理重启前遗留队列
   // 补回群里那枚接单表情的 reaction_id：条目是扫描凭空造出来的，无从继承它。缺了 rid，处置路径
