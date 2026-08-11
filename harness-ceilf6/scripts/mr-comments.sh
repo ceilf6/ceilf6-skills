@@ -133,6 +133,43 @@ case "$sub" in
     wm_write '.consecutive_failures = 0'
     printf '%s\n' "$snapshot"
     ;;
-  mark|reply|enable|disable) die "子命令 ${sub} 尚未实现（Task 2）" ;;
+  mark)
+    [ -n "$snap" ] || usage
+    [ -f "$snap" ] || die "快照不存在：$snap"
+    wm_write --slurpfile s "$snap" --arg at "$(now)" --argjson ct "$count_trigger" '
+      ($s[0]) as $sn
+      | .threads = (reduce $sn.threads[] as $t (.threads;
+          .[$t.id] = ((.[$t.id] // {}) + { reply_count: ($t.replies | length), resolved: $t.resolved })))
+      | (reduce $sn.new[] as $n (.; .threads[$n.id].triggered_at = $at))
+      | .trigger_count = (if $ct == 1 then .trigger_count + 1 else .trigger_count end)
+      | .last_poll_at = $at'
+    echo "mr-comments: 水位已推进（$(jq -r '.new | length' "$snap") 条新评论线程）"
+    ;;
+  reply)
+    { [ -n "$thread" ] && [ -n "$msgfile" ]; } || usage
+    msg=$(cat "$msgfile" 2>/dev/null) || die "message 文件不可读：$msgfile"
+    [ -n "$msg" ] || die "回复内容为空"
+    case "$msg" in "【bot】"*) : ;; *) msg="【bot】${msg}" ;; esac
+    if [ -n "$handled" ]; then
+      case "$handled" in fixed|rejected|pending_user) : ;; *) die "--handled 只收 fixed|rejected|pending_user" ;; esac
+    fi
+    repo=$(jq -r '.repo // empty' "$WM"); iid=$(jq -r '.iid // empty' "$WM")
+    { [ -n "$repo" ] && [ -n "$iid" ]; } || die "水位缺 repo/iid：先执行 fetch"
+    # handled 落在回复成功之后：先落再发会让失败的线程被当成已处置，永远不再触发
+    bytedcli codebase mr comment reply -R "$repo" "$iid" --thread "$thread" -m "$msg" >/dev/null \
+      || die "回复失败（thread ${thread}），handled 未落位，可重试"
+    if [ -n "$handled" ]; then
+      wm_write --arg t "$thread" --arg h "$handled" '.threads[$t] = ((.threads[$t] // {}) + {handled:$h})'
+    fi
+    echo "mr-comments: 已回复 thread ${thread}${handled:+（handled=${handled}）}"
+    ;;
+  enable)
+    wm_write '.auto_disabled = false | .trigger_count = 0'
+    echo "mr-comments: 已复位（auto_disabled=false，trigger_count=0）"
+    ;;
+  disable)
+    wm_write '.auto_disabled = true'
+    echo "mr-comments: 已停用自动触发"
+    ;;
   *) usage ;;
 esac

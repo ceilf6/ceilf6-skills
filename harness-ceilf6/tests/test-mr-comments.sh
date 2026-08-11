@@ -114,5 +114,51 @@ rc=0; bash "$MC" fetch --ctx-dir "$ctx" >/dev/null 2>&1 || rc=$?
 [ "$(jq '.closed' "$ctx/mr-comments.json")" = false ] && ok "状态不可解析不误判 closed" || bad "误判 closed"
 cleanup
 
+echo "== mark：推进水位、count-trigger、幂等 =="
+make_fixture
+std_comments
+bash "$MC" fetch --ctx-dir "$ctx" > "$R/snap.json"
+# mark 按 .threads 全量推水位（不只是 new），少一条就会让已读线程重新触发
+[ "$(jq '.threads | length' "$R/snap.json")" = 3 ] && ok "快照带全量线程" || bad "threads: $(jq -c '.threads' "$R/snap.json")"
+[ "$(jq '.closed' "$R/snap.json")" = false ] && ok "正常路径 closed=false" || bad "closed: $(jq -c '.closed' "$R/snap.json")"
+bash "$MC" mark --ctx-dir "$ctx" --from-snapshot "$R/snap.json" --count-trigger
+[ "$(jq '.threads.t1.reply_count' "$ctx/mr-comments.json")" = 1 ] && ok "reply_count 推进" || bad "reply_count"
+[ "$(jq -r '.threads.t1.triggered_at' "$ctx/mr-comments.json")" != null ] && ok "new 线程落 triggered_at" || bad "triggered_at"
+[ "$(jq '.trigger_count' "$ctx/mr-comments.json")" = 1 ] && ok "count-trigger 计数" || bad "trigger_count"
+# 已解决/本人的线程也要记 reply_count，否则别人后续回复时会把本人旧评论一起当增量推给模型
+[ "$(jq '.threads | length' "$ctx/mr-comments.json")" = 3 ] && ok "水位覆盖快照全量线程" || bad "水位线程: $(jq -c '.threads | keys' "$ctx/mr-comments.json")"
+snap2=$(bash "$MC" fetch --ctx-dir "$ctx")
+[ "$(printf '%s' "$snap2" | jq '.new | length')" = 0 ] && ok "mark 后 new 清空" || bad "mark 未生效"
+bash "$MC" mark --ctx-dir "$ctx" --from-snapshot "$R/snap.json"
+[ "$(jq '.trigger_count' "$ctx/mr-comments.json")" = 1 ] && ok "无 --count-trigger 不计配额" || bad "配额误计"
+
+echo "== 回复增长：只有增量进 new；loop_suspect 依赖 handled =="
+bash "$MC" reply --ctx-dir "$ctx" --thread t1 --message-file <(printf '已修复：改为判空后再取值') --handled fixed
+grep -q -- '-m 【bot】已修复' "$STUB_STATE/calls.log" && ok "reply 自动加【bot】前缀" || bad "前缀缺失"
+[ "$(jq -r '.threads.t1.handled' "$ctx/mr-comments.json")" = fixed ] && ok "handled 落位" || bad "handled"
+jq '.threads[0].comments += [{author:{username:"cr-bot"}, body:"回复收到，另外这里还有一处"}]' \
+  "$STUB_STATE/comments.json" > "$STUB_STATE/tmp" && mv "$STUB_STATE/tmp" "$STUB_STATE/comments.json"
+snap3=$(bash "$MC" fetch --ctx-dir "$ctx")
+[ "$(printf '%s' "$snap3" | jq '.new[0].new_replies | length')" = 1 ] && ok "只含增量回复" || bad "增量: $(printf '%s' "$snap3" | jq -c '.new[0]')"
+[ "$(printf '%s' "$snap3" | jq '.loop_suspect')" = true ] && ok "已处置线程再评 → loop_suspect" || bad "loop_suspect"
+
+echo "== reply 带前缀不重复加；失败不落 handled =="
+bash "$MC" reply --ctx-dir "$ctx" --thread t1 --message-file <(printf '【bot】补充说明')
+grep -q -- '-m 【bot】补充说明' "$STUB_STATE/calls.log" && ok "已带前缀原样发出" || bad "前缀重复"
+grep -q -- '-m 【bot】【bot】' "$STUB_STATE/calls.log" && bad "前缀被叠加" || ok "无叠加前缀"
+touch "$STUB_STATE/reply_fail"
+rc=0; bash "$MC" reply --ctx-dir "$ctx" --thread t3 --message-file <(printf 'x') --handled rejected >/dev/null 2>&1 || rc=$?
+[ "$rc" != 0 ] && ok "回复失败非零退出" || bad "失败被吞"
+[ "$(jq -r '.threads.t3.handled // "null"' "$ctx/mr-comments.json")" = null ] && ok "失败不落 handled" || bad "handled 误落"
+rm -f "$STUB_STATE/reply_fail"
+
+echo "== enable / disable =="
+bash "$MC" disable --ctx-dir "$ctx"
+[ "$(jq '.auto_disabled' "$ctx/mr-comments.json")" = true ] && ok "disable" || bad "disable"
+bash "$MC" enable --ctx-dir "$ctx"
+[ "$(jq '.auto_disabled' "$ctx/mr-comments.json")" = false ] && ok "enable 复位" || bad "enable"
+[ "$(jq '.trigger_count' "$ctx/mr-comments.json")" = 0 ] && ok "enable 清配额" || bad "trigger_count 未清"
+cleanup
+
 echo; echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" = 0 ]
