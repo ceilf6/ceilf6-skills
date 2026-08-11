@@ -51,3 +51,12 @@ test('首次失败自动重试一次后成功', async () => {
   assert.equal(readFileSync(log, 'utf8').trim().split('\n').length, 2);
   rmSync(dir, { recursive: true, force: true });
 });
+test('sendToChat 返回 messageId 与 threadId', async () => {
+  const { dir, log, lark } = setup();
+  const out = await lark.sendToChat('oc_1', '【bot】MR 9 发现 1 条新 CR 评论');
+  assert.ok(out.messageId);
+  assert.equal(typeof out.threadId, 'string');
+  const calls = readFileSync(log, 'utf8');
+  assert.ok(calls.includes('--chat-id oc_1'));
+  rmSync(dir, { recursive: true, force: true });
+});

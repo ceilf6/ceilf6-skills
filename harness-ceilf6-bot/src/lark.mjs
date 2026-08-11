@@ -43,5 +43,12 @@ export function makeLark(config) {
       // message_id 供 awaiting 登记做「引用回复」匹配；调用方不关心时忽略即可。
       return res.data?.message_id ?? '';
     },
+    async sendToChat(chatId, text) {
+      const res = await call(['im', '+messages-send', '--chat-id', chatId,
+        '--msg-type', 'text', '--content', JSON.stringify({ text })]);
+      if (!res?.ok) { console.error(`[lark] sendToChat 失败 ${chatId}`); return null; }
+      // thread_id 供话题登记（话题群每条消息都有）；应答缺字段时给空串，调用方容忍。
+      return { messageId: res.data?.message_id ?? '', threadId: res.data?.thread_id ?? '' };
+    },
   };
 }
