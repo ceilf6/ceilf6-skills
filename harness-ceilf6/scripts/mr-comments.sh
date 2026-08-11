@@ -136,6 +136,20 @@ case "$sub" in
   mark)
     [ -n "$snap" ] || usage
     [ -f "$snap" ] || die "快照不存在：$snap"
+    # 快照由调用方传入，形状不保证：closed 快照（MR 合入时 fetch 只吐 mr_id+closed）与截断文件
+    # 都会在下面的 jq 迭代里炸，而报错落在 wm_write 上、指着水位文件——看的人会去查错文件。
+    snap_shape=$(jq -r '
+      if (.closed // false) == true then "closed"
+      elif ((.threads | type) != "array") or ((.new | type) != "array") then "malformed"
+      else "ok" end' "$snap" 2>"$ERRF") || die "快照不是合法 JSON：${snap}（$(err_tail)）"
+    case "$snap_shape" in
+      closed) die "快照为 closed 形态（MR 已合入/关闭），无可推进：$snap" ;;
+      malformed) die "快照缺 threads/new 数组（损坏或截断）：$snap" ;;
+    esac
+    # 串 MR 的快照会把重建防护刚清空的 threads 重新种回去（水位 mr_id 已在防护里与 meta 对齐）。
+    # 缺 mr_id 的快照按同源放行：这里守的是喂错 MR，不是快照字段缺失。
+    snap_mr=$(jq -r '.mr_id // empty' "$snap")
+    { [ -z "$snap_mr" ] || [ "$snap_mr" = "$mr" ]; } || die "快照属 MR ${snap_mr}，当前水位是 MR ${mr}"
     wm_write --slurpfile s "$snap" --arg at "$(now)" --argjson ct "$count_trigger" '
       ($s[0]) as $sn
       | .threads = (reduce $sn.threads[] as $t (.threads;

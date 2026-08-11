@@ -121,7 +121,7 @@ bash "$MC" fetch --ctx-dir "$ctx" > "$R/snap.json"
 # mark 按 .threads 全量推水位（不只是 new），少一条就会让已读线程重新触发
 [ "$(jq '.threads | length' "$R/snap.json")" = 3 ] && ok "快照带全量线程" || bad "threads: $(jq -c '.threads' "$R/snap.json")"
 [ "$(jq '.closed' "$R/snap.json")" = false ] && ok "正常路径 closed=false" || bad "closed: $(jq -c '.closed' "$R/snap.json")"
-bash "$MC" mark --ctx-dir "$ctx" --from-snapshot "$R/snap.json" --count-trigger
+bash "$MC" mark --ctx-dir "$ctx" --from-snapshot "$R/snap.json" --count-trigger >/dev/null
 [ "$(jq '.threads.t1.reply_count' "$ctx/mr-comments.json")" = 1 ] && ok "reply_count 推进" || bad "reply_count"
 [ "$(jq -r '.threads.t1.triggered_at' "$ctx/mr-comments.json")" != null ] && ok "new 线程落 triggered_at" || bad "triggered_at"
 [ "$(jq '.trigger_count' "$ctx/mr-comments.json")" = 1 ] && ok "count-trigger 计数" || bad "trigger_count"
@@ -129,11 +129,11 @@ bash "$MC" mark --ctx-dir "$ctx" --from-snapshot "$R/snap.json" --count-trigger
 [ "$(jq '.threads | length' "$ctx/mr-comments.json")" = 3 ] && ok "水位覆盖快照全量线程" || bad "水位线程: $(jq -c '.threads | keys' "$ctx/mr-comments.json")"
 snap2=$(bash "$MC" fetch --ctx-dir "$ctx")
 [ "$(printf '%s' "$snap2" | jq '.new | length')" = 0 ] && ok "mark 后 new 清空" || bad "mark 未生效"
-bash "$MC" mark --ctx-dir "$ctx" --from-snapshot "$R/snap.json"
+bash "$MC" mark --ctx-dir "$ctx" --from-snapshot "$R/snap.json" >/dev/null
 [ "$(jq '.trigger_count' "$ctx/mr-comments.json")" = 1 ] && ok "无 --count-trigger 不计配额" || bad "配额误计"
 
 echo "== 回复增长：只有增量进 new；loop_suspect 依赖 handled =="
-bash "$MC" reply --ctx-dir "$ctx" --thread t1 --message-file <(printf '已修复：改为判空后再取值') --handled fixed
+bash "$MC" reply --ctx-dir "$ctx" --thread t1 --message-file <(printf '已修复：改为判空后再取值') --handled fixed >/dev/null
 grep -q -- '-m 【bot】已修复' "$STUB_STATE/calls.log" && ok "reply 自动加【bot】前缀" || bad "前缀缺失"
 [ "$(jq -r '.threads.t1.handled' "$ctx/mr-comments.json")" = fixed ] && ok "handled 落位" || bad "handled"
 jq '.threads[0].comments += [{author:{username:"cr-bot"}, body:"回复收到，另外这里还有一处"}]' \
@@ -143,7 +143,7 @@ snap3=$(bash "$MC" fetch --ctx-dir "$ctx")
 [ "$(printf '%s' "$snap3" | jq '.loop_suspect')" = true ] && ok "已处置线程再评 → loop_suspect" || bad "loop_suspect"
 
 echo "== reply 带前缀不重复加；失败不落 handled =="
-bash "$MC" reply --ctx-dir "$ctx" --thread t1 --message-file <(printf '【bot】补充说明')
+bash "$MC" reply --ctx-dir "$ctx" --thread t1 --message-file <(printf '【bot】补充说明') >/dev/null
 grep -q -- '-m 【bot】补充说明' "$STUB_STATE/calls.log" && ok "已带前缀原样发出" || bad "前缀重复"
 grep -q -- '-m 【bot】【bot】' "$STUB_STATE/calls.log" && bad "前缀被叠加" || ok "无叠加前缀"
 touch "$STUB_STATE/reply_fail"
@@ -153,11 +153,36 @@ rc=0; bash "$MC" reply --ctx-dir "$ctx" --thread t3 --message-file <(printf 'x')
 rm -f "$STUB_STATE/reply_fail"
 
 echo "== enable / disable =="
-bash "$MC" disable --ctx-dir "$ctx"
+bash "$MC" disable --ctx-dir "$ctx" >/dev/null
 [ "$(jq '.auto_disabled' "$ctx/mr-comments.json")" = true ] && ok "disable" || bad "disable"
-bash "$MC" enable --ctx-dir "$ctx"
+bash "$MC" enable --ctx-dir "$ctx" >/dev/null
 [ "$(jq '.auto_disabled' "$ctx/mr-comments.json")" = false ] && ok "enable 复位" || bad "enable"
 [ "$(jq '.trigger_count' "$ctx/mr-comments.json")" = 0 ] && ok "enable 清配额" || bad "trigger_count 未清"
+
+echo "== mark 守卫：closed / 损坏 / 串 MR 的快照都不进水位 =="
+jq -n '{mr_id:"8288090", closed:true}' > "$R/closed.json"
+rc=0; err=$(bash "$MC" mark --ctx-dir "$ctx" --from-snapshot "$R/closed.json" 2>&1 >/dev/null) || rc=$?
+[ "$rc" != 0 ] && ok "closed 快照非零退出" || bad "closed 快照被吞"
+case "$err" in *"closed 形态"*) ok "closed 快照文案点明形态" ;; *) bad "closed 文案：${err}" ;; esac
+jq -n '{mr_id:"8288090", closed:false, threads:null, new:null}' > "$R/shape.json"
+rc=0; err=$(bash "$MC" mark --ctx-dir "$ctx" --from-snapshot "$R/shape.json" 2>&1 >/dev/null) || rc=$?
+[ "$rc" != 0 ] && ok "threads/new 非数组非零退出" || bad "坏形状被吞"
+case "$err" in *"$R/shape.json"*) ok "坏形状诊断指向快照文件" ;; *) bad "诊断未指快照：${err}" ;; esac
+printf '{"mr_id":"8288090","threads":' > "$R/trunc.json"
+rc=0; err=$(bash "$MC" mark --ctx-dir "$ctx" --from-snapshot "$R/trunc.json" 2>&1 >/dev/null) || rc=$?
+[ "$rc" != 0 ] && ok "截断快照非零退出" || bad "截断快照被吞"
+case "$err" in *"不是合法 JSON"*"$R/trunc.json"*) ok "截断快照诊断指向快照文件" ;; *) bad "诊断未指快照：${err}" ;; esac
+# 换 MR 后误喂旧快照：脚本的 MR 重建防护刚把 threads 清空，mark 不能把它填回去
+jq '.mr_id = "9000001"' "$ctx/meta.json" > "$ctx/tmp" && mv "$ctx/tmp" "$ctx/meta.json"
+bash "$MC" fetch --ctx-dir "$ctx" >/dev/null
+rc=0; err=$(bash "$MC" mark --ctx-dir "$ctx" --from-snapshot "$R/snap.json" 2>&1 >/dev/null) || rc=$?
+[ "$rc" != 0 ] && ok "旧 MR 快照非零退出" || bad "串 MR 快照被吃下"
+case "$err" in *8288090*9000001*) ok "文案点名快照/水位两侧 MR" ;; *) bad "文案：${err}" ;; esac
+[ "$(jq '.threads | length' "$ctx/mr-comments.json")" = 0 ] && ok "串 MR 快照不污染水位" || bad "水位被污染: $(jq -c '.threads' "$ctx/mr-comments.json")"
+# 缺 mr_id 的快照按同源放行：这条守的是喂错 MR，不是快照字段缺失
+jq 'del(.mr_id)' "$R/snap.json" > "$R/nomr.json"
+rc=0; bash "$MC" mark --ctx-dir "$ctx" --from-snapshot "$R/nomr.json" >/dev/null 2>&1 || rc=$?
+[ "$rc" = 0 ] && ok "缺 mr_id 的快照不误伤" || bad "无 mr_id 快照被拒 (rc=$rc)"
 cleanup
 
 echo; echo "PASS=$PASS FAIL=$FAIL"
