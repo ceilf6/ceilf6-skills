@@ -143,6 +143,7 @@ async function undone(ctx){
   const r = await fetch('/api/undone', {method:'POST', body: JSON.stringify({ctx_dir: ctx})});
   const out = await r.json().catch(() => ({}));
   if (!r.ok) alert(out.error || '操作失败');
+  else if (out.warning) alert(out.warning);
   load();
 }
 // 拉群与求CR 是两个动作：群一次建成长期有效，求CR 每次返工都要重发。silent 供自测完成后的

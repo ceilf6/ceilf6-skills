@@ -22,6 +22,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 THREADS_SH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "threads.sh")
 BOARD_HTML = os.path.join(os.path.dirname(os.path.abspath(__file__)), "board", "index.html")
 CR_GROUP_SH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cr-group.sh")
+# meego 动作走 bytedcli-meego 技能的机械层：skills 目录在 scripts 上两层，已装与仓库直跑两种布局同构
+MEEGO_SH = os.environ.get("HARNESS_MEEGO_SH", os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "bytedcli-meego", "scripts", "meego.sh"))
 MANUAL_NODES = ("human_cr_done", "selftest_done")
 SET_TARGETS = ("plan_gate", "dev_done", "cr_passed", "mr_created", "human_cr_done", "selftest_done",
                "cr_group_created", "cr_requested", "qa_requested", "done")
@@ -71,6 +74,11 @@ def run_threads(*args):
 
 def run_cr_group(*args, timeout=120):
     return subprocess.run(["bash", CR_GROUP_SH, *args],
+                          capture_output=True, text=True, timeout=timeout)
+
+
+def run_meego(*args, timeout=120):
+    return subprocess.run(["bash", MEEGO_SH, *args],
                           capture_output=True, text=True, timeout=timeout)
 
 
@@ -146,6 +154,26 @@ class Handler(BaseHTTPRequestHandler):
                         "ok": True, "output": r.stdout,
                         "warning": "节点已回退，但 WIP 标记失败：" + (w.stderr or w.stdout).strip()}))
                     return
+            # 收束到完成即串 meego：进入待发布 + 回填提测评论。meego 侧失败只出 warning，
+            # 不改变节点写入结果——看板的完成与 meego 的流转是两笔账，后者可人工补
+            if r.returncode == 0 and target == "done":
+                try:
+                    m = run_meego("done", "--ctx-dir", ctx)
+                    # 契约是恒 exit 0 + JSON；破契约（技能未装、脚本崩）时 stdout 为空，
+                    # 当作 {} 解析就把硬失败吞成了成功，故先判死再解析
+                    if m.returncode != 0 or not (m.stdout or "").strip():
+                        mj = {"meego": "failed: " + ((m.stderr or m.stdout).strip()[:200] or "无输出")}
+                    else:
+                        mj = json.loads(m.stdout)
+                except Exception:
+                    mj = {"meego": "failed: meego.sh 超时或输出不可解析"}
+                bad_parts = [f"{k}={v}" for k, v in mj.items()
+                             if k in ("advance", "comment", "meego") and v != "ok"]
+                if bad_parts and not mj.get("skipped"):
+                    self._send(200, json.dumps({
+                        "ok": True, "output": r.stdout,
+                        "warning": "已完成，但 meego 收束未全成：" + "；".join(bad_parts)}))
+                    return
         elif self.path == "/api/undone":
             got = self._post_body(("ctx_dir",))
             if got is None:
@@ -153,6 +181,12 @@ class Handler(BaseHTTPRequestHandler):
                 return
             (ctx,) = got
             r = run_threads("undone", "--ctx-dir", ctx)
+            # 撤销只回落本地 status，meego 那边已流转的状态不动：薄壳不读 meta，无条件提醒一句
+            if r.returncode == 0:
+                self._send(200, json.dumps({
+                    "ok": True, "output": r.stdout,
+                    "warning": "撤销完成不回滚 meego：如线程绑定 meego 且节点已流转，请人工处理"}))
+                return
         elif self.path == "/api/note":
             got = self._post_body(("ctx_dir", "note"))
             if got is None:
@@ -182,6 +216,22 @@ class Handler(BaseHTTPRequestHandler):
             (ctx,) = got
             step, no_mr = CR_STEPS[self.path]
             r = run_cr_group(step, "--ctx-dir", ctx)
+            # /api/cr-qa 成功后回填 meego 提测知会：失败不影响 QA 节点结果
+            if r.returncode == 0 and self.path == "/api/cr-qa":
+                try:
+                    q = run_meego("comment", "--ctx-dir", ctx, "--preset", "qa")
+                    q_rc, q_err = q.returncode, (q.stderr or q.stdout).strip()[:200]
+                except Exception as e:
+                    q_rc, q_err = -1, f"meego.sh 调用异常：{e}"
+                if q_rc != 0:
+                    # 本分支绕过下方的通用 stderr 告警出口，cr-group 的半成功告警得并进同一条
+                    # warning，否则「发起QA 半成功」在评论也失败时反而无声
+                    warn = "已发起QA，但 meego 提测评论失败：" + q_err
+                    if r.stderr.strip():
+                        warn += "；另 cr-group 告警：" + r.stderr.strip()[:200]
+                    self._send(200, json.dumps({
+                        "ok": True, "output": r.stdout, "warning": warn}))
+                    return
             if r.returncode == 3:
                 self._send(400, json.dumps({"error": no_mr}))
             elif r.returncode != 0:

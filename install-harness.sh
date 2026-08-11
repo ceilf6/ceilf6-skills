@@ -6,7 +6,7 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$HOME/.claude/skills"
 
-for s in harness-context harness-ceilf6 lark-sediment; do
+for s in harness-context harness-ceilf6 lark-sediment bytedcli-meego; do
   target="$HOME/.claude/skills/$s"
   if [ -d "$target" ] && [ ! -L "$target" ]; then
     echo "发现普通目录（手动拷贝产物），替换为链接：$target"

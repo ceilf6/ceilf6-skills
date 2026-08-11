@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# 假 bytedcli：整行 argv 追加 $STUB_STATE/calls.log；按子命令回放 $STUB_STATE 下的应答文件。
+# 应答一律用 MCP 信封（.data.result.content[0].text 内嵌字符串化 JSON），与真机同构。
+# 哨兵：comment_fail / node_get_fail / transition_fail / state_list_fail / state_transition_fail /
+#       create_fail / node_update_fail → 对应命令 exit 5（真机错误即非零退出）。
+#       create_nonjson → meego create 退 0 但吐非 JSON（网关降级形态）。
+set -euo pipefail
+printf '%s\n' "$*" >> "${STUB_STATE:?bytedcli stub 需要 STUB_STATE}/calls.log"
+envelope() { jq -n --arg t "$(cat "$1")" '{status:"success", data:{result:{content:[{type:"text", text:$t}]}}}'; }
+case "$*" in
+  *"meego comment create"*)
+    if [ -f "${STUB_STATE}/comment_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    echo '{"status":"success"}' ;;
+  *"meego node get"*)
+    if [ -f "${STUB_STATE}/node_get_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    envelope "${STUB_STATE}/nodes.json" ;;
+  *"meego node transition"*)
+    # 读干 stdin：真机 CLI 会读，调用方若不隔离 stdin 就会吞掉自己循环的剩余输入
+    cat >/dev/null 2>/dev/null || true
+    if [ -f "${STUB_STATE}/transition_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    echo '{"status":"success"}' ;;
+  *"meego node update"*)
+    if [ -f "${STUB_STATE}/node_update_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    echo '{"status":"success"}' ;;
+  *"meego state list"*)
+    if [ -f "${STUB_STATE}/state_list_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    envelope "${STUB_STATE}/states.json" ;;
+  *"meego state transition"*)
+    if [ -f "${STUB_STATE}/state_transition_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    echo '{"status":"success"}' ;;
+  *"meego create"*)
+    if [ -f "${STUB_STATE}/create_nonjson" ]; then echo 'NOT JSON'; exit 0; fi
+    if [ -f "${STUB_STATE}/create_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    envelope "${STUB_STATE}/created.json" ;;
+  *) : ;;
+esac

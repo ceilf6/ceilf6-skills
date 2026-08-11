@@ -30,8 +30,36 @@ export HARNESS_BOT_CONTROL="http://127.0.0.1:1"
 # 拉群与求CR 用例靠它们零真实外部调用
 export PATH="$HERE/stubs:$PATH"
 export STUB_STATE="$T/stub"; mkdir -p "$STUB_STATE"
+# 半成功注入层：哨兵 qa_warn 下 remind-qa 退 0 但吐 stderr（cr-group 分级容错的形态），
+# 其余调用原样转交共享 stub。须在 server 起来前进 PATH——server 继承本进程环境
+mkdir -p "$STUB_STATE/bin"
+cat > "$STUB_STATE/bin/bytedcli" <<EOF
+#!/usr/bin/env bash
+if [ -f "\${STUB_STATE}/qa_warn" ]; then
+  case "\$*" in *remind-qa*) echo "cr-group: 警告——QA 提醒接口降级" >&2 ;; esac
+fi
+exec "$HERE/stubs/bytedcli" "\$@"
+EOF
+chmod +x "$STUB_STATE/bin/bytedcli"
+export PATH="$STUB_STATE/bin:$PATH"
 echo '[{"username":"dalao1"}]' > "$STUB_STATE/reviewers.json"
 echo '{"data":{"chat_id":"oc_web_1"}}' > "$STUB_STATE/create.json"
+# 假 meego.sh：记录调用、按哨兵回放
+export HARNESS_MEEGO_SH="$STUB_STATE/fake-meego.sh"
+cat > "$STUB_STATE/fake-meego.sh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${STUB_STATE}/meego-calls.log"
+case "$1" in
+  done)
+    if [ -f "${STUB_STATE}/meego_hard_fail" ]; then echo "meego 炸了" >&2; exit 3; fi
+    if [ -f "${STUB_STATE}/meego_done_fail" ]; then echo '{"advance":"failed: x","comment":"ok"}'; else echo '{"advance":"ok","comment":"ok"}'; fi
+    exit 0 ;;
+  comment)
+    if [ -f "${STUB_STATE}/meego_comment_fail" ]; then echo "评论失败" >&2; exit 1; fi
+    exit 0 ;;
+esac
+EOF
+chmod +x "$STUB_STATE/fake-meego.sh"
 # 改 HOME 是为了让 web 子命令走「同目录 web.py」的回退分支：否则它优先加载已安装技能里的副本，
 # 测的就不是本仓库的这份代码了
 HOME="$T" bash "$TH" web --port "$PORT" >/dev/null 2>&1 &
@@ -56,6 +84,10 @@ echo "$page" | grep -Fq "cr_group_created:'拉群'" && ok "拉群标签在册" |
 echo "$page" | grep -Fq "cr_requested:'发起CR'" && ok "发起CR 标签在册" || bad "缺发起CR 标签"
 echo "$page" | grep -Fq "qa_requested:'发起QA'" && ok "发起QA 标签在册" || bad "缺发起QA 标签"
 echo "$page" | grep -Fq "chip('完成'" && ok "端点完成在册" || bad "缺完成端点"
+# warning 是「动作成功但有半成功/待人工」的唯一出口：三个写动作（set-node / 收尾三步 / 撤销完成）
+# 都得在成功分支弹出来，少一个就只到 HTTP 响应、到不了人眼前
+[ "$(echo "$page" | grep -cF 'else if (out.warning) alert(out.warning)')" = 3 ] \
+  && ok "三个写动作都弹 warning" || bad "warning 弹窗缺口：$(echo "$page" | grep -cF 'else if (out.warning) alert(out.warning)')"
 echo "$page" | grep -Fq '<script>window.BOARD = {"mode": "local"}</script>' \
   && ok "local 配置已注入" || bad "local 配置未注入"
 echo "$page" | grep -q 'BOARD_CONFIG' && bad "注入点残留" || ok "注入点已替换"
@@ -235,6 +267,47 @@ tmp=$(mktemp); jq '.mr_id = null' "$CTX/meta.json" > "$tmp" && mv "$tmp" "$CTX/m
 out=$(curl -s -X POST "http://127.0.0.1:${PORT}/api/set-node" \
   -d "{\"ctx_dir\": \"$CTX\", \"target\": \"plan_gate\"}")
 echo "$out" | jq -e 'has("warning") | not' >/dev/null && ok "无 MR 回退无警告" || bad "无 MR 回退: $out"
+
+echo "== done 钩子 =="
+resp=$(curl -s -X POST "http://127.0.0.1:${PORT}/api/set-node" \
+  -d "{\"ctx_dir\":\"$CTX\",\"target\":\"done\"}")
+echo "$resp" | jq -e '.ok == true' >/dev/null && ok "set-node done 成功" || bad "resp: $resp"
+grep -q "^done --ctx-dir $CTX" "$STUB_STATE/meego-calls.log" && ok "done 串出 meego done" || bad "meego 未被调用"
+echo "$resp" | jq -e 'has("warning") | not' >/dev/null && ok "meego 正常无 warning" || bad "多余 warning: $resp"
+curl -s -X POST "http://127.0.0.1:${PORT}/api/undone" -d "{\"ctx_dir\":\"$CTX\"}" >/dev/null
+touch "$STUB_STATE/meego_done_fail"
+resp=$(curl -s -X POST "http://127.0.0.1:${PORT}/api/set-node" \
+  -d "{\"ctx_dir\":\"$CTX\",\"target\":\"done\"}")
+echo "$resp" | jq -e '.ok == true' >/dev/null && ok "meego 失败不影响收束" || bad "resp: $resp"
+echo "$resp" | jq -r '.warning // ""' | grep -q "meego" && ok "失败出 warning" || bad "无 warning: $resp"
+rm -f "$STUB_STATE/meego_done_fail"
+# 硬失败（非 0 退出且无 stdout，如 meego 技能未装）不能当成功吞掉：JSON 解析不出来照样要报
+touch "$STUB_STATE/meego_hard_fail"
+resp=$(curl -s -X POST "http://127.0.0.1:${PORT}/api/set-node" \
+  -d "{\"ctx_dir\":\"$CTX\",\"target\":\"done\"}")
+rm -f "$STUB_STATE/meego_hard_fail"
+echo "$resp" | jq -e '.ok == true' >/dev/null && ok "meego 硬失败不影响收束" || bad "resp: $resp"
+echo "$resp" | jq -r '.warning // ""' | grep -q "meego" && ok "硬失败出 warning" || bad "无 warning: $resp"
+
+echo "== undone 提示 =="
+resp=$(curl -s -X POST "http://127.0.0.1:${PORT}/api/undone" -d "{\"ctx_dir\":\"$CTX\"}")
+echo "$resp" | jq -r '.warning // ""' | grep -q "不回滚 meego" && ok "undone 附人工提醒" || bad "resp: $resp"
+
+echo "== qa 串提测评论 =="
+# 无 MR 时 cr-group.sh qa 直接 exit 3，串评论的前提是 QA 本身跑通
+tmp=$(mktemp); jq '.mr_id = "8300100"' "$CTX/meta.json" > "$tmp" && mv "$tmp" "$CTX/meta.json"
+: > "$STUB_STATE/meego-calls.log"
+curl -s -X POST "http://127.0.0.1:${PORT}/api/cr-qa" -d "{\"ctx_dir\":\"$CTX\"}" >/dev/null
+grep -q "^comment --ctx-dir $CTX --preset qa" "$STUB_STATE/meego-calls.log" && ok "qa 成功串 preset 评论" || bad "qa 未串评论"
+# 评论失败走早返回，绕过通用 stderr 出口：cr-group 自己的半成功告警得并进同一条 warning，
+# 否则「QA 提醒降级」这笔在评论也失败时反而没人看见
+touch "$STUB_STATE/qa_warn" "$STUB_STATE/meego_comment_fail"
+out=$(curl -s -X POST "http://127.0.0.1:${PORT}/api/cr-qa" -d "{\"ctx_dir\":\"$CTX\"}")
+rm -f "$STUB_STATE/qa_warn" "$STUB_STATE/meego_comment_fail"
+echo "$out" | jq -e '.ok == true and (.warning | contains("meego 提测评论失败"))' >/dev/null \
+  && ok "qa 评论失败出 warning" || bad "qa 评论失败响应: $out"
+echo "$out" | jq -e '.warning | contains("cr-group 告警")' >/dev/null \
+  && ok "cr-group 半成功并入同一 warning" || bad "cr-group 告警丢失: $out"
 
 # bot 未运行时 /api/running 降级为空列表 + offline，看板照常渲染
 out=$(curl -s "http://127.0.0.1:${PORT}/api/running")

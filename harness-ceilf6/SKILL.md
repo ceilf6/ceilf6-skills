@@ -47,8 +47,9 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
 2. **需求短题**：从 plan.md 目标提炼 ≤20 字短题；会话名 / wiki 子文档标题 / MR 标题三处同源用它；
 3. **会话改名**：`bash ~/.claude/skills/harness-ceilf6/scripts/rename-session.sh --title '<短题>'`（同名自动跳过；非会话环境自动跳过，不阻塞）。bot 无人值守场景 runner 已用 `--name` 给初始名，这里过门后覆盖为短题；
 4. **需求 wiki 子文档**：meta.wiki_url 已指向「02-需求」（`JhrcwNjUdiUXPMkIUnWcIiOdntc`）下的文档（用 lark-cli 的 wiki 节点查询确认其父节点，机械用法见 `lark-cli skills read lark-wiki`）→ 复用不重建；否则在「02-需求」下新建子文档（space_id `7658115519924686035`，`--obj-type docx`，标题 = 短题），初始内容 = plan 四段 + 来源（bot 场景带 chat/message id），并回写 meta.wiki_url（`jq '.wiki_url="<url>"' "$CTX/meta.json" > "$CTX/tmp" && mv "$CTX/tmp" "$CTX/meta.json"`）。wiki 操作失败如实报告后继续——文档可收尾时补建，不阻塞开发。
-5. **登记线程**：`bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh register --ctx-dir "$CTX" --title '<短题>'`。登记表 `~/.harness-ceilf6/threads.jsonl` 是所有 harness 线程的全局索引，session_id 取自 `CLAUDE_CODE_SESSION_ID`（取不到则记 null，唤回退化为新会话续入）。**必须在会话本身的 cwd 下执行**：`claude --resume` 严格按进程 cwd 判定作用域，登记的 cwd 差一层就恢复不了。续入时重复登记即覆盖（读时 last-wins）。
-6. **里程碑**：`bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh mark --ctx-dir "$CTX" plan_gate`，回显进度图转发用户。
+5. **Meego 关联**：需求材料含 meego 链接 → `bash ~/.claude/skills/bytedcli-meego/scripts/meego.sh resolve --ctx-dir "$CTX" --url '<链接>'` 落 meta；没有 → `… create --ctx-dir "$CTX" --title '<短题>' --description-file <(plan 四段摘要 + 任务来源)` 自动创建（事后报告）。随后 `… schedule --ctx-dir "$CTX" --start <起> --due <止> --points <估分>` 回填排期（按 plan 工作量估算）。输出 `{"skipped":true}`（仓库未绑定空间）则本步与后续一切 meego 动作静默跳过。resolve 失败停下报告（链接是高确定性来源，不许静默转创建）；create/schedule 失败如实报告后继续——meego 硬门在收尾建 MR 前拦截。首次映射（配置缺项）按 bytedcli-meego SKILL.md 处理，无人值守走 ask。
+6. **登记线程**：`bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh register --ctx-dir "$CTX" --title '<短题>'`。登记表 `~/.harness-ceilf6/threads.jsonl` 是所有 harness 线程的全局索引，session_id 取自 `CLAUDE_CODE_SESSION_ID`（取不到则记 null，唤回退化为新会话续入）。**必须在会话本身的 cwd 下执行**：`claude --resume` 严格按进程 cwd 判定作用域，登记的 cwd 差一层就恢复不了。续入时重复登记即覆盖（读时 last-wins）。
+7. **里程碑**：`bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh mark --ctx-dir "$CTX" plan_gate`，回显进度图转发用户。
 
 ### 阶段 1：开发（TDD 红绿纪律）
 
@@ -73,9 +74,9 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
      1. **squash**：把 commit message 写入临时文件后 `bash ~/.claude/skills/harness-ceilf6/scripts/squash-branch.sh --dir "$CTX" --message-file <文件>`。message 实质性规则：描述改了什么行为、为什么，从 plan.md 目标 + 实际改动提炼；禁止「处理CR意见」「修复评审问题」「harness 自动开发」这类过程叙事；续入时重写为覆盖全部范围的最终表述。旧状态在 `harness-backup/<分支>` 引用可回退。
      2. **rebase**：`bash ~/.claude/skills/harness-ceilf6/scripts/rebase-base.sh --dir "$CTX"`——fetch 后把分支变基到 base 远端最新（本地跟踪 ref 常年滞后，脚本 fetch 失败即停、不降级），MR 必须基于最新 base 才能干净合入。已在最新上则空转通过。放在 squash 之后：单提交重放，冲突至多解一次。发生变基 → push 前重跑自检（typecheck + 相关测试），挂了回阶段 1 修复后从收尾第 1 步重来；解过冲突 → 冲突解决属未经机审的新改动，记入 `$CTX/cr/round-N/fixes.md` 并建议补一轮 cr-round 复核（通过后继续收尾，squash 无需重做——变基不新增提交）。冲突由会话解决；无人值守下解法拿不准按「模式」节关键决策分叉走 ask。
      3. **push**：`git push --force-with-lease origin <分支>`。force-with-lease 仅限 harness 需求分支——2026-07-30 用户裁定方案 A（MR 恒单 commit），是既有自动 push 豁免（2026-07-29）的延伸。
-     4. **MR**：调用 bytedcli-bits-mr 建 MR——标题 = 需求短题，描述必含：任务来源（bot 场景带 chat/message id）、plan 四段摘要、CR 轮次表、遗留 minor/nit 清单。**续入不重复建 MR**：当前分支已存在开放 MR 时只在既有 MR 追加一条评论（本轮变更摘要 + 新增 CR 轮次 + 注明历史已重写），MR 链接沿用。建成后 bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh mark --ctx-dir "$CTX" mr_created。
+     4. **MR**：调用 bytedcli-bits-mr 建 MR——标题 = 需求短题，描述必含：任务来源（bot 场景带 chat/message id）、plan 四段摘要、CR 轮次表、遗留 minor/nit 清单。**Meego 硬门**：绑定空间的仓库里 meta 缺 meego_id → 先按阶段 0 第 5 步补 resolve/create，补建仍失败则停在建 MR 之前（交互如实报告 / 无人值守 ask），不降级建非正规 MR。建 MR 用 create-mr-with-meego.js 带 `--meego <meta.meego_id>`，`--meego-type` 按 meta.meego_type 映射（story→feature、issue→bug；缺失按分支前缀 feat/fix 兜底）。MR 建成后 `bash ~/.claude/skills/bytedcli-meego/scripts/meego.sh comment --ctx-dir "$CTX" --message-file <(MR 链接 + 一句变更摘要)`。**续入不重复建 MR**：当前分支已存在开放 MR 时只在既有 MR 追加一条评论（本轮变更摘要 + 新增 CR 轮次 + 注明历史已重写），MR 链接沿用。建成后 bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh mark --ctx-dir "$CTX" mr_created。
      5. **自测矩阵**：在 meta.wiki_url 需求子文档追加「自测场景矩阵」，结构与随附说明**必读并遵循 references/selftest-matrix.md**——先列分发面（哪些产品线 × 哪些端会加载这份代码，vc-ai 为视频会议/妙记/豆包/文档空间四条线），两级列头（首行 = 产品线分组，次行 = 该线下用户可感知场景），行 = 端/环境；格子状态（待测留白 / 未涉及 / 测后 ✅/❌）、表前填写约定、表后「环境准入与版本确认」均按该文件执行。该矩阵是阶段 3 自测节点的执行清单。
-     6. **沉淀**：harness-context 供料 + lark-sediment 流程——需求结论、CR 往返要点、踩坑追加到 meta.wiki_url 需求子文档（wiki_url 为空则先按阶段 0 第 4 步补建）；同批产出 B 线四问叙事节（lark-sediment「两条沉淀线」）追加到**同一篇**需求子文档；跨需求通用经验按 lark-sediment 正常去重、分类落位，不塞进需求文档；写 `$CTX/sediment.md` 台账。沉淀失败如实报告后继续汇总（MR 已建，不因沉淀失败回滚）。无人值守模式沉淀全程不需人工。
+     6. **沉淀**：harness-context 供料 + lark-sediment 流程——需求结论、CR 往返要点、踩坑追加到 meta.wiki_url 需求子文档（wiki_url 为空则先按阶段 0 第 4 步补建）；同批产出 B 线四问叙事节（lark-sediment「两条沉淀线」）追加到**同一篇**需求子文档；跨需求通用经验按 lark-sediment 正常去重、分类落位，不塞进需求文档；写 `$CTX/sediment.md` 台账。沉淀失败如实报告后继续汇总（MR 已建，不因沉淀失败回滚）。无人值守模式沉淀全程不需人工。沉淀完成后 `… meego.sh comment --ctx-dir "$CTX" --message-file <(需求 wiki 子文档链接)`——meego 成为 wiki（自测矩阵与沉淀）的入口，失败如实报告不回滚。
      7. 输出收尾汇总（模板见下，首行进度图、次行未自测警示，MR 为过程产物行）。
 
      失败/熔断/超时**不 squash、不 rebase、不 push、不建 MR、不沉淀**——半成品不进团队远端视野、不上 wiki。
@@ -116,6 +117,8 @@ meta.max_rounds 非 null 时，达到该轮数也停下交用户（默认 null �
 
 **MR 评论自动处置**：MR 存续期间（mr_created 之后、看板「完成」之前），bot 的 mrwatch 巡检（默认每 5 分钟）自动发现 MR 上新的 CR 评论并起无人值守值班任务处置，纪律见 references/mr-comment-duty.md——评判三分法、回复一律【bot】前缀、人工评论仅有「确凿修复 / 疑点转开发者」两种自动出口、人工里程碑不代 mark。交互模式手动处理评论走同一份纪律与同一单点 `mr-comments.sh`（fetch / reply / mark），水位同源，bot 不会重复触发。熔断（同线程自动触发达上限）后人工确认再 `bash ~/.claude/skills/harness-ceilf6/scripts/mr-comments.sh enable --ctx-dir "$CTX"` 复位。
 
+**Meego 收尾**：发起QA 成功后看板自动串 `meego.sh comment --preset qa` 提测知会（CLI 路径由会话补调）；MR 合入后看板点「完成」自动串 `meego.sh done`——唯一的 meego 流转时刻（advance 按映射 confirm 本端节点 + 收束评论），CLI / 会话 set-node done 时由会话补调（自动化只覆盖看板路径，同拉群边界）。两处 meego 失败都只在看板弹 warning，不改变节点写入结果——看板进度与 meego 状态是两笔账，后者人工补。撤销完成不回滚 meego（看板无条件提醒一句），节点已流转时人工处理。
+
 `human_cr_done` 与 `selftest_done` 齐备后输出**可交付版汇总**；在此之前对本需求不得使用「完成 / 可交付」措辞：
 
 ```markdown
@@ -129,6 +132,6 @@ meta.max_rounds 非 null 时，达到该轮数也停下交用户（默认 null �
 
 ## 约束
 
-- 收尾自动 squash + 变基到 base 远端最新 + force-with-lease push + 建 MR + 沉淀是本技能职责（squash/force-with-lease：用户 2026-07-30 裁定方案 A；自动 push：2026-07-29 裁定；rebase：2026-08-11 裁定，方案 A 恒单 commit 的延伸——变基后必然 force push，沿用既有豁免；均仅限 harness 需求分支）；不动 Meego、不打 SCM 包（workflow-bugfix / scm 技能另行处理）。
+- 收尾自动 squash + 变基到 base 远端最新 + force-with-lease push + 建 MR + 沉淀是本技能职责（squash/force-with-lease：用户 2026-07-30 裁定方案 A；自动 push：2026-07-29 裁定；rebase：2026-08-11 裁定，方案 A 恒单 commit 的延伸——变基后必然 force push，沿用既有豁免；均仅限 harness 需求分支）。Meego 经 bytedcli-meego 技能收敛管理（关联/创建于计划门、评论于关键时刻、流转仅在 done——挂点见流程各步）；不打 SCM 包（workflow-bugfix / scm 技能另行处理）。
 - 不修改 cr/round-*/ 下的历史产物；每轮产物只写本轮目录。
 - 对 verdict 的每条 blocker/major 必须显式处置（修复或书面不采纳），禁止静默忽略。
