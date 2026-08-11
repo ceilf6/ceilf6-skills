@@ -106,6 +106,8 @@ async function goWaiting(rt, question, progress, kind = 'user') {
       messageId: rt.task.messageId, threadId: rt.task.threadId ?? '', branch: rt.branch,
       worktree: rt.worktree, sessionId: rt.sessionId, question,
       questionMsgId: qMsgId || '', statusRid: rt.statusRid, title: rt.title, kind,
+      // 免清场标记必须随登记条目持久化：bot 重启后经懒续跑重建的值班会话丢了它，一个 skip 就会清掉用户检出。
+      preserveWorktree: rt.preserveWorktree ?? false,
     });
   } catch (e) {
     // 登记只决定「回复能否路由回来」，不该连带杀掉活着的会话。
@@ -122,7 +124,8 @@ async function settle(rt, verdict, { why, result } = {}) {
   if (verdict === 'stopped') rt.session?.kill(); else rt.session?.endInput();
   const { config, lark, task } = rt;
   if (verdict === 'skip') {
-    await cleanupWorktree(config, rt.worktree, rt.branch);
+    // 值班任务跑在线程既有检出上：skip 也不得清场——cleanupWorktree 会删掉用户的检出与需求分支。
+    if (!rt.preserveWorktree) await cleanupWorktree(config, rt.worktree, rt.branch);
     rt.statusRid = await swapReaction(lark, task.messageId, config.reactions.skipped, rt.statusRid);
   } else if (verdict === 'stopped') {
     rt.statusRid = await swapReaction(lark, task.messageId, config.reactions.stopped, rt.statusRid);
@@ -333,6 +336,7 @@ export async function resumeTask(info, replyText, config, lark, hooks = {}) {
     task, config, lark, hooks, branch: info.branch, worktree: info.worktree, logPath,
     statusRid: claimedRid, sessionId: info.sessionId ?? '', title: info.title || 'harness 任务',
     resumeSessionId: info.sessionId, resumeFlags: info.resumeFlags ?? [],
+    preserveWorktree: info.preserveWorktree ?? false,
     firstMessage: REPLY_FRAME(replyText),
   });
 }
@@ -374,5 +378,23 @@ export async function runTask(task, config, lark, hooks = {}) {
     task, config, lark, hooks, branch, worktree, logPath,
     statusRid: claimedRid, sessionId: '', title: sessionName(task.text),
     firstMessage: renderPrompt(task, branch, config.chatId),
+  });
+}
+
+// 值班任务：在线程既有检出上起会话（MR 评论自动处置）。不建 worktree、任何终态都不清场；
+// prompt 由调用方渲染好整段传入。
+export async function runDutyTask(task, config, lark, hooks = {}, opts) {
+  mkdirSync(config.logsDir, { recursive: true });
+  const logPath = join(config.logsDir, `task-${task.messageId}.log`);
+  try {
+    hooks.onWorktreeReady?.({ threadId: task.threadId ?? '', branch: opts.branch, worktree: opts.cwd, messageId: task.messageId });
+  } catch (e) {
+    console.error(`[runner] onWorktreeReady 回调失败：${e.message}`);
+  }
+  const claimedRid = await lark.addReaction(task.messageId, config.reactions.claimed);
+  return startTurnLoop({
+    task, config, lark, hooks, branch: opts.branch, worktree: opts.cwd, logPath,
+    statusRid: claimedRid, sessionId: '', title: opts.title, preserveWorktree: true,
+    firstMessage: opts.firstMessage,
   });
 }
