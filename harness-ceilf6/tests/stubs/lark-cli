@@ -1,6 +1,22 @@
 #!/usr/bin/env bash
-# 假 lark-cli：整行 argv 追加进 $STUB_STATE/calls.log；哨兵 msg_fail 存在 → 发送失败。
+# 假 lark-cli：整行 argv 追加进 $STUB_STATE/calls.log。
+# 哨兵：msg_fail → 所有调用失败；
+#       user_send_denied → 用户身份发消息报缺 im:message.send_as_user（企业管控），
+#                          --as bot 的发送与其他调用照常成功。
+# auth status 固定回 appId，供 bot 降级路径把应用机器人拉进群。
 set -euo pipefail
 printf '%s\n' "$*" >> "${STUB_STATE:?lark-cli stub 需要 STUB_STATE}/calls.log"
+case "$*" in
+  *"auth status"*) echo '{"appId":"cli_stub_app"}'; exit 0 ;;
+esac
 [ -f "${STUB_STATE}/msg_fail" ] && exit 1
+if [ -f "${STUB_STATE}/user_send_denied" ]; then
+  case "$*" in
+    *"+messages-send"*)
+      case "$*" in
+        *"--as bot"*) : ;;
+        *) echo 'missing required scope(s): im:message.send_as_user' >&2; exit 1 ;;
+      esac ;;
+  esac
+fi
 echo '{}'

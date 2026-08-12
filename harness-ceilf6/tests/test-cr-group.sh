@@ -28,7 +28,8 @@ setup() { # <mr_id 或空>：造 repo + ctx + STUB_STATE
     > "$CTX/meta.json"
   echo '[{"username":"dalao1"},{"username":"dalao2"},{"username":"wangjinghong.ceilf6"},{"username":"dalao1"}]' \
     > "$STUB_STATE/reviewers.json"
-  echo '{"data":{"chat_id":"oc_stub_1"}}' > "$STUB_STATE/create.json"
+  # chat create 真机应答把 chat_id 裸放在 data 字段
+  echo '{"code":200,"data":"oc_stub_1","message":"success"}' > "$STUB_STATE/create.json"
 }
 # 本机 AI IDE 守护进程会异步往新 .git 下写 ai/ 目录，与删除竞争导致 ENOTEMPTY，故重试
 teardown() { rm -rf "$T" 2>/dev/null || { sleep 1; rm -rf "$T" 2>/dev/null || true; }; }
@@ -144,12 +145,19 @@ rc=0; bash "$CG" request --ctx-dir "$CTX" >/dev/null 2>"$err" || rc=$?
 grep -q 'chat create' "$STUB_STATE/calls.log" && ok "求CR 兜底再问一次群" || bad "求CR 未兜底"
 grep -q 'messages-send' "$STUB_STATE/calls.log" && bad "无 chat_id 不应发消息" || ok "跳过发消息"
 jq -e '.milestones | has("cr_requested") | not' "$CTX/meta.json" >/dev/null && ok "求CR 不 mark" || bad "求CR 误 mark"
-# 兜底那次能拿到就照常发
+# 兜底那次能拿到就照常发；嵌套 chat_id 键是兼容形状，一并覆盖
 echo '{"data":{"chat_id":"oc_late"}}' > "$STUB_STATE/create.json"
 bash "$CG" request --ctx-dir "$CTX" >/dev/null 2>&1
 has "兜底取到后发消息" '+messages-send --chat-id oc_late' "$(cat "$STUB_STATE/calls.log")"
 jq -e '.milestones.cr_requested' "$CTX/meta.json" >/dev/null && ok "补齐后 mark" || bad "补齐后未 mark"
 rm -f "$err"; teardown
+
+echo "== 建群应答 data 为错误文案：不得当群标识落盘 =="
+setup 8300014
+echo '{"code":500,"data":"mr not found","message":"fail"}' > "$STUB_STATE/create.json"
+bash "$CG" group --ctx-dir "$CTX" >/dev/null 2>&1
+jq -e 'has("cr_chat_id") | not' "$CTX/meta.json" >/dev/null && ok "错误文案不落盘" || bad "错误文案被当群标识"
+teardown
 
 echo "== reviewer 名单为空：照常建群，但要告警 =="
 setup 8300003
@@ -197,6 +205,33 @@ grep -q '消息未发出' "$err" && ok "发送失败有诊断" || bad "发送失
 jq -e '.milestones | has("cr_requested") | not' "$CTX/meta.json" >/dev/null && ok "求CR 不 mark" || bad "求CR 误 mark"
 jq -e '.milestones.cr_group_created' "$CTX/meta.json" >/dev/null && ok "拉群节点不受影响" || bad "拉群节点被清"
 rm -f "$err"; teardown
+
+echo "== 用户身份被企业管控拒发：拉 bot 进群改用 bot 身份补发 =="
+setup 8300015
+bash "$CG" group --ctx-dir "$CTX" >/dev/null 2>&1
+: > "$STUB_STATE/user_send_denied"
+: > "$STUB_STATE/calls.log"
+rc=0; HARNESS_LARK_BOT_PROFILE=stub_bot bash "$CG" request --ctx-dir "$CTX" >/dev/null 2>&1 || rc=$?
+calls=$(cat "$STUB_STATE/calls.log")
+[ "$rc" = 0 ] && ok "降级后 exit 0" || bad "降级 rc=$rc"
+has "先试默认（用户）身份" '+messages-send --chat-id oc_stub_1' "$calls"
+has "查 harness bot 的应用标识" 'auth status --json --profile stub_bot' "$calls"
+has "把 harness bot 拉进群" 'chat.members create --chat-id oc_stub_1 --member-id-type app_id' "$calls"
+has "拉的是 auth status 回的应用" 'cli_stub_app' "$calls"
+add_line=$(grep 'chat.members create' "$STUB_STATE/calls.log" | head -1)
+hasnt "拉 bot 进群用本人身份（不带 profile）" '--profile' "$add_line"
+has "以 harness bot 身份补发" '--as bot' "$calls"
+has "补发带 bot profile" '+messages-send --chat-id oc_stub_1 --as bot' "$calls"
+bot_send=$(grep -- '--as bot' "$STUB_STATE/calls.log" | head -1)
+has "bot 发送切到 harness bot profile" '--profile stub_bot' "$bot_send"
+jq -e '.milestones.cr_requested' "$CTX/meta.json" >/dev/null && ok "求CR 已 mark" || bad "求CR 未 mark"
+# qa 走同一条发送路径
+: > "$STUB_STATE/calls.log"
+rc=0; HARNESS_LARK_BOT_PROFILE=stub_bot bash "$CG" qa --ctx-dir "$CTX" >/dev/null 2>&1 || rc=$?
+[ "$rc" = 0 ] && ok "qa 同样降级成功" || bad "qa 降级 rc=$rc"
+has "qa 也以 bot 补发" '--as bot' "$(cat "$STUB_STATE/calls.log")"
+jq -e '.milestones.qa_requested' "$CTX/meta.json" >/dev/null && ok "求QA 已 mark" || bad "求QA 未 mark"
+teardown
 
 echo "== --message 覆盖文案 =="
 setup 8300005

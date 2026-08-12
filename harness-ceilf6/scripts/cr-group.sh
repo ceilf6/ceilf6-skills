@@ -29,14 +29,54 @@ EOF
   exit 1
 }
 
-# 从 bits mr chat create 的应答里取群标识；应答形状按真机为准，故递归找第一个 chat_id
-parse_chat_id() { printf '%s' "${1:-}" | jq -r 'first(.. | .chat_id? // empty)' 2>/dev/null || true; }
+# 从 bits mr chat create 的应答里取群标识。真机应答把 chat_id 裸放在 data 字段
+# （{"code":200,"data":"oc_…","message":"success"}），同时容忍任意层级的 chat_id 键；
+# 裸字符串必须带 oc_ 前缀——失败应答的 data 可能是错误文案，不设前缀会把它当群标识落盘。
+parse_chat_id() {
+  printf '%s' "${1:-}" \
+    | jq -r 'first((.. | .chat_id? // empty), (.data? | strings | select(startswith("oc_"))))' 2>/dev/null \
+    || true
+}
 
 save_chat_id() { # <chat_id>：落 meta.cr_chat_id，供求CR 复用
   local tmp
   tmp=$(mktemp)
   jq --arg c "$1" '.cr_chat_id = $c' "$meta" > "$tmp" || die "meta 不可解析：$meta"
   mv "$tmp" "$meta"
+}
+
+# 降级发消息用的 bot 身份：优先 harness 自己的 bot（无人值守 bot 的 lark profile，
+# 现读 harness-ceilf6-bot/config.json——群里喊人的是 harness 流程，应以 harness 的名义，
+# 而非个人 CLI 应用）；bot 未部署时退回当前活跃应用。env HARNESS_LARK_BOT_PROFILE 可覆盖。
+bot_profile() {
+  if [ -n "${HARNESS_LARK_BOT_PROFILE:-}" ]; then printf '%s' "$HARNESS_LARK_BOT_PROFILE"; return; fi
+  jq -r '.profile // empty' "$HERE/../../harness-ceilf6-bot/config.json" 2>/dev/null || true
+}
+
+# 群消息统一走这里：默认身份（用户）优先——消息以本人名义最自然。本企业安全管控
+# 不放行 im:message.send_as_user 且不可申请开通，用户身份被拒时退到 bot 身份补发。
+# bot 只能在群内发言，且 harness bot 无用户身份，故拉 bot 进群用本人用户身份
+# （有 im:chat.members 写权限；bot 已在群时重复拉为幂等），发送才切 bot profile。
+# 错误分类按文案匹配，形状按真机为准：不符只改本段。
+send_group_msg() { # <chat_id> <text>；失败返回非零，die 文案由调用方定
+  local chat_id="$1" text="$2" err app_id p
+  if err=$(lark-cli im +messages-send --chat-id "$chat_id" --text "$text" 2>&1); then
+    return 0
+  fi
+  case "$err" in
+    *send_as_user*|*missing_scope*)
+      p=$(bot_profile)
+      app_id=$(lark-cli auth status --json ${p:+--profile "$p"} 2>/dev/null \
+        | jq -r '.appId // empty' || true)
+      if [ -n "$app_id" ]; then
+        lark-cli im chat.members create --chat-id "$chat_id" --member-id-type app_id \
+          --data "{\"id_list\":[\"${app_id}\"]}" --as user >/dev/null 2>&1 || true
+      fi
+      lark-cli im +messages-send --chat-id "$chat_id" --as bot --text "$text" \
+        ${p:+--profile "$p"} >/dev/null 2>&1
+      ;;
+    *) return 1 ;;
+  esac
 }
 
 sub="${1:-}"
@@ -149,8 +189,7 @@ case "$sub" in
     # 消息是本步唯一的实质动作：发不出去就不标完成，节点留黄可重试，
     # 否则「已求CR」会掩盖一条谁都没收到的消息
     [ -n "$chat_id" ] || die "未拿到群标识，消息未发出——请先完成拉群"
-    lark-cli im +messages-send --chat-id "$chat_id" --text "$msg" >/dev/null \
-      || die "消息未发出（群 ${chat_id}）"
+    send_group_msg "$chat_id" "$msg" || die "消息未发出（群 ${chat_id}）"
     bash "$TH" mark --ctx-dir "$ctx" cr_requested
     bytedcli bits mr update --mr-id "$mr" --wip false >/dev/null 2>&1 || true
     echo "cr-group: 求CR 消息已发出（MR ${mr}）"
@@ -169,8 +208,7 @@ case "$sub" in
     bytedcli bits mr remind-qa --mr-id "$mr" >/dev/null || die "一键提醒 QA 失败（MR ${mr}）"
     chat_id=$(jq -r '.cr_chat_id // empty' "$meta")
     [ -n "$chat_id" ] || die "未拿到群标识，消息未发出——请先完成拉群"
-    lark-cli im +messages-send --chat-id "$chat_id" --text "$msg" >/dev/null \
-      || die "已提醒 QA，但群消息未发出（群 ${chat_id}）"
+    send_group_msg "$chat_id" "$msg" || die "已提醒 QA，但群消息未发出（群 ${chat_id}）"
     bash "$TH" mark --ctx-dir "$ctx" qa_requested
     echo "cr-group: 已提醒 QA 并在群里知会（MR ${mr}）"
     ;;
