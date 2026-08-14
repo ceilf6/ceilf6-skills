@@ -4,7 +4,8 @@
 #       update_fail → mr update 失败；qa_fail → remind-qa 失败；
 #       list_fail → comment list 失败；reply_fail → comment reply 失败；
 #       start_wip → code-review start 被 WIP 挡（mr update --wip false 会清除它，模拟摘除后可发起）；
-#       start_started → start 报评审已在运行；start_fail → start 恒失败。
+#       start_started → start 报评审已在运行；start_fail → start 恒失败；
+#       remind_review_fail → remind-review 失败；no_qa → qa-status 回空 QA 名单。
 set -euo pipefail
 printf '%s\n' "$*" >> "${STUB_STATE:?bytedcli stub 需要 STUB_STATE}/calls.log"
 case "$*" in
@@ -24,6 +25,10 @@ case "$*" in
     case "$*" in *"--wip false"*) rm -f "${STUB_STATE}/start_wip" ;; esac ;;
   *"remind-qa"*)
     if [ -f "${STUB_STATE}/qa_fail" ]; then echo "remind qa failed" >&2; exit 1; fi ;;
+  *"remind-review"*)
+    if [ -f "${STUB_STATE}/remind_review_fail" ]; then echo "remind review failed" >&2; exit 1; fi ;;
+  *"qa-status"*)
+    if [ -f "${STUB_STATE}/no_qa" ]; then echo '{"qa_review_info":[]}'; else echo '{"qa_review_info":[{"username":"qa1"}]}'; fi ;;
   *"code-review gitlab"*) cat "${STUB_STATE}/gitlab.json" 2>/dev/null || echo '{}' ;;
   *"comment list"*)
     if [ -f "${STUB_STATE}/list_fail" ]; then echo "list failed" >&2; exit 1; fi

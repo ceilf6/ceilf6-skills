@@ -131,12 +131,12 @@ const ORDER = ['plan_gate','dev_done','cr_passed','mr_created','human_cr_done','
 const LABEL = {plan_gate:'计划门', dev_done:'开发', cr_passed:'机审CR', mr_created:'建MR',
                human_cr_done:'人工CR', selftest_done:'自测', cr_group_created:'拉群',
                cr_requested:'发起CR', qa_requested:'发起QA'};
-async function setNode(ctx, target, silent){
+async function setNode(ctx, target){
   const r = await fetch('/api/set-node', {method:'POST', body: JSON.stringify({ctx_dir: ctx, target: target})});
   const out = await r.json().catch(() => ({}));
   if (!r.ok) alert(out.error || '操作失败');
   else if (out.warning) alert(out.warning);
-  if (!silent || !r.ok) load();
+  load();
   return r.ok;
 }
 async function undone(ctx){
@@ -146,26 +146,25 @@ async function undone(ctx){
   else if (out.warning) alert(out.warning);
   load();
 }
-// 拉群与求CR 是两个动作：群一次建成长期有效，求CR 每次返工都要重发。silent 供自测完成后的
-// 串联使用——中途重渲染会让链路白闪三次，最后一步再刷。
-async function crStep(ctx, path, failMsg, silent){
-  const r = await fetch(path, {method:'POST', body: JSON.stringify({ctx_dir: ctx})});
-  const out = await r.json().catch(() => ({}));
-  if (!r.ok) alert(out.error || failMsg);
-  else if (out.warning) alert(out.warning);
-  if (!silent || !r.ok) load();
-  return r.ok;
+// 拉群、发起CR、发起QA 三个动作各自手动点：喊人的时机由用户定，QA 也只在 CR 之后。
+// 三者都往外发东西且一次调用要几十秒，期间界面没有回执，最容易被当成没点上而重复点——
+// CR_BUSY 挡住并发的第二次点击，避免群里多喊一遍。
+let CR_BUSY = false;
+async function crStep(ctx, path, failMsg){
+  if (CR_BUSY) return false;
+  CR_BUSY = true;
+  try {
+    const r = await fetch(path, {method:'POST', body: JSON.stringify({ctx_dir: ctx})});
+    const out = await r.json().catch(() => ({}));
+    if (!r.ok) alert(out.error || failMsg);
+    else if (out.warning) alert(out.warning);
+    load();
+    return r.ok;
+  } finally { CR_BUSY = false; }
 }
-const crGroup = (ctx, silent) => crStep(ctx, '/api/cr-group', '拉群失败', silent);
-const crRequest = (ctx, silent) => crStep(ctx, '/api/cr-request', '求CR 失败', silent);
-const crQa = (ctx, silent) => crStep(ctx, '/api/cr-qa', '求QA 失败', silent);
-// 自测完成后一路走到求QA：任一步失败即停在那个节点上，免得群还没建就去发消息
-async function finishSelftest(ctx){
-  if (!await setNode(ctx, 'cr_group_created', true)) { load(); return; }
-  if (!await crGroup(ctx, true)) return;
-  if (!await crRequest(ctx, true)) return;
-  await crQa(ctx);
-}
+const crGroup = (ctx) => crStep(ctx, '/api/cr-group', '拉群失败');
+const crRequest = (ctx) => crStep(ctx, '/api/cr-request', '求CR 失败');
+const crQa = (ctx) => crStep(ctx, '/api/cr-qa', '求QA 失败');
 function chip(text, cls, tip, onclick){
   const s = document.createElement('span');
   s.className = 'chip ' + cls + (onclick ? '' : ' ro');
@@ -205,14 +204,14 @@ function renderNodes(t){
           tip = '点击建 MR 群并把 reviewer 拉进来（群已存在也照常补人）';
           act = () => crGroup(t.ctx_dir);
         } else if (n === 'cr_requested'){
-          tip = '点击往群里发求CR消息';
+          tip = '点击一键提醒 RD 并往群里发求CR消息';
           act = () => crRequest(t.ctx_dir);
         } else if (n === 'qa_requested'){
           tip = '点击一键提醒 QA 并在群里知会';
           act = () => crQa(t.ctx_dir);
         } else if (n === 'selftest_done'){
-          tip = '点击标记自测完成，随后自动拉群、发起CR、发起QA';
-          act = () => finishSelftest(t.ctx_dir);
+          tip = '点击标记自测完成（拉群、发起CR、发起QA 之后各自手动点）';
+          act = () => setNode(t.ctx_dir, next);
         } else {
           tip = '点击标记「' + LABEL[n] + '」完成';
           act = () => setNode(t.ctx_dir, next);
@@ -222,7 +221,9 @@ function renderNodes(t){
       cls = 'n-todo';
       if (!PUB){
         if (n === 'cr_group_created' || n === 'cr_requested' || n === 'qa_requested'){
-          tip = '请先完成自测'; act = () => alert('请先完成自测');
+          // 三步都往外喊人，只能按序点：发起CR 要等群建好，发起QA 要等 CR 已经喊过
+          const need = '请先完成「' + (LABEL[ORDER[cur]] || '前序节点') + '」';
+          tip = need; act = () => alert(need);
         } else {
           tip = '点击完成到「' + LABEL[n] + '」（含前序节点）';
           act = () => setNode(t.ctx_dir, next);

@@ -44,6 +44,8 @@ chmod +x "$STUB_STATE/bin/bytedcli"
 export PATH="$STUB_STATE/bin:$PATH"
 echo '[{"username":"dalao1"}]' > "$STUB_STATE/reviewers.json"
 echo '{"data":{"chat_id":"oc_web_1"}}' > "$STUB_STATE/create.json"
+# 拉群现读 mr status 取平台坐标（group_name / project_id），缺了它 cr-group.sh 会告警
+echo '{"group_name":"stubgroup","project_id":40379}' > "$STUB_STATE/status.json"
 # 假 meego.sh：记录调用、按哨兵回放
 export HARNESS_MEEGO_SH="$STUB_STATE/fake-meego.sh"
 cat > "$STUB_STATE/fake-meego.sh" <<'EOF'

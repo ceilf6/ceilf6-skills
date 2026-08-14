@@ -30,6 +30,8 @@ setup() { # <mr_id 或空>：造 repo + ctx + STUB_STATE
     > "$STUB_STATE/reviewers.json"
   # chat create 真机应答把 chat_id 裸放在 data 字段
   echo '{"code":200,"data":"oc_stub_1","message":"success"}' > "$STUB_STATE/create.json"
+  # 平台坐标现读 mr status：需求仓没有 .bits/project_config.json，缺坐标时评审接口会拒执行或回空
+  echo '{"group_name":"stubgroup","project_id":40379}' > "$STUB_STATE/status.json"
 }
 # 本机 AI IDE 守护进程会异步往新 .git 下写 ai/ 目录，与删除竞争导致 ENOTEMPTY，故重试
 teardown() { rm -rf "$T" 2>/dev/null || { sleep 1; rm -rf "$T" 2>/dev/null || true; }; }
@@ -53,22 +55,46 @@ hasnt "拉群常态不摘 WIP" '--wip false' "$calls"
 jq -e '.milestones | has("cr_requested") | not' "$CTX/meta.json" >/dev/null && ok "拉群不标求CR" || bad "拉群误标求CR"
 # 名单来自平台按规则的评审发起：不 start 名单里只有全局 QA/RD 位，建群只剩本人
 has "拉群前发起代码评审" 'code-review start --mr-id 8300001' "$calls"
+# 平台坐标：缺了它 start 直接拒执行、reviewer info 静默回空——四条调用都得带上
+has "start 带坐标" 'code-review start --mr-id 8300001 --group-name stubgroup --project-id 40379' "$calls"
+has "读名单带坐标" 'reviewer info --mr-id 8300001 --group-name stubgroup --project-id 40379' "$calls"
+has "建群带 group-name" 'chat create --mr-id 8300001 --group-name stubgroup' "$calls"
+has "拉人带 group-name" 'chat add --mr-id 8300001 --username dalao1 --member-type reviewer --group-name stubgroup' "$calls"
 s_line=$(grep -n 'code-review start' "$STUB_STATE/calls.log" | head -1 | cut -d: -f1 || true)
 r_line=$(grep -n 'reviewer info' "$STUB_STATE/calls.log" | head -1 | cut -d: -f1 || true)
 [ -n "$s_line" ] && [ -n "$r_line" ] && [ "$s_line" -lt "$r_line" ] \
   && ok "start 先于读名单" || bad "顺序: start@${s_line:-无} reviewer@${r_line:-无}"
 
-echo "== request：发消息、标节点、摘 WIP =="
+echo "== request：一键提醒 RD、发消息、标节点、摘 WIP =="
 : > "$STUB_STATE/calls.log"
 out=$(bash "$CG" request --ctx-dir "$CTX")
 calls=$(cat "$STUB_STATE/calls.log")
 has "向落盘的群发消息" '+messages-send --chat-id oc_stub_1' "$calls"
 has "消息含求CR文案与表情" '大佬们，有空辛苦 CR 一下[送心]' "$calls"
 has "摘 WIP" 'mr update --mr-id 8300001 --wip false' "$calls"
+# 群里那张「邀请大家进行代码审查」卡片与 reviewer 待办都由一键提醒 RD 派发
+has "一键提醒 RD" 'bits mr remind-review --mr-id 8300001' "$calls"
+w_line=$(grep -n -- '--wip false' "$STUB_STATE/calls.log" | head -1 | cut -d: -f1 || true)
+rr_line=$(grep -n 'remind-review' "$STUB_STATE/calls.log" | head -1 | cut -d: -f1 || true)
+m_line=$(grep -n 'messages-send' "$STUB_STATE/calls.log" | head -1 | cut -d: -f1 || true)
+[ -n "$w_line" ] && [ -n "$rr_line" ] && [ -n "$m_line" ] && [ "$w_line" -lt "$rr_line" ] && [ "$rr_line" -lt "$m_line" ] \
+  && ok "顺序：摘 WIP → 提醒 RD → 发消息" || bad "顺序: wip@${w_line:-无} remind@${rr_line:-无} msg@${m_line:-无}"
 jq -e '.milestones.cr_requested' "$CTX/meta.json" >/dev/null && ok "求CR 节点已 mark" || bad "求CR 节点未 mark"
 # 群已在 meta 里，求CR 不必再建一次
 hasnt "求CR 不重复建群" 'chat create' "$calls"
 hasnt "求CR 不重复拉人" 'chat add' "$calls"
+
+echo "== request：一键提醒 RD 失败——不发消息、不标完成 =="
+tmp=$(mktemp); jq 'del(.milestones.cr_requested)' "$CTX/meta.json" > "$tmp" && mv "$tmp" "$CTX/meta.json"
+: > "$STUB_STATE/calls.log"; : > "$STUB_STATE/remind_review_fail"
+err=$(mktemp); rc=0
+bash "$CG" request --ctx-dir "$CTX" >/dev/null 2>"$err" || rc=$?
+[ "$rc" != 0 ] && ok "提醒失败非零退出" || bad "提醒失败仍 exit 0"
+grep -q '一键提醒 RD 失败' "$err" && ok "提醒失败有诊断" || bad "提醒失败无诊断"
+grep -q 'messages-send' "$STUB_STATE/calls.log" && bad "提醒失败不该发群消息" || ok "提醒失败不发群消息"
+jq -e '.milestones | has("cr_requested") | not' "$CTX/meta.json" >/dev/null && ok "提醒失败不 mark" || bad "提醒失败误 mark"
+rm -f "$STUB_STATE/remind_review_fail" "$err"
+bash "$CG" request --ctx-dir "$CTX" >/dev/null 2>&1
 
 echo "== qa：一键提醒 + 群里知会，两者都成才标完成 =="
 : > "$STUB_STATE/calls.log"
@@ -249,6 +275,7 @@ has "group dry-run 提到建群" 'chat create' "$out"
 out=$(bash "$CG" request --ctx-dir "$CTX" --dry-run)
 has "request dry-run 打印计划" 'DRY:' "$out"
 has "request dry-run 提到发消息" 'messages-send' "$out"
+has "request dry-run 提到一键提醒 RD" 'remind-review' "$out"
 out=$(bash "$CG" qa --ctx-dir "$CTX" --dry-run)
 has "qa dry-run 打印计划" 'DRY:' "$out"
 has "qa dry-run 提到一键提醒" 'remind-qa' "$out"
@@ -320,6 +347,30 @@ rc=0; bash "$CG" group --ctx-dir "$CTX" >/dev/null 2>"$T/err" || rc=$?
 has "失败告警" '发起代码评审失败' "$(cat "$T/err")"
 has "照常建群" 'chat create' "$(cat "$STUB_STATE/calls.log")"
 teardown
+
+echo "== group：取不到平台坐标——告警且不带坐标照常走 =="
+setup 8300024
+echo 'not json' > "$STUB_STATE/status.json"
+err=$(mktemp)
+bash "$CG" group --ctx-dir "$CTX" >/dev/null 2>"$err"
+grep -q '未取到 MR 的平台坐标' "$err" && ok "缺坐标有告警" || bad "缺坐标零告警"
+calls=$(cat "$STUB_STATE/calls.log")
+hasnt "不带空坐标参数" '--group-name ' "$calls"
+has "照常建群" 'chat create --mr-id 8300024' "$calls"
+jq -e '.milestones.cr_group_created' "$CTX/meta.json" >/dev/null && ok "仍 mark" || bad "未 mark"
+rm -f "$err"; teardown
+
+echo "== qa：MR 上无 QA 评审人——告警但照常提醒与知会 =="
+setup 8300025
+bash "$CG" group --ctx-dir "$CTX" >/dev/null 2>&1
+: > "$STUB_STATE/no_qa"; : > "$STUB_STATE/calls.log"
+err=$(mktemp); rc=0
+bash "$CG" qa --ctx-dir "$CTX" >/dev/null 2>"$err" || rc=$?
+[ "$rc" = 0 ] && ok "空 QA 名单不阻断" || bad "空 QA 名单 rc=$rc"
+grep -q '没有 QA 评审人' "$err" && ok "空 QA 名单有告警" || bad "空 QA 名单零告警"
+has "仍调一键提醒" 'remind-qa --mr-id 8300025' "$(cat "$STUB_STATE/calls.log")"
+jq -e '.milestones.qa_requested' "$CTX/meta.json" >/dev/null && ok "仍 mark" || bad "未 mark"
+rm -f "$STUB_STATE/no_qa" "$err"; teardown
 
 echo; echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" = 0 ]

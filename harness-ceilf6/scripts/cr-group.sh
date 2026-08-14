@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # MR 评审群与求CR。子命令：
 #   group   --ctx-dir <路径> [--dry-run]                       建群并把 reviewer 拉进来
-#   request --ctx-dir <路径> [--message <文案>] [--dry-run]     往群里发求CR消息
+#   request --ctx-dir <路径> [--message <文案>] [--dry-run]     一键提醒 RD 并往群里发求CR消息
 #   qa      --ctx-dir <路径> [--message <文案>] [--dry-run]     一键提醒 QA 并往群里发消息
 #   wip     --ctx-dir <路径> [--dry-run]                       返工时给 MR 挂 WIP
 # 拆成独立子命令是因为返工只需重新喊人：群一旦建成就长期有效，回退到开发再走一遍时不必重建。
@@ -123,33 +123,45 @@ case "$sub" in
     # 不依赖调用方 cwd——web.py 的工作目录不定
     repo_root=$(cd "$ctx/../.." && pwd -P)
     me=$(git -C "$repo_root" config user.name 2>/dev/null || true)
+    # 平台坐标（group_name / project_id）：bytedcli 默认从 cwd 的 .bits/project_config.json 兜底，
+    # 需求仓没有这个文件、web.py 的工作目录也不定。缺了它 code-review start 直接拒绝执行
+    # （action_required），reviewer info 更隐蔽——静默回空数组，看着像「这个 MR 真没评审人」。
+    # mr status 只认 --mr-id，用它现取坐标显式带给下面每条支持的子命令；取不到就照旧不带。
+    scope=$(bytedcli bits mr status --mr-id "$mr" --json 2>/dev/null || true)
+    gname=$(printf '%s' "$scope" | jq -r 'first((.. | objects | .group_name? // empty))' 2>/dev/null || true)
+    pid=$(printf '%s' "$scope" | jq -r 'first((.. | objects | .project_id? // empty))' 2>/dev/null || true)
+    [ -n "$gname$pid" ] || echo "cr-group: 警告——未取到 MR 的平台坐标，评审人名单可能不全" >&2
     # 拉群前确保平台代码评审已发起：分支代码评审人由平台按默认规则在 start 时拉取
     # （start_type=MANUALLY_BEGIN、fetch_mode=DEFAULT_RULE），未发起时 reviewer info 里只有
     # 全局 QA/RD 位，建群会只剩本人。已发起的重复 start 按幂等放行；平台 allow_review_wip=false，
     # WIP 挡住 start 时先摘 WIP 重试一次（走到拉群意味着自测已完成、代码已定，提前摘除站得住，
     # 「发起CR」步的摘 WIP 由此成幂等复核）。错误分类按文案匹配、形状按真机为准：不符只改本段。
-    if ! start_err=$(bytedcli --json bits mr code-review start --mr-id "$mr" 2>&1); then
+    if ! start_err=$(bytedcli --json bits mr code-review start --mr-id "$mr" \
+        ${gname:+--group-name "$gname"} ${pid:+--project-id "$pid"} 2>&1); then
       case "$start_err" in
         *RUNNING*|*running*|*已发起*|*already*)
           : ;;
         *WIP*|*wip*|*Wip*)
           bytedcli bits mr update --mr-id "$mr" --wip false >/dev/null 2>&1 || true
-          bytedcli --json bits mr code-review start --mr-id "$mr" >/dev/null 2>&1 \
+          bytedcli --json bits mr code-review start --mr-id "$mr" \
+            ${gname:+--group-name "$gname"} ${pid:+--project-id "$pid"} >/dev/null 2>&1 \
             || echo "cr-group: 警告——摘 WIP 后发起代码评审仍失败，名单可能不全，可平台手点后重跑拉群" >&2 ;;
         *)
           echo "cr-group: 警告——发起代码评审失败（$(printf '%s' "$start_err" | tr '\n' ' ' | cut -c1-160)），名单可能不全" >&2 ;;
       esac
     fi
-    rev=$(bytedcli bits mr reviewer info --mr-id "$mr" --json 2>/dev/null || echo '[]')
+    rev=$(bytedcli bits mr reviewer info --mr-id "$mr" \
+      ${gname:+--group-name "$gname"} ${pid:+--project-id "$pid"} --json 2>/dev/null || echo '[]')
     reviewers=$(printf '%s' "$rev" | jq -r --arg me "$me" \
       '[.[]?.username // empty] | unique | .[] | select(. != "" and . != $me)' 2>/dev/null || true)
-    create_out=$(bytedcli bits mr chat create --mr-id "$mr" --json 2>/dev/null) \
+    create_out=$(bytedcli bits mr chat create --mr-id "$mr" ${gname:+--group-name "$gname"} --json 2>/dev/null) \
       || echo "cr-group: 警告——建群失败（群可能已存在），继续" >&2
     # added 是成功数而非尝试数：收尾行是唯一到达用户眼前的回执，鉴权过期导致全员拉失败时
     # 报「拉入 N 人」会让人以为已经喊到人
     added=0
     for u in $reviewers; do
-      if bytedcli bits mr chat add --mr-id "$mr" --username "$u" --member-type reviewer >/dev/null 2>&1; then
+      if bytedcli bits mr chat add --mr-id "$mr" --username "$u" --member-type reviewer \
+          ${gname:+--group-name "$gname"} >/dev/null 2>&1; then
         added=$((added + 1))
       else
         echo "cr-group: 警告——拉人失败：${u}（可能已在群内）" >&2
@@ -175,11 +187,17 @@ case "$sub" in
   request)
     if [ -z "$mr" ]; then echo "cr-group: 无 MR，未发起CR"; exit 3; fi
     if [ "$dry" = 1 ]; then
+      echo "DRY: bytedcli bits mr update --mr-id ${mr} --wip false"
+      echo "DRY: bytedcli bits mr remind-review --mr-id ${mr}"
       echo "DRY: lark-cli im +messages-send --chat-id <meta.cr_chat_id 或现取> --text ${msg}"
       echo "DRY: threads.sh mark --ctx-dir ${ctx} cr_requested"
-      echo "DRY: bytedcli bits mr update --mr-id ${mr} --wip false"
       exit 0
     fi
+    # 摘 WIP 在前：走到发起CR 意味着代码已定，且 WIP 会挡住平台侧的提醒
+    bytedcli bits mr update --mr-id "$mr" --wip false >/dev/null 2>&1 || true
+    # 与 qa 步同构：先走 Bits 原生的一键提醒 RD——群里那张「邀请大家进行代码审查 @人」的卡片
+    # 和 reviewer 的待办都由它派发，只发群消息的话 reviewer 的待办列表里没有这条
+    bytedcli bits mr remind-review --mr-id "$mr" >/dev/null || die "一键提醒 RD 失败（MR ${mr}）"
     chat_id=$(jq -r '.cr_chat_id // empty' "$meta")
     if [ -z "$chat_id" ]; then
       # 拉群那步没能解析出群标识时的兜底：再问一次（create 对已存在的群通常会回既有信息）
@@ -191,18 +209,24 @@ case "$sub" in
     [ -n "$chat_id" ] || die "未拿到群标识，消息未发出——请先完成拉群"
     send_group_msg "$chat_id" "$msg" || die "消息未发出（群 ${chat_id}）"
     bash "$TH" mark --ctx-dir "$ctx" cr_requested
-    bytedcli bits mr update --mr-id "$mr" --wip false >/dev/null 2>&1 || true
-    echo "cr-group: 求CR 消息已发出（MR ${mr}）"
+    echo "cr-group: 已提醒 RD 并在群里求CR（MR ${mr}）"
     ;;
 
   qa)
     if [ -z "$mr" ]; then echo "cr-group: 无 MR，未发起QA"; exit 3; fi
     if [ "$dry" = 1 ]; then
+      echo "DRY: bytedcli bits mr qa-status --mr-id ${mr} --json"
       echo "DRY: bytedcli bits mr remind-qa --mr-id ${mr}"
       echo "DRY: lark-cli im +messages-send --chat-id <meta.cr_chat_id> --text ${msg}"
       echo "DRY: threads.sh mark --ctx-dir ${ctx} qa_requested"
       exit 0
     fi
+    # 一键提醒只对 MR 上已有的评审人生效：QA 位为空时接口照样回成功，群里却什么都不会出现
+    # （Bits 页面上的「一键提醒 QA」此时同样是灰的）。静默的空提醒最误导人，先探一次
+    qa_n=$(bytedcli bits mr qa-status --mr-id "$mr" --json 2>/dev/null \
+      | jq -r '[.qa_review_info? // empty] | flatten | length' 2>/dev/null || echo 0)
+    [ "${qa_n:-0}" != 0 ] \
+      || echo "cr-group: 警告——MR 上没有 QA 评审人，一键提醒 QA 不会有人收到，请在 Bits 上先配 QA" >&2
     # 先走 Bits 原生的一键提醒 QA（QA 侧的待办由它派发），再往群里补一句给人看。
     # 提醒失败就不发群消息：只发消息不提醒是半吊子，QA 的待办列表里仍然没有这条
     bytedcli bits mr remind-qa --mr-id "$mr" >/dev/null || die "一键提醒 QA 失败（MR ${mr}）"
