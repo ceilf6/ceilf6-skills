@@ -80,7 +80,13 @@ class SubprocessTests(unittest.TestCase):
             (skill / "SKILL.md").write_text("", encoding="utf-8")
             handle = io.StringIO()
             successful = subprocess.CompletedProcess([], 0, "", "")
-            outcomes = [successful] * 6 + [
+            bits_ready = subprocess.CompletedProcess(
+                [],
+                0,
+                json.dumps({"expired": False}),
+                "",
+            )
+            outcomes = [successful] * 4 + [bits_ready, successful] + [
                 runner.CommandError(
                     "local parser unavailable",
                     label="local AI parser",
@@ -123,6 +129,53 @@ class SubprocessTests(unittest.TestCase):
                     runner.run_preflight({}, io.StringIO())
 
         self.assertIs(raised.exception, failure)
+
+    def test_bits_preflight_rejects_expired_token_status(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            home = Path(temp_dir)
+            trae = home / "trae-cli"
+            prompt = home / "prompt.md"
+            skill = home / "skill"
+            trae.write_text("", encoding="utf-8")
+            trae.chmod(0o700)
+            prompt.write_text("", encoding="utf-8")
+            skill.mkdir()
+            (skill / "SKILL.md").write_text("", encoding="utf-8")
+            successful = subprocess.CompletedProcess([], 0, "", "")
+            expired_bits = subprocess.CompletedProcess(
+                [],
+                0,
+                json.dumps(
+                    {
+                        "expired": True,
+                        "captured_at": "2026-08-05T19:56:24.703+08:00",
+                    }
+                ),
+                "",
+            )
+            outcomes = [successful] * 4 + [expired_bits] + [successful] * 2
+
+            with mock.patch.object(runner, "TRAE", trae), mock.patch.object(
+                runner, "PROMPT_FILE", prompt
+            ), mock.patch.object(runner, "SKILL_DIR", skill), mock.patch.object(
+                runner, "run_checked", side_effect=outcomes
+            ):
+                with self.assertRaises(runner.CommandError) as raised:
+                    runner.run_preflight({}, io.StringIO())
+
+        self.assertEqual(raised.exception.label, "Bits auth")
+        self.assertEqual(runner.error_code(raised.exception), "bits_auth")
+        self.assertIn("expired", str(raised.exception))
+
+    def test_bits_status_non_object_json_preserves_auth_error_code(self):
+        process = subprocess.CompletedProcess([], 0, "[]", "")
+
+        with self.assertRaises(runner.CommandError) as raised:
+            runner.validate_bits_auth_status(process)
+
+        self.assertEqual(raised.exception.label, "Bits auth")
+        self.assertEqual(runner.error_code(raised.exception), "bits_auth")
+        self.assertIn("invalid JSON object", str(raised.exception))
 
     def test_timeout_preserves_label_and_stable_error_code(self):
         with mock.patch.object(

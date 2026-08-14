@@ -182,6 +182,26 @@ def log_line(handle, message: str) -> None:
     handle.flush()
 
 
+def validate_bits_auth_status(process: subprocess.CompletedProcess) -> None:
+    try:
+        status = json.loads(process.stdout)
+    except (json.JSONDecodeError, TypeError) as error:
+        raise CommandError(
+            "Bits auth status returned invalid JSON",
+            label="Bits auth",
+        ) from error
+    if not isinstance(status, dict):
+        raise CommandError(
+            "Bits auth status returned invalid JSON object",
+            label="Bits auth",
+        )
+    if status.get("expired") is not False:
+        raise CommandError(
+            "Bits auth expired at {}".format(status.get("captured_at", "unknown")),
+            label="Bits auth",
+        )
+
+
 def run_preflight(env: Dict[str, str], handle=sys.stdout) -> None:
     required_paths = (TRAE, PROMPT_FILE, SKILL_DIR / "SKILL.md")
     for path in required_paths:
@@ -201,7 +221,9 @@ def run_preflight(env: Dict[str, str], handle=sys.stdout) -> None:
     for label, argv in required_checks:
         started = time.monotonic()
         log_line(handle, "preflight {} started".format(label))
-        run_checked(label, argv, PREFLIGHT_TIMEOUT_SECONDS, env)
+        process = run_checked(label, argv, PREFLIGHT_TIMEOUT_SECONDS, env)
+        if label == "Bits auth":
+            validate_bits_auth_status(process)
         log_line(
             handle,
             "preflight {} passed in {:.1f}s".format(label, time.monotonic() - started),
