@@ -135,5 +135,6 @@ meta.max_rounds 非 null 时，达到该轮数也停下交用户（默认 null �
 ## 约束
 
 - 收尾自动 squash + 变基到 base 远端最新 + force-with-lease push + 建 MR + 沉淀是本技能职责（squash/force-with-lease：用户 2026-07-30 裁定方案 A；自动 push：2026-07-29 裁定；rebase：2026-08-11 裁定，方案 A 恒单 commit 的延伸——变基后必然 force push，沿用既有豁免；均仅限 harness 需求分支）。Meego 经 bytedcli-meego 技能收敛管理（关联/创建于计划门、评论于关键时刻、流转仅在 done——挂点见流程各步）；不打 SCM 包（workflow-bugfix / scm 技能另行处理）。
+- **文档行文**：本技能产出的一切给人看的文本都受此约束——需求 wiki 子文档（plan 四段、自测矩阵说明、沉淀正文、B 线叙事节）、MR 描述、收尾汇总与可交付版汇总。只管行文，字段名、清单、表格、代码块与 URL 属结构、不受管。散文型行文（沉淀正文、B 线叙事节、MR 的改动说明、汇总里的改动概览）动笔前先加载 human-writing skill。技术型行文（plan 四段、矩阵说明、fixes.md、commit message）不套其散文形态，但四条硬约束始终生效：材料关（列不出具体材料就写短，不换四种说法灌字数）、禁翻案腔、禁名词化与黑话、禁洞察路标。自查脚本与判读口径见 lark-sediment 第 2 步，两处同一口径。
 - 不修改 cr/round-*/ 下的历史产物；每轮产物只写本轮目录。
 - 对 verdict 的每条 blocker/major 必须显式处置（修复或书面不采纳），禁止静默忽略。
