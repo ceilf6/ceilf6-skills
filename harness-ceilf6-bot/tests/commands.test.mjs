@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseDmReply, mergeFlags, mergeFlat, SUPPORTED_HINT, parseControl, CONTROL } from '../src/commands.mjs';
+import { parseDmReply, mergeFlags, mergeFlat, SUPPORTED_HINT, parseControl, parseErrand, CONTROL } from '../src/commands.mjs';
 
 test('纯正文：无命令原样返回', () => {
   const r = parseDmReply('用方案 A，注意兼容 7.72');
@@ -78,6 +78,38 @@ test('parseControl 只取首行：命令行之后的正文被丢弃', () => {
 });
 test('CONTROL 钉住控制命令集合：新增/删改控制通道成员即红', () => {
   assert.deepEqual([...CONTROL].sort(), ['pause', 'resume', 'stop', 'tasks']);
+});
+test('parseErrand 取出办事正文：首行剩余 + 第二行起原样', () => {
+  assert.equal(parseErrand('/do 看下磁盘'), '看下磁盘');
+  assert.equal(parseErrand('/do 把 ~/tmp 清一下\n顺便报个占用'), '把 ~/tmp 清一下\n顺便报个占用');
+  assert.equal(parseErrand('/do\n正文只在第二行'), '正文只在第二行');
+  // 正文里的空行与缩进属于用户的原文，不得被压平
+  assert.equal(parseErrand('/do 步骤：\n\n  1. 先看日志'), '步骤：\n\n  1. 先看日志');
+});
+// 粘 shell / YAML / 列表进来时正文常常从第二行开始，且靠行首缩进表意：对拼接结果做全局 trim
+// 会把这些缩进连同首尾空行一起吃掉，而用户看到的是自己贴的东西被改了。
+test('parseErrand 保真：第二行起的行首缩进、空行与末尾换行都不动', () => {
+  assert.equal(parseErrand('/do\n  1. keep indent'), '  1. keep indent');
+  assert.equal(parseErrand('/do\n\tcurl -sS https://x | jq .'), '\tcurl -sS https://x | jq .');
+  assert.equal(parseErrand('/do\n\n  缩进前还空一行'), '\n  缩进前还空一行');
+  assert.equal(parseErrand('/do 首行有正文\n  第二行缩进\n'), '首行有正文\n  第二行缩进\n');
+});
+test('parseErrand 与 parseControl 共用 mention 剥离', () => {
+  assert.equal(parseErrand('@harness-ceilf6 /do 看下磁盘'), '看下磁盘');
+});
+test('parseErrand 无正文回空串，非 /do 回 null', () => {
+  assert.equal(parseErrand('/do'), '');
+  assert.equal(parseErrand('/do   '), '');
+  assert.equal(parseErrand('/stop'), null);
+  assert.equal(parseErrand('/document 这不是办事'), null); // 命令名须完整匹配
+  assert.equal(parseErrand('帮我看下磁盘'), null);
+  assert.equal(parseErrand('先看这个\n/do 看下磁盘'), null); // 只认首行
+  assert.equal(parseErrand(''), null);
+  assert.equal(parseErrand(null), null);
+});
+test('/do 不进 CONTROL：办事不是刹车，群话题里的 /do 不得走控制通道', () => {
+  assert.equal(CONTROL.has('do'), false);
+  assert.equal(parseControl('/do 看下磁盘'), null);
 });
 test('parseControl 拒绝：参数命令、非首行、纯文本、原型链名、空', () => {
   assert.equal(parseControl('/model opus'), null); // 参数命令不归控制通道

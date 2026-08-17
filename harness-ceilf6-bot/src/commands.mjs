@@ -13,15 +13,40 @@ export const SUPPORTED_HINT = `当前支持：${Object.entries(COMMANDS).map(([n
 // 与 COMMANDS 分属两类——刹车必须在 listener 层立即生效，等会话读到就晚了。
 export const CONTROL = new Set(['stop', 'pause', 'tasks', 'resume']);
 
+// 办事命令与它的用法提示：私信路由不到任务时的回执要把这条出口指出来，与解析同源一份文案。
+export const ERRAND = 'do';
+export const ERRAND_HINT = `/${ERRAND} <要做的事>`;
+
 // 只认首行：正文里出现的斜杠行是普通文本，误判会凭空杀掉一个任务。
-export function parseControl(text) {
-  // 飞书 mention 在 content 里就是字面文本（`@名字 ` 原样留在正文），而群里的人习惯
-  // 先 @ 机器人再发命令；只剥首行开头的连续 mention，中段的 @ 属正文。
-  const first = String(text ?? '').split('\n')[0].trim().replace(/^(?:@\S+\s+)+/, '');
+// 飞书 mention 在 content 里就是字面文本（`@名字 ` 原样留在正文），而群里的人习惯
+// 先 @ 机器人再发命令；只剥首行开头的连续 mention，中段的 @ 属正文。
+function firstLineCommand(text) {
+  const lines = String(text ?? '').split('\n');
+  const first = lines[0].trim().replace(/^(?:@\S+\s+)+/, '');
   if (!first.startsWith('/')) return null;
-  const [name, ...rest] = first.slice(1).split(/\s+/);
-  if (!CONTROL.has(name)) return null;
-  return { name, arg: rest.join(' ').trim() };
+  const name = first.slice(1).split(/\s+/)[0];
+  return { name, rest: first.slice(1 + name.length).replace(/^\s+/, ''), tail: lines.slice(1) };
+}
+
+export function parseControl(text) {
+  const c = firstLineCommand(text);
+  if (!c || !CONTROL.has(c.name)) return null;
+  return { name: c.name, arg: c.rest.trim() };
+}
+
+// 办事正文：`/do <要做的事>`，第二行起原样带上——用户写的步骤、路径、粘贴的报错都在那里，
+// 按控制命令那样只取首行会把它们悄悄丢掉。返回 null 表示这条不是办事，空串表示只发了命令没带正文。
+// 「原样」的边界在整条消息之内：事件层（normalize）已统一去掉消息首尾空白，本函数不再另做修剪，
+// 故行首缩进、制表符与中间空行都完整保留，末尾空行则在到达这里之前就没了。
+// 不进 CONTROL：那是刹车通道，成员会连带吃到「控制命令独占一条消息」的语义（对办事正好说反），
+// 且群话题里的同名命令会被当成对任务的操作走进 controlTask。
+export function parseErrand(text) {
+  const c = firstLineCommand(text);
+  if (!c || c.name !== ERRAND) return null;
+  // 只去掉命令那一行本身，正文一律原样：粘进来的 shell / YAML / 列表靠缩进表意，
+  // 对拼接结果做全局 trim 会把第二行开头的缩进连同空行一起吃掉。
+  const body = c.rest ? [c.rest, ...c.tail].join('\n') : c.tail.join('\n');
+  return body.trim() ? body : '';
 }
 
 export function parseDmReply(text) {

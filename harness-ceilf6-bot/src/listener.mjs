@@ -9,8 +9,8 @@ import { decide, mentionsBot } from './filter.mjs';
 import { appendContextEntry } from './context.mjs';
 import { Store } from './state.mjs';
 import { makeLark } from './lark.mjs';
-import { runTask, runDutyTask, resumeTask, injectReply, killSession, killActiveChildren, taskSnapshot, stopLive } from './runner.mjs';
-import { parseDmReply, mergeFlags, parseControl, SUPPORTED_HINT } from './commands.mjs';
+import { runTask, runDutyTask, runErrandTask, errandCwd, resumeTask, injectReply, killSession, killActiveChildren, taskSnapshot, stopLive } from './runner.mjs';
+import { parseDmReply, mergeFlags, parseControl, parseErrand, SUPPORTED_HINT, ERRAND_HINT } from './commands.mjs';
 import { scanStranded } from './stranded.mjs';
 import { makeMrWatch } from './mrwatch.mjs';
 import { startControlServer } from './control.mjs';
@@ -65,6 +65,11 @@ export function validateConfig(config) {
   // botName 可省略（省略即关掉 @ 旁路，满水位一律拒单）；给了就得是 bot 在群里的显示名。
   if (config.botName !== undefined && (typeof config.botName !== 'string' || config.botName === '')) {
     errs.push('botName（可省略；给了则需非空字符串）');
+  }
+  // errandCwd 可省略（省略即家目录）；空串会让 spawn 的 cwd 落回 bot 自己的工作目录，
+  // 办事就悄悄跑在 harness-ceilf6-bot 的检出里了。
+  if (config.errandCwd !== undefined && (typeof config.errandCwd !== 'string' || config.errandCwd === '')) {
+    errs.push('errandCwd（可省略；给了则需非空字符串）');
   }
   // controlPort 可省略（省略即 DEFAULT_CONTROL_PORT）；给了就必须是合法端口号。
   // 0 会让 listen 漂成 OS 随便派的端口（静默失败），3.5 / 70000 则要等到 listen 才抛
@@ -133,6 +138,10 @@ if (isMain) {
     // 挂起中的会话进程死亡（崩溃 / OOM / 被外部 kill / 换参数收割）：任务不终态、留给懒续跑，
     // 但它已经不烧 CPU 了，槽位必须在此归还——那条 runTask promise 永远不会 resolve。
     onSuspendClose: (info) => releaseSlot(info.messageId),
+    // 终态已定、回执还在发的那段时间：条目此刻就得销账，否则 /tasks 会把它显示成「等回复」、
+    // /stop 会按残留态回一句「已停止」，而回执路径仍在把「已完成」投出去。销账在 settleTask
+    // 里重做一遍无妨——两处都是幂等的。
+    onSettling: (info) => { store.markSettled(info.messageId); store.dropAwaiting(info.messageId); },
   };
   function settleTask(task) {
     return (out) => {
@@ -239,7 +248,7 @@ if (isMain) {
       seen.add(e.messageId);
       out.push({
         messageId: e.messageId, short: e.messageId.slice(-6), title: e.title ?? '', branch: e.branch ?? '',
-        worktree: e.worktree ?? '', state: KIND_STATE[e.kind] ?? 'waiting',
+        worktree: e.worktree ?? '', state: KIND_STATE[e.kind] ?? 'waiting', errand: e.errand ?? false,
         startedAt: e.askedAt ?? '', sessionId: e.sessionId ?? '', question: e.question ?? '',
       });
     }
@@ -247,15 +256,15 @@ if (isMain) {
       if (seen.has(messageId)) continue;
       seen.add(messageId);
       out.push({
-        messageId, short: messageId.slice(-6), title: rawTitle(t.text), question: '',
-        branch: '', worktree: '', state: 'starting', startedAt: t.receivedAt ?? '', sessionId: '',
+        messageId, short: messageId.slice(-6), title: rawTitle(t.text), question: '', errand: t.errand ?? false,
+        branch: '', worktree: t.worktree ?? '', state: 'starting', startedAt: t.receivedAt ?? '', sessionId: '',
       });
     }
     for (const t of store.listQueued()) {
       if (seen.has(t.messageId)) continue;
       seen.add(t.messageId);
       out.push({
-        messageId: t.messageId, short: t.messageId.slice(-6), title: rawTitle(t.text), question: '',
+        messageId: t.messageId, short: t.messageId.slice(-6), title: rawTitle(t.text), question: '', errand: false,
         branch: '', worktree: '', state: 'queued', startedAt: t.receivedAt ?? '', sessionId: '',
       });
     }
@@ -303,9 +312,12 @@ if (isMain) {
     return list.map((t, i) => {
       const ran = elapsed(t.startedAt);
       const title = t.title || t.branch;
-      return `${i + 1}. [${STATE_LABEL[t.state]}] ${title}（${t.short}）`
+      // 办事没有分支，第二格改报它在哪个目录办；状态徽标带上「办事」，
+      // 否则它和需求任务在列表里长得一模一样，/stop 时容易停错。
+      const where = t.errand ? t.worktree : t.branch;
+      return `${i + 1}. [${STATE_LABEL[t.state]}${t.errand ? '·办事' : ''}] ${title}（${t.short}）`
         // 拿分支当标题的任务（滞留登记没有别的可用）不再把分支名重复一遍
-        + `${t.branch && t.branch !== title ? ` · ${t.branch}` : ''}`
+        + `${where && where !== title ? ` · ${where}` : ''}`
         + `${ran ? ` · ${ELAPSED_LABEL[t.state] ?? '已跑'} ${ran}` : ''}`
         + progressLine(t);
     }).join('\n');
@@ -354,7 +366,12 @@ if (isMain) {
     // 启动中：worktree 还没建完，既没有进程可杀也没有队列条目可撤。回执必须说清「稍候再来」，
     // 而不是含糊成「没有在册任务」——后者会让人以为刹车没生效而重复发命令。
     if (t.state === 'starting') {
-      return { ok: false, error: `该任务正在建 worktree（尚未起进程），稍候数十秒后重试 /${mode}。` };
+      return {
+        ok: false,
+        error: t.errand
+          ? `该办事正在启动（尚未起进程），稍候数秒后重试 /${mode}。`
+          : `该任务正在建 worktree（尚未起进程），稍候数十秒后重试 /${mode}。`,
+      };
     }
     if (t.state === 'queued') {
       if (mode === 'pause') return { ok: false, error: '排队中的任务尚未起进程，请改用 /stop。' };
@@ -386,7 +403,8 @@ if (isMain) {
       ? `cd ${entry.worktree} && claude --resume ${entry.sessionId}`
       : `cd ${entry.worktree} && claude`;
     await lark.sendDm(config.dmOpenId,
-      `🛑 任务已停止（等待态作废，进程不在）\n${entry.title}\nworktree：${entry.worktree}\n如需接管：${takeover}`);
+      `🛑 ${entry.errand ? '办事' : '任务'}已停止（等待态作废，进程不在）\n${entry.title}`
+      + `\n${entry.errand ? '目录' : 'worktree'}：${entry.worktree}\n如需接管：${takeover}`);
     return { ok: true, was: entryWas, title: entry.title, messageId: t.messageId };
   }
 
@@ -411,7 +429,13 @@ if (isMain) {
       }
     }
     const info = store.findAwaiting(target.messageId) ?? target;
-    resumeTask(info, body, config, lark, { onAsk: taskHooks.onAsk, onSuspendClose: taskHooks.onSuspendClose, onResumed })
+    resumeTask(info, body, config, lark, {
+      onAsk: taskHooks.onAsk, onSuspendClose: taskHooks.onSuspendClose,
+      onSettling: taskHooks.onSettling, onResumed,
+      // 懒续跑起会话前隔着一次表情往返，期间 /stop 会按「无进程的残留态」把它处置掉（记终态、
+      // 删条目、发 🛑）。终态记账就是这里的取消令牌：记过就别再 spawn。
+      stillWanted: () => !store.isSettled(info.messageId),
+    })
       .then(settleTask({ messageId: info.messageId, threadId: info.threadId }))
       .catch((e) => {
         console.error(`[listener] 懒续跑异常：${e.message}`);
@@ -478,9 +502,39 @@ if (isMain) {
     if (!out.ok) await lark.sendDm(config.dmOpenId, out.error);
   }
 
-  // 私信回路：路由（引用精确 > 单任务直发）→ 斜杠命令 → 注入活会话或懒续跑。
+  // 办事：不占 concurrency 槽、也不看接单水位——这是你当面下的指令，实时优先（与懒续跑轮同一条裁定）。
+  // 现场是你自己的目录，故不入队、不建 worktree、不进线程登记（没有话题可归属）。
+  function launchErrand(ev, text) {
+    const task = {
+      messageId: ev.messageId, senderOpenId: ev.senderOpenId, text,
+      receivedAt: new Date().toISOString(),
+    };
+    console.error(`[listener] 办事 ${ev.messageId}：${text.split('\n')[0].slice(0, 60)}`);
+    // 起会话之前隔着一次飞书往返（接单表情），失败时最坏要等两次 30s 超时。这段窗口里办事还没进
+    // 活表，不占一格在册状态就等于「刚发完 /do 的这几十秒里 /tasks 看不见它、/stop 回没有在册任务」。
+    // 与群任务的启动窗口同一处置：先登记，onLive 到达时交棒给活表实态。
+    // 带上目录：办事那一行的第二格就取它，缺了它启动窗口里的 /tasks 只能显示一个光秃秃的徽标。
+    starting.set(task.messageId, { ...task, errand: true, worktree: errandCwd(config) });
+    runErrandTask(task, config, lark, taskHooks)
+      .then(settleTask(task))
+      .catch((e) => console.error(`[listener] 办事异常：${e.message}`))
+      // 目录不存在等早退路径永不到达 onLive，这里是启动窗口的唯一出口：漏清则那一格永远占着。
+      .finally(() => starting.delete(task.messageId));
+  }
+
+  // 私信回路：办事 → 路由（引用精确 > 单任务直发）→ 斜杠命令 → 注入活会话或懒续跑。
   async function handleDm(ev) {
     store.markProcessed(ev.messageId);
+    // 办事先于一切路由：它不找任务，任务在不在等都不影响它。
+    const errandText = parseErrand(ev.text);
+    if (errandText !== null) {
+      if (!errandText) {
+        await lark.sendDm(config.dmOpenId, `办事要带上正文：${ERRAND_HINT}`);
+        return;
+      }
+      launchErrand(ev, errandText);
+      return;
+    }
     // 控制命令先于路由：/stop 必须能作用于活跃任务，而活跃任务不在 listWaiting 里。
     const ctl = parseControl(ev.text);
     if (ctl) {
@@ -506,12 +560,19 @@ if (isMain) {
       if (waitingList.length === 0) {
         // 剩下的那些不等你回复（后台运行中、已滞留），逐类点名只会把回执写长：报个数、指向 /tasks。
         const idle = all.length - waitingList.length;
-        await lark.sendDm(config.dmOpenId, idle
+        await lark.sendDm(config.dmOpenId, (idle
           ? `当前没有等待回复的任务；另有 ${idle} 个不等回复的任务（后台运行中 / 已滞留），用 /resume 推进（先 /tasks 看序号）。`
-          : '当前没有等待回复的任务。');
+          : '当前没有等待回复的任务。')
+          // 这条回执是「话没送到任何地方」的现场，办事的入口必须在此处指出来——否则人只能
+          // 反复发同一句话，而这正是想让 bot 直接做点事的时刻。
+          + `\n不是要回任务、只想让我在你电脑上办件事：${ERRAND_HINT}`);
         return;
       }
-      if (waitingList.length > 1) { await lark.sendDm(config.dmOpenId, `有 ${waitingList.length} 个任务在等回复，请引用对应提问消息回复。`); return; }
+      if (waitingList.length > 1) {
+        await lark.sendDm(config.dmOpenId,
+          `有 ${waitingList.length} 个任务在等回复，请引用对应提问消息回复。\n不是要回任务、只想让我办件事：${ERRAND_HINT}`);
+        return;
+      }
       target = waitingList[0];
     }
     const parsed = parseDmReply(ev.text);
@@ -588,7 +649,9 @@ if (isMain) {
       }
       // 接单水位：在册未完成任务满 maxOpenTasks 就不再接新单——积压的主体是等人工 CR 的任务，
       // 机器再接只会让队伍更长。@ 了 bot 的是明确的人工指派，照接。
-      const open = registry().length;
+      // 办事条目不计入：水位限的是「人处理不过来的需求单」，办事不产 MR、不等人工 CR，
+      // 让它垫水位会把群里的接单能力挂在几件杂活上。
+      const open = registry().filter((t) => !t.errand).length;
       if (open >= maxOpenTasks && !mentionsBot(ev.text, config.botName)) {
         // 本回调是同步的，未捕获的 rejection 会按默认策略掀掉常驻进程。
         rejectForBacklog(ev, open).catch((e) => console.error(`[listener] 拒单回复异常：${e.message}`));

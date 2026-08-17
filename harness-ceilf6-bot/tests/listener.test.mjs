@@ -78,7 +78,7 @@ function tapStderr(child) {
 
 // 事件流 stub 一次性吐完整个文件，无法在同一进程内编排「任务已就绪之后才到回复」；
 // 分两次启动既是确定性的时序编排，也顺带验证 threads.jsonl 跨重启可用。
-async function runListener({ cfgPath, root, events, verdict, turns, until }) {
+async function runListener({ cfgPath, root, events, verdict, turns, until, env = {} }) {
   const eventsFile = join(root, `events-${Math.random().toString(36).slice(2)}.ndjson`);
   writeFileSync(eventsFile, events.join('\n') + '\n');
   const larkLog = join(root, 'lark-calls.log');
@@ -86,7 +86,7 @@ async function runListener({ cfgPath, root, events, verdict, turns, until }) {
     env: {
       ...process.env, STUB_LOG: larkLog, STUB_EVENTS_FILE: eventsFile,
       // undefined 会被 spawn 串化成 "undefined" 字符串，必须条件展开
-      ...(verdict ? { STUB_VERDICT: verdict } : {}), ...(turns ? { STUB_TURNS: turns } : {}),
+      ...(verdict ? { STUB_VERDICT: verdict } : {}), ...(turns ? { STUB_TURNS: turns } : {}), ...env,
     },
   });
   const closed = new Promise((res) => child.on('close', res));
@@ -125,7 +125,7 @@ async function runFedListener({ cfgPath, root, turns, env = {}, feed }) {
 }
 
 // 把在册水位垫到指定高度：awaiting 条目就是 registry() 的一路来源，起 N 个真任务只是把同一件事跑得更慢。
-function seedAwaiting(root, n) {
+function seedAwaiting(root, n, decorate = () => ({})) {
   mkdirSync(join(root, 'state'), { recursive: true });
   const lines = [];
   for (let i = 0; i < n; i++) {
@@ -133,9 +133,16 @@ function seedAwaiting(root, n) {
       messageId: `om_seed_${String(i).padStart(6, '0')}`, kind: 'user', waiting: true,
       title: `旧任务 ${i}`, branch: `bot/seed-${i}`, worktree: join(root, 'wt', `seed-${i}`),
       sessionId: `sess_seed_${i}`, question: '等你回复', askedAt: `2026-08-14T00:0${i}:00Z`,
+      ...decorate(i),
     }));
   }
   writeFileSync(join(root, 'state', 'awaiting.jsonl'), lines.join('\n') + '\n');
+}
+
+// 从办事会话的首轮 prompt 里切出「原文」那一段（errand-prompt.md 里 {{TASK_TEXT}} 的位置）：
+// 断言正文保真必须逐字节比，includes 会被模板自带的空行糊过去。
+function errandBodyIn(prompt) {
+  return prompt.split('- 原文：\n\n')[1]?.split('\n\n## 指令')[0] ?? '';
 }
 
 // 只挡 `git worktree add` 一个子命令（拖慢或拖垮），其余 git 调用原样透传：
@@ -301,14 +308,15 @@ test('端到端（stub）：ask 挂起 → 私信含问题 → 重启后私信�
   assert.ok(qDm.includes('messages-send'), '提问应走私信');
   assert.ok(!qDm.includes('messages-reply'), '群里零文字消息');
   // 第二程：私信直发回复（单任务免引用）→ 懒续跑 → pass ✅
+  // 就绪判据取 ✅ 私信而不是 awaiting 条目消失：条目在终态一选定就销账（早于终态表情与回执的
+  // 飞书往返），拿它当判据会在回执发出之前就 SIGTERM 掉 listener。
   const second = await runListener({
     cfgPath, root, turns: 'pass',
     events: [dmLine({ message_id: 'om_dm_222222', content: '选 A' })],
-    until: () => !existsSync(awaitingPath) || readFileSync(awaitingPath, 'utf8').trim() === '',
+    until: () => readFileSync(larkLogPath, 'utf8').includes('任务完成'),
   });
-  assert.ok(second.ok, '终态后 awaiting 条目应删除');
-  const calls = readFileSync(larkLogPath, 'utf8');
-  assert.ok(calls.includes('任务完成'), '应收到 ✅ 私信');
+  assert.ok(second.ok, '懒续跑应跑到 pass 并发出 ✅ 私信');
+  assert.equal(existsSync(awaitingPath) ? readFileSync(awaitingPath, 'utf8').trim() : '', '', '终态后 awaiting 条目应删除');
   rmFixture(root);
 });
 
@@ -733,10 +741,12 @@ test('端到端（stub）：活跃轮次中被重启的任务，重启后自动�
   const first = await runListener({
     cfgPath, root, turns: 'hang',
     events: [evLine({ message_id: 'om_strand_1111', message_type: 'post', thread_id: 'omt_strand' })],
+    // 判据要等到会话 id 真的落进日志：日志文件在 spawn 时就建好了，只判存在会在 init 事件写盘
+    // 之前就收割 listener，留下一份空日志——而滞留登记正是靠日志里的会话 id 成立的。
     until: () => existsSync(threadsPath) && readFileSync(threadsPath, 'utf8').includes('omt_strand')
-      && existsSync(join(root, 'logs', 'task-om_strand_1111.log')),
+      && sessionUp(root, 'om_strand_1111'),
   });
-  assert.ok(first.ok, '任务应已登记线程并落下任务日志');
+  assert.ok(first.ok, '任务应已登记线程并落下带会话 id 的任务日志');
   // 文件压根没被写过也算「没有条目」：滞留任务从没 ask 过
   const awaitingText = () => (existsSync(awaitingPath) ? readFileSync(awaitingPath, 'utf8') : '');
   assert.equal(awaitingText().trim(), '', '收割时没有 awaiting 条目——这正是滞留的成因');
@@ -1237,6 +1247,223 @@ test('validateConfig：mrWatch 非法值被点名', () => {
   assert.ok(validateConfig({ ...base, mrWatch: [] }).some((e) => e.includes('mrWatch（需对象或省略）')));
 });
 
+test('端到端（stub）：私信 /do 在办事目录起会话，不建 worktree、不入队，终态私信回执', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-do-')));
+  const home = join(root, 'home');
+  mkdirSync(home, { recursive: true });
+  const cfgPath = writeConfig(root, makeRepo(root), { errandCwd: home });
+  const larkLogPath = join(root, 'lark-calls.log');
+  const cwdOut = join(root, 'cwd.txt');
+  const { ok } = await runListener({
+    cfgPath, root, verdict: 'pass',
+    events: [dmLine({ message_id: 'om_do_111111', content: '/do 看下 ~/Downloads 有多大' })],
+    until: () => existsSync(larkLogPath) && readFileSync(larkLogPath, 'utf8').includes('完成'),
+    env: { STUB_CWD_OUT: cwdOut },
+  });
+  assert.ok(ok, '/do 应起一个办事会话并跑到终态');
+  assert.equal(readFileSync(cwdOut, 'utf8').trim(), home, '办事会话的 cwd 必须是 errandCwd');
+  assert.ok(existsSync(join(root, 'logs', 'task-om_do_111111.log')), '办事应有会话日志');
+  assert.equal(existsSync(join(root, 'wt')), false, '办事不得创建 worktree');
+  assert.equal(new Store(join(root, 'state')).size(), 0, '私信不得入队');
+  const calls = readFileSync(larkLogPath, 'utf8');
+  assert.ok(!calls.includes('messages-reply'), '办事全程零群消息');
+  rmFixture(root);
+});
+
+// 接单表情那次飞书往返（失败时最坏两次 30s 超时）之前，办事还没进活表。这段窗口正是
+// 「刚发完 /do、想反悔」的时刻：不占一格在册状态，/tasks 就会回「当前没有在册任务」。
+test('端到端（stub）：接单表情还没回来时，/tasks 已能看见启动中的办事', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-do-start-')));
+  const home = join(root, 'home');
+  mkdirSync(home, { recursive: true });
+  const cfgPath = writeConfig(root, makeRepo(root), { errandCwd: home });
+  const larkLogPath = join(root, 'lark-calls.log');
+  const { ok, stderr } = await runFedListener({
+    cfgPath, root, turns: 'pass', env: { STUB_SLOW_API_S: '6' },
+    feed: async (send) => {
+      send(dmLine({ message_id: 'om_do_555555', content: '/do 看下磁盘' }));
+      // 表情调用已发出（stub 先写日志再挂起）即已进入窗口
+      if (!await poll(() => existsSync(larkLogPath) && readFileSync(larkLogPath, 'utf8').includes('reactions'))) return false;
+      send(dmLine({ message_id: 'om_do_666666', content: '/tasks' }));
+      return poll(() => readFileSync(larkLogPath, 'utf8').includes('启动中'));
+    },
+  });
+  assert.ok(ok, `启动窗口内的办事应出现在 /tasks 里：\n${stderr?.().slice(-800)}`);
+  const calls = readFileSync(larkLogPath, 'utf8');
+  assert.ok(calls.includes('办事'), '列表里应标出这是办事');
+  assert.ok(calls.includes('看下磁盘'), '标题取办事正文首行');
+  // 办事那一行的第二格是目录：启动窗口里同样得给出来，否则只剩一个光秃秃的徽标
+  assert.ok(calls.includes(home), `启动中的办事也要报目录：${calls.split('\n').find((l) => l.includes('启动中'))}`);
+  rmFixture(root);
+});
+
+// Round 1 的解析测试直接调 parseErrand，绕过了 normalize→handleDm 这段真实链路。正文保真要
+// 端到端成立才算数：飞书事件里的缩进与制表符必须原样出现在会话首轮 prompt 里。
+test('端到端（stub）：/do 正文经 normalize 到首轮 prompt 逐字节保真', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-do-fidelity-')));
+  const home = join(root, 'home');
+  mkdirSync(home, { recursive: true });
+  const cfgPath = writeConfig(root, makeRepo(root), { errandCwd: home });
+  const promptOut = join(root, 'prompt.txt');
+  const body = '按这个顺序来：\n\n  1. 先看日志\n\tgrep -n ERROR app.log\n  2. 再看磁盘';
+  const { ok } = await runListener({
+    cfgPath, root, verdict: 'pass',
+    events: [dmLine({ message_id: 'om_do_777777', content: `/do ${body}` })],
+    until: () => existsSync(promptOut),
+    env: { STUB_PROMPT_OUT: promptOut },
+  });
+  assert.ok(ok, '办事会话应拿到首轮 prompt');
+  assert.equal(errandBodyIn(readFileSync(promptOut, 'utf8')), body, '正文被改动了');
+  rmFixture(root);
+});
+
+// 「原样」的边界在整条消息之内：事件层统一去掉首尾空白（与群任务同一套），末尾空行到不了
+// parseErrand。把它钉住，免得日后有人照着「原样保留」四个字去改 normalize。
+test('端到端（stub）：消息末尾的空行在事件层已去掉，不进办事正文', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-do-trailing-')));
+  const home = join(root, 'home');
+  mkdirSync(home, { recursive: true });
+  const cfgPath = writeConfig(root, makeRepo(root), { errandCwd: home });
+  const promptOut = join(root, 'prompt.txt');
+  const { ok } = await runListener({
+    cfgPath, root, verdict: 'pass',
+    events: [dmLine({ message_id: 'om_do_888888', content: '/do 首行\n  第二行缩进\n\n' })],
+    until: () => existsSync(promptOut),
+    env: { STUB_PROMPT_OUT: promptOut },
+  });
+  assert.ok(ok, '办事会话应拿到首轮 prompt');
+  assert.equal(errandBodyIn(readFileSync(promptOut, 'utf8')), '首行\n  第二行缩进',
+    '行首缩进要保留，末尾空行不该进正文');
+  rmFixture(root);
+});
+
+test('端到端（stub）：/do 无正文只回用法，不起会话', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-do-empty-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const { ok } = await runListener({
+    cfgPath, root, verdict: 'pass',
+    events: [dmLine({ message_id: 'om_do_222222', content: '/do' })],
+    until: () => existsSync(larkLogPath) && readFileSync(larkLogPath, 'utf8').includes('/do <要做的事>'),
+  });
+  assert.ok(ok, '空 /do 应收到用法回执');
+  const logsDir = join(root, 'logs');
+  const taskLogs = existsSync(logsDir) ? readdirSync(logsDir).filter((f) => f.startsWith('task-om_do_')) : [];
+  assert.deepEqual(taskLogs, [], '空 /do 不得起会话');
+  rmFixture(root);
+});
+
+test('端到端（stub）：路由不到任务的私信，回执把 /do 一并指出来', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-hint-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  const { ok } = await runListener({
+    cfgPath, root, verdict: 'pass',
+    events: [dmLine({ message_id: 'om_hint_111111', content: '在吗' })],
+    until: () => existsSync(larkLogPath) && readFileSync(larkLogPath, 'utf8').includes('/do'),
+  });
+  assert.ok(ok, '零任务在等时的回执应提到 /do');
+  assert.ok(readFileSync(larkLogPath, 'utf8').includes('没有等待回复的任务'), '原有提示仍在');
+  rmFixture(root);
+});
+
+test('端到端（stub）：在册的办事条目不占接单水位，群里的新任务照接', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-do-quota-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  // 五条在册，其中两条是办事：按需求单只算 3 个，水位（5）未满
+  seedAwaiting(root, 5, (i) => (i < 2 ? { errand: true, branch: '', worktree: root, title: `办事 ${i}` } : {}));
+  const { ok } = await runFedListener({
+    cfgPath, root, turns: 'ask:先确认一下需求边界',
+    feed: async (send) => {
+      send(evLine({ message_id: 'om_dq_aaaaaa', content: '这是一个新任务，描述足够长' }));
+      return poll(() => sessionUp(root, 'om_dq_aaaaaa'));
+    },
+  });
+  assert.ok(ok, '办事条目不该把接单水位垫满');
+  assert.equal(readFileSync(larkLogPath, 'utf8').includes('先不接新单'), false, '不得被拒单');
+  rmFixture(root);
+});
+
+// 两个前置都要真的成立：水位靠四条残留 + 一条真跑起来的群任务垫满（共 5），并发靠那条群任务
+// 占住唯一的槽（turns=hang，永不产出 RESULT）。只 seed awaiting 不起进程的话 running 恒为 0，
+// 「并发占满」就是句空话——那样即使日后给 launchErrand 加上一条按 concurrency 拒绝的分支也照样绿。
+test('端到端（stub）：任务把水位与并发都占满时，/do 照常起会话', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-do-busy-')));
+  const home = join(root, 'home');
+  mkdirSync(home, { recursive: true });
+  const cfgPath = writeConfig(root, makeRepo(root), { errandCwd: home });
+  const larkLogPath = join(root, 'lark-calls.log');
+  seedAwaiting(root, 4);
+  const { ok, stderr } = await runFedListener({
+    cfgPath, root, turns: 'hang',
+    feed: async (send) => {
+      send(evLine({ message_id: 'om_busy_111111', message_type: 'post', thread_id: 'omt_busy' }));
+      // 群任务进了活跃轮次：concurrency=1 已被它占满，在册也随之满 5
+      if (!await poll(() => sessionUp(root, 'om_busy_111111'))) return false;
+      send(dmLine({ message_id: 'om_do_333333', content: '/do 看下磁盘' }));
+      return poll(() => sessionUp(root, 'om_do_333333'));
+    },
+  });
+  assert.ok(ok, `满水位满并发下 /do 仍应起会话：\n${stderr?.().slice(-800)}`);
+  const calls = readFileSync(larkLogPath, 'utf8');
+  assert.equal(calls.includes('先不接新单'), false, '/do 不得走拒单通道');
+  // 那条群任务还挂在活跃轮次里：办事不是等它让出槽位才跑起来的
+  const busyLog = readFileSync(join(root, 'logs', 'task-om_busy_111111.log'), 'utf8');
+  assert.equal(busyLog.includes('RESULT '), false, '群任务应仍在活跃轮次（未产出终态）');
+  rmFixture(root);
+});
+
+// 终态一旦选定，条目就该立刻销账：回执要走几次飞书往返（办事那条还带退避重试），这段时间里
+// 若还能从旧条目看到「等回复」，人一个 /stop 就会拿到「已停止」，而回执路径仍在投「已完成」。
+test('端到端（stub）：办事终态回执在途时，旧等待条目已销账，/stop 不再当残留态处置', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-do-terminal-')));
+  const home = join(root, 'home');
+  mkdirSync(home, { recursive: true });
+  const cfgPath = writeConfig(root, makeRepo(root), { errandCwd: home });
+  const larkLogPath = join(root, 'lark-calls.log');
+  const awaitingPath = join(root, 'state', 'awaiting.jsonl');
+  const { ok, stderr } = await runFedListener({
+    cfgPath, root, turns: 'ask:要连子目录一起算吗;pass:Downloads 占 42G',
+    // 只卡「办事完成」那一条：/tasks 与 /stop 的回执要能照常送达，否则拿不到判据
+    env: { STUB_SLOW_IM_S: '8', STUB_SLOW_IM_MATCH: '办事完成' },
+    feed: async (send) => {
+      send(dmLine({ message_id: 'om_do_999999', content: '/do 看下 Downloads' }));
+      if (!await poll(() => existsSync(awaitingPath) && readFileSync(awaitingPath, 'utf8').includes('"waiting":true'))) return false;
+      send(dmLine({ message_id: 'om_dm_ans111', content: '算上子目录' })); // 单条在等，直发即路由
+      // 判据必须落在窗口里：stub 在挂起前写下调用行，日志里出现「办事完成」即说明回执正卡在往返中。
+      // 等到窗口过去再问就没有分辨力了——那时两版行为一致。
+      if (!await poll(() => readFileSync(larkLogPath, 'utf8').includes('办事完成'))) return false;
+      assert.equal(readFileSync(awaitingPath, 'utf8').trim(), '', '终态选定即销账，不该等回执发完');
+      send(dmLine({ message_id: 'om_dm_ck1111', content: '/stop' }));
+      return poll(() => readFileSync(larkLogPath, 'utf8').includes('当前没有在册任务'));
+    },
+  });
+  assert.ok(ok, `终态在途时 /stop 应回「当前没有在册任务」：\n${stderr?.().slice(-800)}`);
+  const calls = readFileSync(larkLogPath, 'utf8');
+  assert.equal(calls.includes('办事已停止'), false, '销账之后不该再按残留态回一句「已停止」');
+  // stub 在挂起前就写下调用行，故这条断言的是「完成回执确已发出」——正是它在途的那段窗口
+  assert.ok(calls.includes('办事完成'), '完成回执应已发出（本用例观测的就是它在途那段）');
+  rmFixture(root);
+});
+
+test('端到端（stub）：/tasks 把办事条目与需求任务区分开', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-do-tasks-')));
+  const cfgPath = writeConfig(root, makeRepo(root));
+  const larkLogPath = join(root, 'lark-calls.log');
+  seedAwaiting(root, 2, (i) => (i === 0 ? { errand: true, branch: '', worktree: root, title: '清一下 tmp' } : {}));
+  const { ok } = await runListener({
+    cfgPath, root, verdict: 'pass',
+    events: [dmLine({ message_id: 'om_do_444444', content: '/tasks' })],
+    until: () => existsSync(larkLogPath) && readFileSync(larkLogPath, 'utf8').includes('清一下 tmp'),
+  });
+  assert.ok(ok, '/tasks 应列出办事条目');
+  const calls = readFileSync(larkLogPath, 'utf8');
+  assert.ok(calls.includes('办事'), `办事条目应有可辨识的标记：${calls}`);
+  assert.ok(calls.includes('旧任务 1'), '需求任务照常列出');
+  rmFixture(root);
+});
+
 test('validateConfig：maxOpenTasks / botName 可省略，给了则须合法', () => {
   const base = {
     chatId: 'c', profile: 'p', repoPath: '/r', worktreesDir: '/w', stateDir: '/s', logsDir: '/l',
@@ -1250,4 +1477,16 @@ test('validateConfig：maxOpenTasks / botName 可省略，给了则须合法', (
   assert.ok(validateConfig({ ...base, maxOpenTasks: 2.5 }).some((e) => e.includes('maxOpenTasks')));
   assert.ok(validateConfig({ ...base, botName: '' }).some((e) => e.includes('botName')));
   assert.ok(validateConfig({ ...base, botName: 7 }).some((e) => e.includes('botName')));
+});
+
+test('validateConfig：errandCwd 可省略（省略即家目录），给了则须非空字符串', () => {
+  const base = {
+    chatId: 'c', profile: 'p', repoPath: '/r', worktreesDir: '/w', stateDir: '/s', logsDir: '/l',
+    dmOpenId: 'o', claudeBin: 'claude', larkBin: 'lark-cli',
+    concurrency: 1, taskTimeoutMs: 1000, minTextLength: 10,
+    reactions: { claimed: 'a', done: 'b', failed: 'c', escalate: 'd', skipped: 'e', context: 'f', stopped: 'g' },
+  };
+  assert.equal(validateConfig({ ...base, errandCwd: '/Users/me' }).length, 0);
+  assert.ok(validateConfig({ ...base, errandCwd: '' }).some((e) => e.includes('errandCwd')));
+  assert.ok(validateConfig({ ...base, errandCwd: 7 }).some((e) => e.includes('errandCwd')));
 });

@@ -2,6 +2,7 @@
 // 判断在 claude 会话里；这里只有机械动作与回应。进程组收割纪律在 session.mjs。
 import { execFile } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, existsSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseResult } from './result.mjs';
@@ -11,12 +12,23 @@ import { startSession, killActiveChildren } from './session.mjs';
 export { killActiveChildren };
 
 const TPL_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', 'bootstrap-prompt.md');
+const ERRAND_TPL_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', 'errand-prompt.md');
+
+// 办事会话的起点：不配就是家目录。会话自己能 cd 出去，这只定起点与默认加载哪份 CLAUDE.md。
+export const errandCwd = (config) => config.errandCwd || homedir();
 
 // messageId → 运行时。挂起（等私信回复）的会话也在此登记，injectReply/killSession 按它寻址。
 const liveTasks = new Map();
 
 const REPLY_FRAME = (text) => `用户对上一轮问题的私信回复如下（原文）：\n${text}\n——继续按无人值守契约执行，本轮结束仍以 RESULT 行收尾；后续拿不准的点用 verdict=ask + question 收轮提问（不要用 escalate/fused），等自己布的后台工作用 verdict=working。若上一轮的后台工作已被中断（如 cr/round-N/ 有 instructions 却无 verdict.json、后台进程已不在），先重跑该轮再继续。`;
+const ERRAND_REPLY_FRAME = (text) => `用户对上一轮问题的私信回复如下（原文）：\n${text}\n——接着把这件事办完，本轮结束仍以 RESULT 行收尾；拿不准的点与不可逆动作用 verdict=ask + question 收轮确认，等自己布的后台工作用 verdict=working。`;
+// 办事会话读不懂也不该照做 harness 那套契约（机审轮次、MR、沉淀），续跑框必须按标记分叉。
+const replyFrame = (target, text) => (target?.errand ? ERRAND_REPLY_FRAME(text) : REPLY_FRAME(text));
 const CORRECTION_MSG = '上一轮输出未以 RESULT 行收尾，违反无人值守契约。立即单独补发一行结果行（RESULT + 单行 JSON），不要其他内容。';
+// 办事的合法 verdict：事情办完了（pass）、办不成（fail）、等你拍板（ask）、等自己布的后台工作（working）。
+// 用户直接吩咐的事不存在「这不是任务」，故没有 skip；escalate/fused 是 harness 旧契约，与办事无关。
+const ERRAND_VERDICTS = new Set(['ask', 'working', 'pass', 'fail']);
+const errandCorrection = (why) => `上一轮的结果行不符合办事契约：${why}。verdict 只接受 ask / working / pass / fail（办事没有 skip），pass 的 summary 必须写清办成什么样——用户只看得到那句话。立即单独补发一行合法的结果行（RESULT + 单行 JSON），不要其他内容。`;
 
 function git(repo, args) {
   return new Promise((res, rej) => {
@@ -27,6 +39,16 @@ function git(repo, args) {
 function stamp(d = new Date()) {
   const p = (n) => String(n).padStart(2, '0');
   return `${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+}
+
+function renderErrandPrompt(task, cwd) {
+  return readFileSync(ERRAND_TPL_PATH, 'utf8')
+    .replaceAll('{{SENDER}}', task.senderOpenId ?? '')
+    .replaceAll('{{TIME}}', task.receivedAt ?? '')
+    .replaceAll('{{MESSAGE_ID}}', task.messageId)
+    .replaceAll('{{CWD}}', cwd)
+    // 函数形式 + 最后替换：与 renderPrompt 同理，办事正文是任意用户文本
+    .replaceAll('{{TASK_TEXT}}', () => task.text);
 }
 
 function renderPrompt(task, branch, chatId) {
@@ -88,25 +110,53 @@ async function swapReaction(lark, messageId, newKey, currentRid) {
 // 只发 question 会让用户拿不到决策依据。
 function askDmText(rt, question, progress) {
   const progressLine = progress ? `\n进展：${progress}` : '';
-  return `⏳ ${rt.title} 需要你拍板\n问题：${question}${progressLine}\n分支：${rt.branch}\nworktree：${rt.worktree}\n直接回复本消息即可续跑；多任务在等时请引用本条回复。`;
+  // 办事没有分支与现场，报的是它在哪个目录办——报一个空分支只会让人以为出了错。
+  const where = rt.errand ? `目录：${rt.worktree}` : `分支：${rt.branch}\nworktree：${rt.worktree}`;
+  return `⏳ ${rt.title} 需要你拍板\n问题：${question}${progressLine}\n${where}\n直接回复本消息即可续跑；多任务在等时请引用本条回复。`;
 }
 
 // kind='background'：会话在等自己布的后台工作（钩子、机审 CR），不是在等人——
 // 不发私信、不换表情（群里保持接单态：它确实还在干活）。登记照落：后台工作随 bot 重启
 // 一并被杀时，自唤醒信号永不到来，这条登记是回复「继续」能把它捞回来的唯一凭据。
-async function goWaiting(rt, question, progress, kind = 'user') {
+// 等待态转换要能被终态处置等到：它中间隔着两次飞书往返，而 /stop 随时可能在这期间落定。
+// 记下在途的那一次，settle 的回执排在它后面——已经发出去的提问收不回来，至少不能让
+// 「已停止」抢在它前面到达，那读起来就是「停完了还在问」。
+function goWaiting(rt, question, progress, kind = 'user') {
+  const p = waitingTransition(rt, question, progress, kind)
+    .finally(() => { if (rt.transition === p) rt.transition = null; });
+  rt.transition = p;
+  return p;
+}
+
+async function waitingTransition(rt, question, progress, kind) {
   rt.state = kind === 'background' ? 'background' : 'waiting';
   rt.correctionUsed = false;
   let qMsgId = '';
   if (kind !== 'background') {
+    // 换表情排在发问之前：问题一旦可见，回复随时可能到达，而下面这次 onAsk 才是回复能路由
+    // 回来的唯一凭据。夹在两者之间的表情调用失败要等两次 30s 超时，那段窗口里到达的回复
+    // 找不到 awaiting 条目，会被判成「当前没有等待回复的任务」并记 processed——就此永久丢失。
+    const rid = await swapReaction(rt.lark, rt.task.messageId, rt.config.reactions.escalate, rt.statusRid);
+    // 这两次飞书往返期间控制面可能把任务停掉（/stop 走 settle：终态表情已打、awaiting 条目已删）。
+    // 停止是终态，迟到的这半程必须整个作废——继续发问会让人在停止回执之后又收到一条提问，
+    // 继续 onAsk 会把刚收拾干净的条目以「等回复」复活。rt.statusRid 也不回写：它已指向终态表情。
+    // pause 只置 stopping、不置 settled，它本就要借这条路径补一个等待态，故判据只看 settled。
+    if (rt.settled) {
+      if (rid) await rt.lark.deleteReaction(rt.task.messageId, rid); // 撤掉刚打上的过期 ⚠️
+      return;
+    }
+    rt.statusRid = rid;
     qMsgId = await rt.lark.sendDm(rt.config.dmOpenId, askDmText(rt, question, progress));
-    rt.statusRid = await swapReaction(rt.lark, rt.task.messageId, rt.config.reactions.escalate, rt.statusRid);
+    if (rt.settled) return;
   }
   try {
     rt.hooks.onAsk?.({
       messageId: rt.task.messageId, threadId: rt.task.threadId ?? '', branch: rt.branch,
       worktree: rt.worktree, sessionId: rt.sessionId, question,
       questionMsgId: qMsgId || '', statusRid: rt.statusRid, title: rt.title, kind,
+      // 办事标记与 kind 正交（办事同样会 user / background 地等）：懒续跑与在册视图靠它
+      // 认出这条不是需求任务——丢了它，重启后续跑的办事会话会收到 harness 契约的续跑框。
+      errand: rt.errand ?? false,
       // 免清场标记必须随登记条目持久化：bot 重启后经懒续跑重建的值班会话丢了它，一个 skip 就会清掉用户检出。
       preserveWorktree: rt.preserveWorktree ?? false,
     });
@@ -116,13 +166,40 @@ async function goWaiting(rt, question, progress, kind = 'user') {
   }
 }
 
+// 办事的终态私信不是通知而是交付：任务失手了还有 worktree 与 MR 可事后翻，办事的产物只有这一句话。
+// 故不吃 lark 那套「尽力而为、失败即算了」——多试几次；彻底送不出去就把原文整段写进 stderr
+// （launchd.err.log 是它最后的落点），连同会话日志路径一并给出，人还能捞回来。
+// sendDm 成功时可能回空串（应答缺 message_id），只有 null 才是失败，判据不能用真值。
+async function deliverErrand(rt, text) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt) await new Promise((r) => setTimeout(r, 1000 * attempt));
+    const id = await rt.lark.sendDm(rt.config.dmOpenId, text);
+    if (id !== null && id !== undefined) return true;
+  }
+  console.error(`[runner] 办事结论投递失败（私信三次均未送出），日志 ${rt.logPath}，原文：\n${text}`);
+  return false;
+}
+
 async function settle(rt, verdict, { why, result } = {}) {
   if (rt.settled) return;
   rt.settled = true;
   // 只删指向自己的登记：懒续跑可能已用新运行时覆盖同 key，误删会让后续回复重复起会话。
   if (liveTasks.get(rt.task.messageId) === rt) liveTasks.delete(rt.task.messageId);
+  // 落盘的等待条目必须在这里、在任何外部 await 之前一并销掉。下面的终态表情与回执要走几次
+  // 飞书往返（办事的回执还带退避重试），而运行时此刻已不在活表：这段时间里 /tasks 会从那条
+  // 旧条目把它重新显示成「等回复」，/stop 走「无进程的残留态」分支照样回一句「已停止」，
+  // 而本函数仍会继续把「已完成」投出去——同一件事两条互相打脸的回执。
+  try {
+    rt.hooks?.onSettling?.({ messageId: rt.task.messageId });
+  } catch (e) {
+    console.error(`[runner] onSettling 回调失败：${e.message}`);
+  }
   // stopped 是人工叫停：必须立刻断掉进程组，不能等它把当前轮跑完。
   if (verdict === 'stopped') rt.session?.kill(); else rt.session?.endInput();
+  // 刹车本身（上面那一下）不等任何东西；等的只是回执。在途的等待态转换可能正卡在飞书往返里，
+  // 它自己会复核 settled 并整体作废（不登记、撤掉过期表情），这里只等它退出，好让终态回执
+  // 排在那条已经发出的提问后面。
+  if (rt.transition) { try { await rt.transition; } catch { /* 转换内部已自行记录 */ } }
   const { config, lark, task } = rt;
   if (verdict === 'skip') {
     // 值班任务跑在线程既有检出上：skip 也不得清场——cleanupWorktree 会删掉用户的检出与需求分支。
@@ -133,16 +210,27 @@ async function settle(rt, verdict, { why, result } = {}) {
     const takeover = rt.sessionId
       ? `cd ${rt.worktree} && claude --resume ${rt.sessionId}`
       : `cd ${rt.worktree} && claude`;
-    await lark.sendDm(config.dmOpenId,
-      `🛑 任务已停止（${why}）\n${rt.title}\n分支：${rt.branch}\nworktree：${rt.worktree}\n如需接管：${takeover}`);
+    await lark.sendDm(config.dmOpenId, rt.errand
+      ? `🛑 办事已停止（${why}）\n${rt.title}\n目录：${rt.worktree}\n如需接管：${takeover}`
+      : `🛑 任务已停止（${why}）\n${rt.title}\n分支：${rt.branch}\nworktree：${rt.worktree}\n如需接管：${takeover}`);
   } else if (verdict === 'pass') {
     rt.statusRid = await swapReaction(lark, task.messageId, config.reactions.done, rt.statusRid);
-    await lark.sendDm(config.dmOpenId,
-      `✅ 任务完成\nMR：${result?.mr_url || '（RESULT 未带链接）'}\n分支：${rt.branch}\n摘要：${result?.summary || ''}`);
+    // 办事的交付物就是 summary 那句话：它没有 MR 也没有分支，报出来只会是两行空字段。
+    // 空 summary 到不了这里——handleEvent 的办事契约先纠偏、再按 fail 收束。
+    if (rt.errand) await deliverErrand(rt, `✅ 办事完成\n${rt.title}\n目录：${rt.worktree}\n${result?.summary || ''}`);
+    else {
+      await lark.sendDm(config.dmOpenId,
+        `✅ 任务完成\nMR：${result?.mr_url || '（RESULT 未带链接）'}\n分支：${rt.branch}\n摘要：${result?.summary || ''}`);
+    }
   } else {
     rt.statusRid = await swapReaction(lark, task.messageId, config.reactions.failed, rt.statusRid);
-    await lark.sendDm(config.dmOpenId,
-      `❌ 任务未完成（${why}）\nworktree：${rt.worktree}\n日志：${rt.logPath}\nreason：${result?.reason || ''}`);
+    if (rt.errand) {
+      await deliverErrand(rt,
+        `❌ 办事未完成（${why}）\n${rt.title}\n目录：${rt.worktree}\n日志：${rt.logPath}\nreason：${result?.reason || ''}`);
+    } else {
+      await lark.sendDm(config.dmOpenId,
+        `❌ 任务未完成（${why}）\nworktree：${rt.worktree}\n日志：${rt.logPath}\nreason：${result?.reason || ''}`);
+    }
   }
   rt.finish({ verdict, branch: rt.branch, worktree: rt.worktree, logPath: rt.logPath });
 }
@@ -189,10 +277,21 @@ async function handleEvent(rt, ev) {
     return goWaiting(rt, `本轮以 API 错误收场：${truncate(ev.text)}\n（回复任意内容即重试；可先用 /model <名> 或 /effort <级> 调整后再回复）`);
   }
   const result = parseResult(ev.text);
-  if (!result) {
-    if (rt.correctionUsed) return settle(rt, 'fail', { why: '连续两轮无有效 RESULT 行' });
+  // 解析器是任务与办事共用的，办事那两条契约只能在这里收：
+  // 一、verdict 白名单。落进 skip 分支就是「只换个表情、一句回音都没有」，落进 escalate/fused
+  //     则会把 harness 的接管文案发给一件杂活。
+  // 二、pass 必须带 summary。办事没有 MR 这种能自己说话的产物，那句话就是交付物本身；
+  //     空 summary 的 pass 是一条「办完了，但不告诉你办成什么样」的回执。
+  const breach = rt.errand && result && (
+    !ERRAND_VERDICTS.has(result.verdict) ? `办事契约不接受 verdict=${result.verdict}`
+      : (result.verdict === 'pass' && !String(result.summary ?? '').trim()) ? '办事的 pass 缺 summary（结论就是交付物）'
+        : '');
+  if (!result || breach) {
+    if (rt.correctionUsed) {
+      return settle(rt, 'fail', { why: breach || '连续两轮无有效 RESULT 行' });
+    }
     rt.correctionUsed = true;
-    return rt.session.send(CORRECTION_MSG);
+    return rt.session.send(breach ? errandCorrection(breach) : CORRECTION_MSG);
   }
   rt.correctionUsed = false;
   if (result.verdict === 'ask') {
@@ -250,7 +349,7 @@ function startTurnLoop(init) {
 export function taskSnapshot() {
   return [...liveTasks.values()].filter((rt) => !rt.settled && !rt.stopping).map((rt) => ({
     messageId: rt.task.messageId, short: rt.task.messageId.slice(-6), title: rt.title,
-    branch: rt.branch, worktree: rt.worktree, state: rt.state,
+    branch: rt.branch, worktree: rt.worktree, state: rt.state, errand: !!rt.errand,
     startedAt: rt.startedAt, sessionId: rt.sessionId || rt.session?.sessionId || '',
   }));
 }
@@ -295,7 +394,7 @@ export async function injectReply(messageId, replyText) {
   }
   // 活跃态注入直接进 stdin（stream-json 输入按序排队，成为下一轮输入）：自唤醒转活跃与
   // 用户回复并发的窗口里若退回懒续跑，会对同一 worktree 起第二个进程。
-  rt.session.send(REPLY_FRAME(replyText));
+  rt.session.send(replyFrame(rt, replyText));
   return true;
 }
 
@@ -334,9 +433,19 @@ export async function resumeTask(info, replyText, config, lark, hooks = {}) {
   // 把它补回来），此时无表情可换：飞书 reaction 按 (user, emoji) 唯一，再 add 一次拿不到第二枚，
   // 随后的 del 撤掉的正是它自己，于是从续跑到终态（可能数小时）群消息上零表情——而「没表情」
   // 等于「bot 没看见」。
-  const claimedRid = CLAIMED_STATUS_KINDS.has(info.kind)
+  const reusedRid = CLAIMED_STATUS_KINDS.has(info.kind);
+  const claimedRid = reusedRid
     ? info.statusRid
     : await swapReaction(lark, info.messageId, config.reactions.claimed, info.statusRid);
+  // 上面那次表情往返（失败时最坏两次 30s 超时）里控制面可能把这条停掉：新运行时还没进活表，
+  // /stop 走的是「无进程的残留态」分支——删条目、发 🛑 回执。此刻再 spawn 就是「已停止」之后
+  // 凭空多出一个跑着的会话，它不在任何在册视图里，也再没有刹车能停它。
+  if (hooks.stillWanted && !hooks.stillWanted()) {
+    // 只撤本次打上去的那枚：background / stranded 复用的是群里那枚接单表情，/stop 已经收拾过了。
+    if (!reusedRid && claimedRid) await lark.deleteReaction(info.messageId, claimedRid);
+    console.error(`[runner] 懒续跑期间被叫停，不再起会话：${info.messageId}`);
+    return { verdict: 'stopped', branch: info.branch, worktree: info.worktree, logPath: '' };
+  }
   // 回执时机落在上面两道关之后：worktree 或 sessionId 缺一，这条路径发的就是 ❌，
   // 调用方若在调用之初先乐观报一句「已续跑」，同一个动作会变成两条相互矛盾的私信。
   try {
@@ -346,10 +455,34 @@ export async function resumeTask(info, replyText, config, lark, hooks = {}) {
   }
   return startTurnLoop({
     task, config, lark, hooks, branch: info.branch, worktree: info.worktree, logPath,
-    statusRid: claimedRid, sessionId: info.sessionId ?? '', title: info.title || 'harness 任务',
+    statusRid: claimedRid, sessionId: info.sessionId ?? '',
+    title: info.title || (info.errand ? '办事' : 'harness 任务'),
     resumeSessionId: info.sessionId, resumeFlags: info.resumeFlags ?? [],
-    preserveWorktree: info.preserveWorktree ?? false,
-    firstMessage: REPLY_FRAME(replyText),
+    preserveWorktree: info.preserveWorktree ?? false, errand: info.errand ?? false,
+    firstMessage: replyFrame(info, replyText),
+  });
+}
+
+// 办事任务：在用户自己的目录（缺省家目录）起会话，不建 worktree、不建分支、任何终态都不清场。
+// 与值班任务同形，区别只在 prompt 与全程的对外文案——它不产 MR，交付物是那句 summary。
+export async function runErrandTask(task, config, lark, hooks = {}) {
+  mkdirSync(config.logsDir, { recursive: true });
+  const cwd = errandCwd(config);
+  const logPath = join(config.logsDir, `task-${task.messageId}.log`);
+  if (!existsSync(cwd)) {
+    // 起点不在就别 spawn：ENOENT 只会以「会话进程退出且无有效 RESULT 行」的面目落地，
+    // 而真正该修的是 config.errandCwd。
+    await lark.addReaction(task.messageId, config.reactions.failed);
+    await lark.sendDm(config.dmOpenId,
+      `❌ 办事未启动：目录不存在（尚未运行，无会话日志）\n目录：${cwd}\n检查 config.json 的 errandCwd`);
+    return { verdict: 'fail', branch: '', worktree: cwd, logPath: '' };
+  }
+  const claimedRid = await lark.addReaction(task.messageId, config.reactions.claimed);
+  return startTurnLoop({
+    task, config, lark, hooks, branch: '', worktree: cwd, logPath,
+    statusRid: claimedRid, sessionId: '', title: sessionName(task.text),
+    errand: true, preserveWorktree: true,
+    firstMessage: renderErrandPrompt(task, cwd),
   });
 }
 

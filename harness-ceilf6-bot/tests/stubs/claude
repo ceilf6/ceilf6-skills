@@ -32,6 +32,8 @@ if (process.env.STUB_GRANDCHILD) {
 
 const args = process.argv.slice(2);
 if (process.env.STUB_ARGS_OUT) writeFileSync(process.env.STUB_ARGS_OUT, args.join('\n') + '\n');
+// 会话起在哪个目录只有子进程自己知道：spawn 的 cwd 不进 argv，调用方无从断言。
+if (process.env.STUB_CWD_OUT) writeFileSync(process.env.STUB_CWD_OUT, process.cwd() + '\n');
 const turns = (process.env.STUB_TURNS ?? process.env.STUB_VERDICT ?? 'pass').split(';');
 const SESSION = process.env.STUB_SESSION_ID ?? 'sess_stub_1';
 // STUB_SPLIT_MULTIBYTE：把事件行在首个多字节 UTF-8 字符中间劈成两个先后到达的 chunk，
@@ -55,8 +57,14 @@ function resultLineFor(kind, arg) {
     if (s) obj.summary = s;
     return 'RESULT ' + JSON.stringify(obj);
   }
+  // pass:<摘要> 让用例给出一句只属于自己的结论：固定摘要「完成」与回执模板里的字样重合，
+  // 拿它断言「私信里带上了摘要」永远为真。emptypass 是合法 JSON 但漏了交付字段的形态。
+  if (kind === 'pass' && arg) {
+    return 'RESULT ' + JSON.stringify({ verdict: 'pass', branch: 'b', mr_url: 'https://mr/9', summary: arg });
+  }
   return {
     pass: 'RESULT {"verdict":"pass","branch":"b","mr_url":"https://mr/9","summary":"完成"}',
+    emptypass: 'RESULT {"verdict":"pass","branch":"b","mr_url":"https://mr/9","summary":""}',
     skip: 'RESULT {"verdict":"skip","reason":"闲聊"}',
     fail: 'RESULT {"verdict":"fail","reason":"跑挂了"}',
     escalate: 'RESULT {"verdict":"escalate","reason":"需求不明确"}',

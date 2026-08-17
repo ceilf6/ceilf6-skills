@@ -15,8 +15,18 @@ if [ "${STUB_FAIL_FIRST:-0}" = "1" ] && [ "$calls" -eq 1 ]; then
   echo '{"ok":false,"error":"stub 注入的首次失败"}' >&2
   exit 1
 fi
+# STUB_SLOW_IM_MATCH=<子串>：只让内容含该子串的私信挂住，其余照常。要观测「某一条回执还在
+# 途中」的窗口时必须能这样点名——一律挂住会把窗口里用来做判据的 /tasks、/stop 回执一起拖住。
 if [ -n "${STUB_SLOW_IM_S:-}" ] && [ "$1" = "im" ]; then
-  sleep "$STUB_SLOW_IM_S"
+  case "${STUB_SLOW_IM_MATCH:-}" in
+    "") sleep "$STUB_SLOW_IM_S" ;;
+    *) case "$*" in *"$STUB_SLOW_IM_MATCH"*) sleep "$STUB_SLOW_IM_S" ;; esac ;;
+  esac
+fi
+# STUB_SLOW_API_S=<秒>：表情调用（api）挂住指定时长，用来把「任务已收下、状态表情还没回来」
+# 的启动窗口撑到可观测。日志行同样在挂起前已写下，调用方据此知道自己已进入窗口。
+if [ -n "${STUB_SLOW_API_S:-}" ] && [ "$1" = "api" ]; then
+  sleep "$STUB_SLOW_API_S"
 fi
 if [ "$1" = "event" ] && [ "${2:-}" = "consume" ]; then
   echo "[event] ready event_key=im.message.receive_v1" >&2
