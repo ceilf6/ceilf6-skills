@@ -3,7 +3,7 @@
 #   group   --ctx-dir <路径> [--dry-run]                       建群并把 reviewer 拉进来
 #   request --ctx-dir <路径> [--message <文案>] [--dry-run]     一键提醒 RD 并往群里发求CR消息
 #   qa      --ctx-dir <路径> [--message <文案>] [--dry-run]     一键提醒 QA 并往群里发消息
-#   wip     --ctx-dir <路径> [--dry-run]                       返工时给 MR 挂 WIP
+#   wip     --ctx-dir <路径> [--dry-run]                       建 MR 后与返工时给 MR 挂 WIP（发起CR 前恒 WIP）
 # 拆成独立子命令是因为返工只需重新喊人：群一旦建成就长期有效，回退到开发再走一遍时不必重建。
 # 名单不设配置：现读 MR 上建 MR 时自动配置的 reviewer（bits mr reviewer info）。
 # 完成判据分两类——group 宽容（群多半已在，建群失败、拉人失败都只告警）；request 与 qa 严格

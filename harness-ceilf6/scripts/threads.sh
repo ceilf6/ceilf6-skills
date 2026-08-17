@@ -219,6 +219,35 @@ cmd_set_node() { # 看板手控入口：把当前节点钉为 <目标>——其�
   progress_line "$meta"
 }
 
+cmd_rework() { # 续入返工入口（会话续入 / bot 值班修评论）：里程碑退回「开发」——plan_gate 与 mr_created 保留
+               # （计划门不重过、MR 复用），其余七键整体删除，拉群 / 发起CR / 发起QA 也在内：返工后要重新喊人，
+               # 这三键若残留，返工走到自测后九键再度齐备、看板直接显示待合入，摘 WIP 与提醒都没有入口。
+               # cr_chat_id 不动（群不重建）。有 MR 即挂回 WIP（bytedcli 单点在 cr-group.sh）：返工的 MR
+               # 回到「发起CR」之前的状态；挂载失败只告警不阻断——MR 可能已合入，返工现场比一次 WIP 调用重要。
+  local ctx="" meta tmp mr cg
+  while [ $# -gt 0 ]; do
+    case "$1" in --ctx-dir) ctx="${2:?--ctx-dir 需要值}"; shift 2 ;; *) usage ;; esac
+  done
+  [ -n "$ctx" ] || die "用法：${0##*/} rework --ctx-dir <路径>"
+  meta="$ctx/meta.json"
+  [ -f "$meta" ] || die "缺 meta.json：${ctx}"
+  tmp=$(mktemp)
+  jq '.milestones = ((.milestones // {}) | with_entries(select(.key == "plan_gate" or .key == "mr_created")))' \
+    "$meta" > "$tmp" || die "meta 不可解析：${meta}"
+  mv "$tmp" "$meta"
+  echo "harness-threads: 续入返工，里程碑退回开发（plan_gate/mr_created 保留）"
+  mr=$(jq -r '.mr_id // empty' "$meta")
+  if [ -n "$mr" ]; then
+    # 同目录优先（检出里跑的是自己那份）；经 ~/.local/bin 的 ht 符号链接进来时同目录没有，退到安装路径
+    cg="$(cd "$(dirname "$0")" && pwd)/cr-group.sh"
+    [ -f "$cg" ] || cg="$HOME/.claude/skills/harness-ceilf6/scripts/cr-group.sh"
+    if [ -f "$cg" ] && bash "$cg" wip --ctx-dir "$ctx"; then :; else
+      echo "harness-threads: 警告——MR ${mr} 挂 WIP 失败（MR 可能已合入），返工现场不受影响，需要时手动 bits mr update --wip" >&2
+    fi
+  fi
+  progress_line "$meta"
+}
+
 cmd_undone() { # 撤销完成：status 回落 awaiting_human、milestones 不动——回到待合入，不是回退节点
   local ctx="" meta tmp
   while [ $# -gt 0 ]; do
@@ -315,6 +344,7 @@ usage() {
   ht progress --ctx-dir <路径>      输出该线程节点进度图
   ht set-node --ctx-dir <路径> <节点|done>   看板手控：当前节点绝对定位（推进/回退）
   ht undone --ctx-dir <路径>             撤销完成（status 回落，milestones 不动）
+  ht rework --ctx-dir <路径>             续入返工：重置 plan_gate/mr_created 之外的里程碑，有 MR 即挂 WIP
   ht note --ctx-dir <路径> [文本]        线程备注（省略文本即清除）
   ht retitle --ctx-dir <路径> <新短题>   改列表与看板上的短题
   ht web [--port 7657]              本地节点看板（127.0.0.1）
@@ -654,6 +684,7 @@ case "$cmd" in
   progress) cmd_progress "$@" ;;
   set-node) cmd_set_node "$@" ;;
   undone) cmd_undone "$@" ;;
+  rework) cmd_rework "$@" ;;
   note) cmd_note "$@" ;;
   retitle) cmd_retitle "$@" ;;
   -h|--help) usage ;;

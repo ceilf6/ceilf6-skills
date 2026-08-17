@@ -517,5 +517,44 @@ check_die "clean 拒绝主检出（.git 为符号链接）" "主检出" bash "$T
 [ -d "$LNK" ] && ok "符号链接主检出安然无恙" || bad "符号链接主检出被删"
 cleanup_env
 
+echo "== rework：续入返工——后段里程碑整体重置、有 MR 挂 WIP =="
+make_env
+make_repo repo-rw feat/rw awaiting_human
+export STUB_STATE; STUB_STATE=$(mktemp -d)
+OLDPATH="$PATH"; PATH="$HERE/stubs:$PATH"
+jq '.mr_id="8300031" | .cr_chat_id="oc_keep" | .milestones={plan_gate:"t1",dev_done:"t2",cr_passed:"t3",mr_created:"t4",human_cr_done:"t5",selftest_done:"t6",cr_group_created:"t7",cr_requested:"t8",qa_requested:"t9"}' \
+  "$CTX/meta.json" > "$CTX/m.tmp" && mv "$CTX/m.tmp" "$CTX/meta.json"
+rc=0; out=$(bash "$TH" rework --ctx-dir "$CTX" 2>&1) || rc=$?
+[ "$rc" = 0 ] && ok "rework exit 0" || bad "rework exit $rc: $out"
+keys=$(jq -c '.milestones | keys' "$CTX/meta.json")
+[ "$keys" = '["mr_created","plan_gate"]' ] && ok "只保留 plan_gate/mr_created" || bad "里程碑残留：$keys"
+[ "$(jq -r .cr_chat_id "$CTX/meta.json")" = oc_keep ] && ok "cr_chat_id 保留（返工不重建群）" || bad "cr_chat_id 丢失"
+has "回到开发节点" '◉ 开发（当前）' "$out"
+calls=$(cat "$STUB_STATE/calls.log" 2>/dev/null || true)
+has "挂 WIP 调用" 'mr update --mr-id 8300031 --wip' "$calls"
+hasnt "不摘 WIP" '--wip false' "$calls"
+has "回显挂 WIP" '已挂 WIP' "$out"
+# 再跑一次：里程碑幂等、WIP 重复挂不报错
+rc=0; bash "$TH" rework --ctx-dir "$CTX" >/dev/null 2>&1 || rc=$?
+[ "$rc" = 0 ] && ok "重复 rework 幂等" || bad "重复 rework exit $rc"
+# 挂 WIP 失败：里程碑照常重置、exit 0、stderr 告警（MR 可能已合入）
+: > "$STUB_STATE/update_fail"
+jq '.milestones.selftest_done="t6"' "$CTX/meta.json" > "$CTX/m.tmp" && mv "$CTX/m.tmp" "$CTX/meta.json"
+rc=0; err=$(bash "$TH" rework --ctx-dir "$CTX" 2>&1 >/dev/null) || rc=$?
+[ "$rc" = 0 ] && ok "WIP 失败仍 exit 0" || bad "WIP 失败 exit $rc"
+has "WIP 失败告警" 'WIP' "$err"
+[ "$(jq -c '.milestones | keys' "$CTX/meta.json")" = '["mr_created","plan_gate"]' ] && ok "WIP 失败不影响重置" || bad "WIP 失败后里程碑未重置"
+rm -f "$STUB_STATE/update_fail"
+# 无 MR：零外部调用、exit 0
+rm -f "$STUB_STATE/calls.log"
+jq '.mr_id=null | .milestones={plan_gate:"t1",dev_done:"t2",cr_passed:"t3"}' "$CTX/meta.json" > "$CTX/m.tmp" && mv "$CTX/m.tmp" "$CTX/meta.json"
+rc=0; out=$(bash "$TH" rework --ctx-dir "$CTX" 2>&1) || rc=$?
+[ "$rc" = 0 ] && ok "无 MR exit 0" || bad "无 MR exit $rc"
+[ ! -f "$STUB_STATE/calls.log" ] && ok "无 MR 零调用" || bad "无 MR 有调用：$(cat "$STUB_STATE/calls.log")"
+[ "$(jq -c '.milestones | keys' "$CTX/meta.json")" = '["plan_gate"]' ] && ok "无 MR 也重置到 plan_gate" || bad "无 MR 重置异常"
+check_die "rework 缺 --ctx-dir" "ctx-dir" bash "$TH" rework
+PATH="$OLDPATH"; rm -rf "$STUB_STATE"
+cleanup_env
+
 echo; echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" = 0 ]
