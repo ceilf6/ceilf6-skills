@@ -14,7 +14,12 @@ Example for 2026-07-08:
 
 ## Body
 
-The body has up to three sections, in this order:
+Before drafting, apply the `no_reportable_activity` rule from
+`event-schema.md`: when no target-date event is reportable, do not create or
+update a document.
+
+A published report has two required sections and one optional section, in this
+order:
 
 ```markdown
 # 今日重点
@@ -46,8 +51,8 @@ Section rules:
 - `今日重点` holds the deep blocks for events marked `highlight: true` in the event ledger (0-2 per day, selection rules in event-schema.md). When no event qualifies, omit the whole `今日重点` section — never pad it with a routine item; 空洞的反思比没有反思更减分.
 - Each deep block needs all of 发现问题 / 解决过程 / 反思沉淀 / 证据. If the evidence cannot support all three narrative lines, downgrade the event to a `今日完成` bullet instead.
 - `解决过程` lists 2-4 key nodes (decisions made and how each was verified), not an operation-by-operation log.
-- `今日完成` keeps normal events to one summary line plus 1-3 nested evidence/detail lines.
-- `明日展望` contains 1-3 concrete bullets derived from unfinished events, explicit user input, and the configured plan reference.
+- `今日完成` is required for a published report and keeps normal events to one summary line plus 1-3 nested evidence/detail lines.
+- `明日展望` is required for a published report and contains 1-3 concrete bullets derived from unfinished events, explicit user input, and the configured plan reference.
 
 ## Writing Rules
 

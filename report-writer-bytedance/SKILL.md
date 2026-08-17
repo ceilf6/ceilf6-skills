@@ -40,12 +40,13 @@ When creating or updating Feishu docs, also read the current embedded Lark docs 
 6. Collect all available target-date user activity from ByteDance sources in `source-map.md` and local AI assistant sources in `local-ai-sources.md`. Start from explicit user links, then use broad user/date queries. Read underlying source content before deciding relevance.
 7. Read `report.plan_reference.url` only for `明日展望`. Treat it as a backlog or planning source, not evidence of completed work.
 8. Normalize findings into `WorkEvent` records, merge duplicate signals about the same work item, and mark highlights per the Highlight Selection rules in `event-schema.md` (at least 2 dimensions hit, at most 2 per day).
-9. Draft the report with `report-template.md`. Keep the body focused on work events; keep source diagnostics in the assistant response.
-10. Run the review loop from `review-panel.md`: serial mentor → 主管 → HR reviews, revise blocking findings, at most 2 revision rounds. If blocking findings remain after the second revision, stop and ask the user instead of publishing.
-11. Create or update the Feishu document with `lark-cli docs +create` or `lark-cli docs +update`, using Markdown content unless rich blocks are required.
-12. Verify by fetching the written document and, for new docs, confirming it appears under the configured parent wiki.
-13. Append to the SOP library when the trigger in `event-schema.md` Draft Mapping fires: add one entry to the `report.sop_library.url` document with the date, the SOP or reflection title, a one-line summary, and a link back to the day's report. If the append fails, keep the published report, and surface the error plus the pending entry in the assistant response.
-14. Return the document link, title/date, sources used, empty sources, skipped sources with reasons, review stats, SOP library status, and any assumptions. Do not send IM, email, group, bot, or webhook notifications.
+9. If there are no `completed`, `in_progress`, or `blocked` WorkEvents with target-date activity, do not create or update the daily report and do not append the SOP library. Return the coverage summary and finish with `<daily-report-result status="skipped" date="<YYYY-MM-DD>" reason="no_reportable_activity" />`.
+10. Draft the report with `report-template.md`. Keep the body focused on work events; keep source diagnostics in the assistant response.
+11. Run the review loop from `review-panel.md`: serial mentor → 主管 → HR reviews, revise blocking findings, at most 2 revision rounds. If blocking findings remain after the second revision, stop and ask the user instead of publishing.
+12. Create or update the Feishu document with `lark-cli docs +create` or `lark-cli docs +update`, using Markdown content unless rich blocks are required.
+13. Verify by fetching the written document and, for new docs, confirming it appears under the configured parent wiki.
+14. Append to the SOP library when the trigger in `event-schema.md` Draft Mapping fires: add one entry to the `report.sop_library.url` document with the date, the SOP or reflection title, a one-line summary, and a link back to the day's report. If the append fails, keep the published report, and surface the error plus the pending entry in the assistant response.
+15. Return the document link, title/date, sources used, empty sources, skipped sources with reasons, review stats, SOP library status, and any assumptions. Do not send IM, email, group, bot, or webhook notifications.
 
 ## Source Rules
 
@@ -56,6 +57,7 @@ When creating or updating Feishu docs, also read the current embedded Lark docs 
 - Treat local AI assistant sources as sensitive. Summarize work-relevant facts only; do not copy raw prompts or raw assistant transcripts into the report.
 - Treat calendar events as supporting evidence only. Include a meeting as work only when it produced a user-owned decision, action item, blocker resolution, review, or follow-up.
 - Treat empty query results as coverage evidence, not report content.
+- Treat daily report pages created by this automation as `self_generated_report_artifact` coverage only. Never turn the current or prior automated report into a WorkEvent.
 - Oncall is optional. Record unavailable Oncall coverage as skipped with the
   concrete reason. Never stop publication solely because Oncall is unavailable.
 - Only the runner may send a self-DM for configuration or task failure.
@@ -84,3 +86,7 @@ After creating or updating the daily report, respond with:
 - Review stats: findings per role, blocking/suggestion counts, revision rounds used, unadopted suggestions.
 - SOP library status: entry appended (with title), 本日无新增, or append failure with the pending entry.
 - Confirmation that no group notification was sent.
+
+When no target-date WorkEvent is reportable, return the same source coverage and
+skip reasons, state that no document or SOP entry was written, and end with the
+exact `no_reportable_activity` skipped sentinel from Daily Workflow step 9.
