@@ -10,7 +10,7 @@
 
 1. **环路速判**（`loop_suspect=true` 时先做）：逐条看 new_replies——若全部只是机器人对我们既有【bot】回复的跟评、不含新 finding，在 dispositions.md 记「环路，未处置」后直接收轮，不回复、不修复。
 2. **逐条三分法评判**：确凿需修复 / 确凿不成立 / 有疑点。判定依据：评论指向的代码现场 + plan.md 验收标准；作者是机器人还是人工按 author 与内容判断。「确凿需修复」以 MR 范围为前提：评论指向的问题在本次改动之前既已存在、且修复超出 plan.md 范围的，不入修复闭环——按 harness-ceilf6 的 MR 范围纪律记 `$CTX/out-of-scope.md` 另开线程跟进；机器人作者按「确凿不成立」行回复（措辞改为「范围外存量：<一句理由>，已挂账另开 harness 线程跟进」），人工作者照走 pending_user——范围裁量归开发者。
-3. **确凿需修复** → 走 harness-ceilf6 续入路径闭环（plan.md 验收增补、重置里程碑、TDD 修复、机审 CR 循环、squash → rebase → force-with-lease push 更新 MR），全部修完再统一回复。
+3. **确凿需修复** → 走 harness-ceilf6 续入路径闭环（plan.md 验收增补、重置里程碑、给 MR 挂回 WIP、TDD 修复、机审 CR 循环、squash → rebase → force-with-lease push 更新 MR），全部修完再统一回复。挂 WIP 是续入路径的固定步骤（`threads.sh rework` 重置里程碑时一并挂上）：评论打回即返工，MR 回到「发起CR」之前的状态，摘除留给开发者在看板重新点「发起CR」。
 4. **回复出口表**（一律经 `mr-comments.sh reply`，脚本会强制【bot】前缀）：
 
 | 作者 | 判定 | 动作 | 回复模板 | --handled |
