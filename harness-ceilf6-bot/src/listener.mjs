@@ -5,7 +5,7 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
 import { normalize } from './normalize.mjs';
-import { decide } from './filter.mjs';
+import { decide, mentionsBot } from './filter.mjs';
 import { appendContextEntry } from './context.mjs';
 import { Store } from './state.mjs';
 import { makeLark } from './lark.mjs';
@@ -19,6 +19,10 @@ import { startControlServer } from './control.mjs';
 // 必须是个确定的数而不是留空——`listen(undefined)` 会挑一个随机端口，看板与 runbook 里的
 // 命令就永远连不上，且现象是「连不上」而非「起不来」，无从排查。
 export const DEFAULT_CONTROL_PORT = 7659;
+
+// 接单水位出厂值：在册未完成任务（/tasks 列出的全部，含等人工 CR 的那些）达到它就不再接新单。
+// 限的是「人处理不过来」，不是「机器跑不过来」——后者由 concurrency 管。
+export const DEFAULT_MAX_OPEN_TASKS = 5;
 
 export function nextBackoff(attempt) {
   return Math.min(1000 * 2 ** attempt, 60_000);
@@ -53,6 +57,14 @@ export function validateConfig(config) {
   for (const k of ['concurrency', 'taskTimeoutMs', 'minTextLength']) {
     // 下界 > 0：concurrency=0 会收单记 processed 却永不执行，taskTimeoutMs<=0 秒杀所有任务——都是静默失败形态。
     if (typeof config[k] !== 'number' || Number.isNaN(config[k]) || config[k] <= 0) errs.push(`${k}（需正数）`);
+  }
+  // maxOpenTasks 可省略（省略即 DEFAULT_MAX_OPEN_TASKS）；<=0 会让 bot 一单不接、群里只剩拒单回复。
+  if (config.maxOpenTasks !== undefined && !(Number.isInteger(config.maxOpenTasks) && config.maxOpenTasks > 0)) {
+    errs.push('maxOpenTasks（可省略；给了则需正整数）');
+  }
+  // botName 可省略（省略即关掉 @ 旁路，满水位一律拒单）；给了就得是 bot 在群里的显示名。
+  if (config.botName !== undefined && (typeof config.botName !== 'string' || config.botName === '')) {
+    errs.push('botName（可省略；给了则需非空字符串）');
   }
   // controlPort 可省略（省略即 DEFAULT_CONTROL_PORT）；给了就必须是合法端口号。
   // 0 会让 listen 漂成 OS 随便派的端口（静默失败），3.5 / 70000 则要等到 listen 才抛
@@ -170,6 +182,19 @@ if (isMain) {
     });
     console.error(`[listener] 入队 ${ev.messageId}`);
     pump();
+  }
+
+  const maxOpenTasks = config.maxOpenTasks ?? DEFAULT_MAX_OPEN_TASKS;
+  const backlogReply = (open) =>
+    `我这边还压着 ${open} 个没走完人工 CR 的任务，先不接新单了。\n如有需要，@我 一下我就开做[送心]`;
+
+  // 拒单：不入队、不建现场，只在那条消息的话题里回一句为什么。
+  // 记 processed 与入队同理——事件重放不该让同一条消息再收一次回复；水位降下去后要它跑，重发一条即可。
+  async function rejectForBacklog(ev, open) {
+    store.markProcessed(ev.messageId);
+    // 首行进日志：@ 旁路只能按字面匹配 mention，不生效时这一行是唯一能看出 mention 渲染成什么样的地方。
+    console.error(`[listener] 拒单 ${ev.messageId}（在册 ${open} ≥ ${maxOpenTasks}）：${ev.text.split('\n')[0].slice(0, 60)}`);
+    await lark.replyInThread(ev.messageId, backlogReply(open));
   }
 
   // 话题内回复并进归属任务的 context/。已在跑的会话不会中途重读上下文，
@@ -560,6 +585,14 @@ if (isMain) {
           absorbReply(taskInfo, ev).catch((e) => console.error(`[listener] 回复处理异常：${e.message}`));
           return;
         }
+      }
+      // 接单水位：在册未完成任务满 maxOpenTasks 就不再接新单——积压的主体是等人工 CR 的任务，
+      // 机器再接只会让队伍更长。@ 了 bot 的是明确的人工指派，照接。
+      const open = registry().length;
+      if (open >= maxOpenTasks && !mentionsBot(ev.text, config.botName)) {
+        // 本回调是同步的，未捕获的 rejection 会按默认策略掀掉常驻进程。
+        rejectForBacklog(ev, open).catch((e) => console.error(`[listener] 拒单回复异常：${e.message}`));
+        return;
       }
       admit(ev);
     });

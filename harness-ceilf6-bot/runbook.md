@@ -38,6 +38,23 @@ bot 跑起来后随时可用，**控制命令由 listener 直接执行、不进�
 - **自然语言不生效**：话题里说「这个需求先在计划门节点暂停」只会被存进 `context/` 供下次续入用（📝），正在跑的会话读不到；短于 `minTextLength`（出厂 10 字）的句子连 📝 都不会有，被预滤直接丢弃。要停就发 `/stop`。
 - **后台运行中不打扰你**：会话把活丢给自己布的后台工作（pre-commit 全仓测试、机审 CR）时以 `verdict=working` 收轮，**不发私信、群里保持 👍**，后台跑完的自唤醒轮自动续上。这段时间它在 `/tasks` 与看板上显示「后台运行中」，进展跟在列表那一行下面。它**不吃私信直发的自由文本**（直发只会落到真正在等你回复的那个任务上），要推它一步用 `/resume`。
 - 控制端口：`config.json` 的 `controlPort`，出厂值 7659（可省略，省略即用 7659）；绑 127.0.0.1，端口被占时 bot 启动即响亮失败退出。看板的停止按钮走它。
+- 会话模型：`config.json` 的 `model`，出厂 `opus`（省略同）。接单会话与值班会话每次 spawn 都显式带 `--model`，不吃本机 `claude` 的默认模型；置成空串才退回 CLI 默认。私信 `/model <名>` 记在任务的 `resumeFlags` 上，对该任务后续续跑压过这个出厂值。
+
+## 接单水位（积压限流）
+
+在册未完成任务满 `config.maxOpenTasks`（出厂 5，省略即 5）时，群里的新任务一律不接：不入队、不建现场，
+只在那条消息的话题里回一句「我这边还压着 N 个没走完人工 CR 的任务，先不接新单了」。每条被拒的消息都回一次。
+
+- **口径**：`/tasks` 列出的全部（运行中 + 等回复 + 后台运行中 + 已滞留 + 启动中 + 排队中）。限的是人处理不过来，
+  不是机器跑不过来——后者由 `concurrency` 管，两个数各管各的。
+- **旁路**：消息正文里 @ 了 bot 的照接，无视水位。判据是正文里的字面 `@<config.botName>`（出厂 `harness-ceilf6`）——
+  事件里没有结构化的 mention 字段，飞书把 mention 渲染成字面文本。**bot 一改名就得同步改 `botName`**，
+  改名不改配置的症状是「@ 了也不接」。`botName` 留空即关掉旁路。
+- **被拒的消息不会自动补跑**：水位降下去后要它跑，在群里重发一条（新 `message_id`）。拒单同样记
+  `processed.jsonl`，事件重放不会重复回复。
+- **值班任务（mrwatch）不受水位限制**：处置 MR 评论是在清积压，不是接新单。
+- 拒单在 `logs/launchd.err.log` 里有一行 `拒单 <message_id>（在册 N ≥ 上限）：<正文首行>`。@ 旁路怀疑失效时看这一行的
+  正文形态，按 mention 的实际字面改 `botName`。
 
 ## MR 评论巡检（mrwatch）
 
@@ -99,7 +116,7 @@ skip 清场保护是防御性守卫——值班会话按契约不产出 skip，�
    注意成功响应**没有 `ok` 字段**（顶层是 `appId/brand/defaultAs/identities/identity`）；`ok` 只出现在错误信封 `{"ok":false,"error":{...}}` 里，别拿 `ok:true` 当判据。
    若输出是错误信封：`profile not found` → 回第 1 步（用 `--name taskhall` 创建）；有 profile 但输出里没有 `identities.user.openId` → 回第 2 步（`auth login`）。
    profile 名须与 `config.json` 的 `profile` 字段一致（本手册与出厂配置都用 `taskhall`）；改名要同时改这两处。
-4. 编辑 `harness-ceilf6-bot/config.json`：填 `dmOpenId` = 上一步取到的 `ou_...`（bot 路径的 `member_id`，或 user 路径 `lark-cli auth status --json --verify --profile taskhall` 的 `identities.user.openId`）；确认 repoPath / worktreesDir。
+4. 编辑 `harness-ceilf6-bot/config.json`：填 `dmOpenId` = 上一步取到的 `ou_...`（bot 路径的 `member_id`，或 user 路径 `lark-cli auth status --json --verify --profile taskhall` 的 `identities.user.openId`）；确认 repoPath / worktreesDir；`botName` 填 bot 在群里的显示名（`lark-cli auth status --json --verify --profile taskhall` 的 `identities.bot.appName`），接单水位的 @ 旁路按它匹配。
    **两条路径都必须带 `--profile taskhall`**：open_id 是 **app 维度**的，不带它会拿到另一个应用下同样合法的 `ou_` 值——正好穿过 install 脚本的 `ou_` 前缀守卫，装出一个 reaction 正常、私信全投空的半哑 bot。2026-07-30 首次部署实测：同一个人在默认 app 下是 `ou_c50103…`、在 taskhall app 下是 `ou_19c19d…`，毫无相似性可供肉眼识别。
    install 脚本会用 config 里的 profile 反查真值做交叉校验：**不一致直接拒装**；反查不到（未授权或离线）只告警放行，此时本步骤就是唯一防线。
    `config.json` 是 git 跟踪文件：填进去的是你的个人 open_id，**别提交**；日后升级拉取如报冲突，先 `git stash` 再拉，拉完 `git stash pop`。
@@ -113,6 +130,7 @@ skip 清场保护是防御性守卫——值班会话按契约不产出 skip，�
 3. 发一条模糊任务 → ⚠️ + 私信收到**具体卡点问题**；直接私信回复（多任务在等时引用那条提问）→ ⚠️ 变回 👍 续跑，最终 ✅ + MR 私信。私信回 `/model opus` 或 `/effort xhigh` 可为该任务的后续续跑切参数（收到「已记录」回执）。全程群里零 bot 文字消息。
 4. **话题群**：在第 1 条那个任务的话题里回一句 → 该回复出现 📝，**不再另起任务**；`<worktree>/.harness-ceilf6/<分支名>/context/` 下多出一个 `<YYMMDD-HHmm>-im-<消息id后6位>.md`。📝 只表示「已存进上下文」，**正在跑的会话不会读到它**（上下文在会话启动时一次性装载），它对**下一次续入**才生效。
 5. reaction emoji 键若报错：按 API 错误提示改 config.json 的 `reactions` 键值，无需改码。
+6. **接单水位**：把 `maxOpenTasks` 临时改成 1 并重装 → 群里发一条新任务，话题里收到「先不接新单」回复，且不出现 👀、`state/queue.jsonl` 里没有它；再发一条 `@harness-ceilf6 …` 的，照常 👀 起跑。验完改回 5。
 
 > 本文里的表情是**语义**，实际显示的由 config.json 的 `reactions` 键决定（当前 `claimed=THUMBSUP`，所以「接单」在群里显示为 👍 而不是 👀）。验收时按第 5 条按需改键。
 >

@@ -5,6 +5,7 @@ import { mkdirSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseResult } from './result.mjs';
+import { mergeFlat } from './commands.mjs';
 import { startSession, killActiveChildren } from './session.mjs';
 
 export { killActiveChildren };
@@ -211,6 +212,17 @@ async function handleEvent(rt, ev) {
   return settle(rt, result.verdict, { why: `verdict=${result.verdict}`, result });
 }
 
+// 无人值守的活按 opus 起，且每次 spawn 都显式写进 argv：不写就吃 CLI 侧默认，那份随本机
+// `/model` 配置漂，同一个 bot 在不同机器上会跑出不同模型。
+// config.model 覆盖出厂值；置空串表示「不带 flag，交回 CLI 默认」。
+const DEFAULT_MODEL = 'opus';
+
+// 私信 /model、/effort 记进 resumeFlags 的值压过出厂参数——那是人对着具体任务下的判断。
+function sessionFlags(config, resumeFlags = []) {
+  const model = config.model ?? DEFAULT_MODEL;
+  return mergeFlat(model ? ['--model', model] : [], resumeFlags);
+}
+
 function startTurnLoop(init) {
   const rt = { ...init, state: 'active', settled: false, stopping: false, correctionUsed: false, session: null, startedAt: new Date().toISOString() };
   liveTasks.set(rt.task.messageId, rt);
@@ -225,7 +237,7 @@ function startTurnLoop(init) {
   rt.session = startSession({
     bin: rt.config.claudeBin, cwd: rt.worktree, name: rt.title, logPath: rt.logPath,
     timeoutMs: rt.config.taskTimeoutMs, killGraceMs: rt.config.killGraceMs,
-    resumeSessionId: init.resumeSessionId, extraFlags: init.resumeFlags ?? [],
+    resumeSessionId: init.resumeSessionId, extraFlags: sessionFlags(rt.config, init.resumeFlags ?? []),
     onEvent: (ev) => { handleEvent(rt, ev).catch((e) => console.error(`[runner] 轮次处理异常：${e.message}`)); },
   });
   rt.session.send(init.firstMessage);

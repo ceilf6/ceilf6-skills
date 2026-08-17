@@ -21,3 +21,11 @@ export function decide(ev, config, isProcessed) {
   if (ev.rootId) return { action: 'reply' };
   return { action: 'enqueue' };
 }
+
+// 正文里 @ 了 bot：接单水位满时的放行凭据（明确的人工指派，不该被限流拦掉）。
+// 事件里没有结构化的 mention 字段，飞书把 mention 渲染成字面 `@<显示名>` 留在正文里
+// （lark-cli 拍平后同样如此），只能按字面匹配——bot 一改名，config.botName 必须跟着改。
+export function mentionsBot(text, botName) {
+  if (!botName) return false;
+  return String(text ?? '').includes(`@${botName}`);
+}

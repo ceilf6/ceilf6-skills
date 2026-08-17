@@ -50,3 +50,11 @@ export function mergeFlags(oldFlat, newPairs) {
   for (const [f, v] of newPairs) m.set(f, v);
   return [...m].flat();
 }
+
+// 两个扁平数组的同名覆盖合并（出厂参数 ← 会话已记的 resumeFlags）：同名 flag 出现两次时
+// CLI 取哪个不由这里说了算，合并成一份才有确定行为。
+export function mergeFlat(baseFlat, overrideFlat) {
+  const pairs = [];
+  for (let i = 0; i + 1 < overrideFlat.length; i += 2) pairs.push([overrideFlat[i], overrideFlat[i + 1]]);
+  return mergeFlags(baseFlat, pairs);
+}

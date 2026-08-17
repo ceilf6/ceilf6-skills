@@ -71,6 +71,27 @@ test('pass：worktree 保留、✅、私信含 MR 链接、prompt 含任务原�
   rmFixture(root);
 });
 
+// 接单会话的模型不吃 CLI 侧默认（那份随本机 /model 配置漂），argv 里必须看得见。
+test('默认模型：起会话带 --model opus；config.model 覆盖，置空串退回 CLI 默认', async () => {
+  const { root, repo } = makeFixture();
+  process.env.STUB_VERDICT = 'pass';
+  process.env.STUB_ARGS_OUT = join(root, 'args.txt');
+  delete process.env.STUB_PROMPT_OUT;
+  const argv = () => readFileSync(process.env.STUB_ARGS_OUT, 'utf8').split('\n');
+
+  await runTask(TASK, makeConfig(root, repo), fakeLark([]));
+  assert.equal(argv()[argv().indexOf('--model') + 1], 'opus');
+
+  await runTask({ ...TASK, messageId: 'om_x_654322' }, makeConfig(root, repo, { model: 'sonnet' }), fakeLark([]));
+  assert.equal(argv()[argv().indexOf('--model') + 1], 'sonnet');
+
+  await runTask({ ...TASK, messageId: 'om_x_654323' }, makeConfig(root, repo, { model: '' }), fakeLark([]));
+  assert.equal(argv().includes('--model'), false);
+
+  delete process.env.STUB_ARGS_OUT;
+  rmFixture(root);
+});
+
 test('skip：worktree 与分支删除（注册表已 prune）、留下 skipped 终态表情、零消息', async () => {
   const { root, repo } = makeFixture();
   const calls = [];
@@ -485,15 +506,17 @@ test('resumeTask：--resume + resumeFlags 重建会话、⚠️→👍、续跑�
   process.env.STUB_TURNS = 'pass';
   process.env.STUB_ARGS_OUT = join(root, 'args2.txt');
   process.env.STUB_MSGS_OUT = join(root, 'msgs2.txt');
-  const info = { ...asks[0], resumeFlags: ['--model', 'opus'] };
-  const out = await resumeTask(info, '用 opus 继续，选 A', makeConfig(root, repo), fakeLark(calls2), {});
+  const info = { ...asks[0], resumeFlags: ['--model', 'fable'] };
+  const out = await resumeTask(info, '用 fable 继续，选 A', makeConfig(root, repo), fakeLark(calls2), {});
   assert.equal(out.verdict, 'pass');
   const args = readFileSync(join(root, 'args2.txt'), 'utf8').split('\n');
   assert.equal(args[args.indexOf('--resume') + 1], 'sess_stub_1');
-  assert.equal(args[args.indexOf('--model') + 1], 'opus');
+  // 私信 /model 记下的值压过默认模型，且只留一份（两个 --model 时 CLI 取哪个不由我们说了算）
+  assert.equal(args[args.indexOf('--model') + 1], 'fable');
+  assert.equal(args.filter((a) => a === '--model').length, 1);
   const msgs = readFileSync(join(root, 'msgs2.txt'), 'utf8').trim().split('\n');
   assert.equal(msgs.length, 1); // 只注入回复框架（无 bootstrap）
-  assert.ok(msgs[0].includes('用 opus 继续，选 A'));
+  assert.ok(msgs[0].includes('用 fable 继续，选 A'));
   // 表情：claimed（撤 info.statusRid=rid_2）→ pass 终态
   assert.deepEqual(calls2.filter((c) => c[0] !== 'dm').map((c) => [c[0], c[2]]), [
     ['add', 'THUMBSUP'], ['del', 'rid_2'],

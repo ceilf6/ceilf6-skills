@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseDmReply, mergeFlags, SUPPORTED_HINT, parseControl, CONTROL } from '../src/commands.mjs';
+import { parseDmReply, mergeFlags, mergeFlat, SUPPORTED_HINT, parseControl, CONTROL } from '../src/commands.mjs';
 
 test('纯正文：无命令原样返回', () => {
   const r = parseDmReply('用方案 A，注意兼容 7.72');
@@ -35,6 +35,12 @@ test('原型链上的名字不是命令', () => {
 test('mergeFlags 同名后写覆盖、异名并存', () => {
   assert.deepEqual(mergeFlags(['--model', 'fable'], [['--model', 'opus']]), ['--model', 'opus']);
   assert.deepEqual(mergeFlags(['--model', 'opus'], [['--effort', 'xhigh']]), ['--model', 'opus', '--effort', 'xhigh']);
+});
+test('mergeFlat：两个扁平数组同名后写覆盖、奇数长度的残尾丢弃', () => {
+  assert.deepEqual(mergeFlat(['--model', 'opus'], ['--model', 'fable']), ['--model', 'fable']);
+  assert.deepEqual(mergeFlat(['--model', 'opus'], ['--effort', 'xhigh']), ['--model', 'opus', '--effort', 'xhigh']);
+  assert.deepEqual(mergeFlat([], ['--model', 'fable']), ['--model', 'fable']);
+  assert.deepEqual(mergeFlat(['--model', 'opus'], ['--effort']), ['--model', 'opus']);
 });
 test('SUPPORTED_HINT 列出支持的命令', () => {
   assert.ok(SUPPORTED_HINT.includes('/model'));

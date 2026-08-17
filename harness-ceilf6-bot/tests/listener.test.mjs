@@ -124,6 +124,20 @@ async function runFedListener({ cfgPath, root, turns, env = {}, feed }) {
   return { ok, larkLog, stderr };
 }
 
+// 把在册水位垫到指定高度：awaiting 条目就是 registry() 的一路来源，起 N 个真任务只是把同一件事跑得更慢。
+function seedAwaiting(root, n) {
+  mkdirSync(join(root, 'state'), { recursive: true });
+  const lines = [];
+  for (let i = 0; i < n; i++) {
+    lines.push(JSON.stringify({
+      messageId: `om_seed_${String(i).padStart(6, '0')}`, kind: 'user', waiting: true,
+      title: `旧任务 ${i}`, branch: `bot/seed-${i}`, worktree: join(root, 'wt', `seed-${i}`),
+      sessionId: `sess_seed_${i}`, question: '等你回复', askedAt: `2026-08-14T00:0${i}:00Z`,
+    }));
+  }
+  writeFileSync(join(root, 'state', 'awaiting.jsonl'), lines.join('\n') + '\n');
+}
+
 // 只挡 `git worktree add` 一个子命令（拖慢或拖垮），其余 git 调用原样透传：
 // 出队到 liveTasks 登记之间的启动窗口在小仓库上只有毫秒级，撑开它才谈得上观测。
 function gitShim(root, mode) {
@@ -154,6 +168,54 @@ test('端到端（stub）：过滤入队 → runTask → 状态与日志落盘',
   const processed = readFileSync(join(root, 'state', 'processed.jsonl'), 'utf8');
   assert.equal(processed.trim().split('\n').length, 1); // 只有合法任务被记 processed
   assert.ok(readFileSync(larkLogPath, 'utf8').includes('reactions')); // claimed+done reaction 调用发生
+  rmFixture(root);
+});
+
+test('接单水位：在册第 5 个照接、满 5 之后拒单并在话题里回一句', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-quota-')));
+  const cfgPath = writeConfig(root, makeRepo(root), { botName: 'harness-ceilf6' });
+  const larkLogPath = join(root, 'lark-calls.log');
+  const awaitingPath = join(root, 'state', 'awaiting.jsonl');
+  seedAwaiting(root, 4);
+  const { ok } = await runFedListener({
+    cfgPath, root, turns: 'ask:先确认一下需求边界',
+    feed: async (send) => {
+      // 第五个：水位未满，照常接单并挂起在 ask 上 → 在册满 5
+      send(evLine({ message_id: 'om_wm_aaaaaa', content: '这是第五个任务，描述足够长' }));
+      if (!await poll(() => readFileSync(awaitingPath, 'utf8').includes('om_wm_aaaaaa'))) return false;
+      // 第六个：水位已满 → 不接
+      send(evLine({ message_id: 'om_wm_bbbbbb', content: '这是第六个任务，描述足够长' }));
+      return poll(() => existsSync(larkLogPath) && readFileSync(larkLogPath, 'utf8').includes('先不接新单'));
+    },
+  });
+  assert.ok(ok, '满水位的新任务应收到拒单回复');
+  const calls = readFileSync(larkLogPath, 'utf8');
+  assert.ok(calls.includes('om_wm_bbbbbb'), '拒单回复应发在被拒的那条消息上');
+  assert.ok(calls.includes('reply-in-thread'), '拒单回复走话题内回复，不刷群');
+  assert.ok(/先不接新单|开做/.test(calls));
+  // 拒单 = 不接：没有现场、没有会话、队列里也没有它
+  assert.equal(existsSync(join(root, 'logs', 'task-om_wm_bbbbbb.log')), false, '拒单不得起会话');
+  assert.deepEqual(readdirSync(join(root, 'wt')).filter((d) => d.includes('bbbbbb')), []);
+  assert.equal(new Store(join(root, 'state')).size(), 0, '拒单不得入队');
+  // 记 processed：事件重放不该让同一条消息再收一次拒单回复
+  assert.ok(readFileSync(join(root, 'state', 'processed.jsonl'), 'utf8').includes('om_wm_bbbbbb'));
+  rmFixture(root);
+});
+
+test('接单水位：@ 了 bot 的消息无视水位照接', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-mention-')));
+  const cfgPath = writeConfig(root, makeRepo(root), { botName: 'harness-ceilf6' });
+  const larkLogPath = join(root, 'lark-calls.log');
+  seedAwaiting(root, 5);
+  const { ok } = await runFedListener({
+    cfgPath, root, turns: 'ask:先确认一下需求边界',
+    feed: async (send) => {
+      send(evLine({ message_id: 'om_wm_cccccc', content: '@harness-ceilf6 这个急，帮我改一下配置项' }));
+      return poll(() => sessionUp(root, 'om_wm_cccccc'));
+    },
+  });
+  assert.ok(ok, '被 @ 的任务应照常起会话');
+  assert.equal(readFileSync(larkLogPath, 'utf8').includes('先不接新单'), false, '被 @ 的消息不得收到拒单回复');
   rmFixture(root);
 });
 
@@ -1173,4 +1235,19 @@ test('validateConfig：mrWatch 非法值被点名', () => {
   assert.ok(validateConfig({ ...base, mrWatch: { enabled: 'yes' } }).some((e) => e.includes('mrWatch.enabled')));
   assert.ok(validateConfig({ ...base, mrWatch: 3 }).some((e) => e.includes('mrWatch')));
   assert.ok(validateConfig({ ...base, mrWatch: [] }).some((e) => e.includes('mrWatch（需对象或省略）')));
+});
+
+test('validateConfig：maxOpenTasks / botName 可省略，给了则须合法', () => {
+  const base = {
+    chatId: 'c', profile: 'p', repoPath: '/r', worktreesDir: '/w', stateDir: '/s', logsDir: '/l',
+    dmOpenId: 'o', claudeBin: 'claude', larkBin: 'lark-cli',
+    concurrency: 1, taskTimeoutMs: 1000, minTextLength: 10,
+    reactions: { claimed: 'a', done: 'b', failed: 'c', escalate: 'd', skipped: 'e', context: 'f', stopped: 'g' },
+  };
+  assert.equal(validateConfig({ ...base, maxOpenTasks: 5, botName: 'harness-ceilf6' }).length, 0);
+  // 0 与负数会让 bot 一单不接、群里只剩拒单回复：静默失败形态，必须在 boot 时点名
+  assert.ok(validateConfig({ ...base, maxOpenTasks: 0 }).some((e) => e.includes('maxOpenTasks')));
+  assert.ok(validateConfig({ ...base, maxOpenTasks: 2.5 }).some((e) => e.includes('maxOpenTasks')));
+  assert.ok(validateConfig({ ...base, botName: '' }).some((e) => e.includes('botName')));
+  assert.ok(validateConfig({ ...base, botName: 7 }).some((e) => e.includes('botName')));
 });

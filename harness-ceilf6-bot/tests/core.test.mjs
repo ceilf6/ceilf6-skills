@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, readFileSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { normalize } from '../src/normalize.mjs';
-import { decide } from '../src/filter.mjs';
+import { decide, mentionsBot } from '../src/filter.mjs';
 import { Store } from '../src/state.mjs';
 import { parseResult } from '../src/result.mjs';
 
@@ -54,6 +54,15 @@ test('decide 拒绝：他群/bot 消息/非文本/过短/重复/null', () => {
   assert.equal(decide({ ...ev, text: '短' }, CONFIG, notProcessed).reason, 'too-short');
   assert.equal(decide(ev, CONFIG, () => true).reason, 'duplicate');
   assert.equal(decide(null, CONFIG, notProcessed).reason, 'unparseable');
+});
+test('mentionsBot：按字面 @显示名 匹配，位置不限；名字没配即不成立', () => {
+  assert.equal(mentionsBot('@harness-ceilf6 这个急，帮我改一下', 'harness-ceilf6'), true);
+  assert.equal(mentionsBot('这个急 @harness-ceilf6 帮我改一下', 'harness-ceilf6'), true);
+  assert.equal(mentionsBot('@别人 帮我改一下', 'harness-ceilf6'), false);
+  assert.equal(mentionsBot('harness-ceilf6 帮我改一下', 'harness-ceilf6'), false); // 没有 @ 不算
+  assert.equal(mentionsBot('@harness-ceilf6 帮我改一下', ''), false);
+  assert.equal(mentionsBot('@harness-ceilf6 帮我改一下', undefined), false);
+  assert.equal(mentionsBot(undefined, 'harness-ceilf6'), false);
 });
 test('decide 放行 post：话题首帖才是真任务，只认 text 会把它全丢掉', () => {
   assert.equal(decide(normalize(RAW_HEAD), CONFIG, notProcessed).action, 'enqueue');

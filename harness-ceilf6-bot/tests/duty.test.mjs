@@ -40,6 +40,7 @@ test('runDutyTask：在既有检出起会话，不建 worktree，prompt 原样�
   const calls = [];
   process.env.STUB_VERDICT = 'pass';
   process.env.STUB_PROMPT_OUT = join(root, 'prompt.txt');
+  process.env.STUB_ARGS_OUT = join(root, 'args.txt');
   const out = await runDutyTask(TASK, makeConfig(root, repo), fakeLark(calls), {}, {
     cwd: repo, branch: 'feat/x', title: 'MR 9 评论处置', firstMessage: '值班指令正文 $&原样',
   });
@@ -47,7 +48,9 @@ test('runDutyTask：在既有检出起会话，不建 worktree，prompt 原样�
   assert.equal(out.worktree, repo);
   assert.ok(!existsSync(join(root, 'wt')), '不得创建 worktree');
   assert.ok(readFileSync(process.env.STUB_PROMPT_OUT, 'utf8').includes('值班指令正文 $&原样'));
-  delete process.env.STUB_PROMPT_OUT;
+  const args = readFileSync(process.env.STUB_ARGS_OUT, 'utf8').split('\n');
+  assert.equal(args[args.indexOf('--model') + 1], 'opus'); // 值班会话与接单会话同一套默认模型
+  delete process.env.STUB_PROMPT_OUT; delete process.env.STUB_ARGS_OUT;
   rmFixture(root);
 });
 
