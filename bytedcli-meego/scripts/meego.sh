@@ -224,15 +224,28 @@ case "$sub" in
           echo "meego: 节点「${n}」owner 非本人（dev_owner_key），拒绝流转，转人工"
           continue
         fi
+        # 入参形状按真机（2026-08-14 实测）：transition 认单数 --node-id 且只收 node_key。
+        # --node-ids 复数被工具忽略（服务端等同没传 → code=20018），节点名同样 20018——
+        # 「节点名称或节点id」的 CLI help 文案不成立，别照抄。
+        nk=$(printf '%s' "$node" | jq -r '.basic.node_key // empty')
+        if [ -z "$nk" ]; then echo "meego: 节点「${n}」应答缺 node_key，跳过"; continue; fi
         # </dev/null 必须：循环体共享 heredoc 作 stdin，CLI 若读 stdin 会吞掉剩余节点名（静默漏流转）
         tout=$(bytedcli --json meego node transition --project-key "$PK" --work-item-id "$id" \
-          --action confirm --node-ids "[\"${n}\"]" 2>&1 </dev/null) \
-          || { echo "meego: 节点「${n}」confirm 失败：$(snippet "$tout")" >&2; fails=$((fails+1)); continue; }
+          --action confirm --node-id "$nk" 2>&1 </dev/null) \
+          || { case "$tout" in
+                 *20016*|*"Node Is Not Arrived"*)
+                   # 节点流是串行的：目标节点未到达时无法直接 confirm，推进前序节点属人工判断
+                   # （前序常含他人负责的评审节点），机械层只如实报位置。
+                   at=$(printf '%s' "$nodes" | jq -r 'first(.list[]? | select(.basic.status == "doing") | .basic.name) // "未知"')
+                   echo "meego: 节点「${n}」尚未到达（节点流停在「${at}」），前序节点未推进，转人工" >&2 ;;
+                 *) echo "meego: 节点「${n}」confirm 失败：$(snippet "$tout")" >&2 ;;
+               esac
+               fails=$((fails+1)); continue; }
         echo "meego: 节点「${n}」已流转完成"
       done <<EOF
 $names
 EOF
-      [ "$fails" = 0 ] || die "有 ${fails} 个节点流转失败（幂等，可重跑 advance 重试）"
+      [ "$fails" = 0 ] || die "有 ${fails} 个节点未流转成功（advance 幂等，消掉上述原因后可重跑）"
     else
       DS=$(printf '%s' "$rc_cfg" | jq -r '.issue.done_state // empty')
       [ -n "$DS" ] || die "配置缺 issue.done_state（repo ${repo}）：先 map set 落首次映射"

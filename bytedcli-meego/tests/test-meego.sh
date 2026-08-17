@@ -139,7 +139,9 @@ bash "$MG" schedule --ctx-dir "$ctx" --start 2026-08-11 --due 2026-08-20 --point
   && ok "schedule exit 0" || bad "schedule 失败"
 grep -q -- "--node-id fe_development" "$STUB_STATE/calls.log" && ok "按名定位 node_key" || bad "node-id: $(tail -1 "$STUB_STATE/calls.log")"
 grep -q -- "--node-schedule" "$STUB_STATE/calls.log" && ok "带排期 JSON" || bad "无排期参数"
-grep -q "2026-08-11" "$STUB_STATE/calls.log" && ok "起始日期入参" || bad "日期缺失"
+# 排期日期以按时区 00:00:00 的毫秒时间戳入参，字符串日期会被 thrift 拒收
+start_ms=$(( $(date -j -f "%Y-%m-%d %H:%M:%S" "2026-08-11 00:00:00" +%s 2>/dev/null || date -d "2026-08-11 00:00:00" +%s) * 1000 ))
+grep -q "$start_ms" "$STUB_STATE/calls.log" && ok "起始日期入参（毫秒时间戳）" || bad "日期缺失: $(tail -1 "$STUB_STATE/calls.log")"
 grep -qF -- '--node-owners ["6976056325272862721"]' "$STUB_STATE/calls.log" && ok "带开发负责人" || bad "owners: $(tail -1 "$STUB_STATE/calls.log")"
 grep -q '"points":5' "$STUB_STATE/calls.log" && ok "估分入排期 JSON" || bad "points: $(tail -1 "$STUB_STATE/calls.log")"
 jq '.meego_type="issue"' "$ctx/meta.json" > "$ctx/tmp" && mv "$ctx/tmp" "$ctx/meta.json"
@@ -179,7 +181,16 @@ jq -n '{list:[{basic:{name:"前端开发", node_key:"fe_development", status:"do
 bash "$MG" advance --ctx-dir "$ctx" >/dev/null && ok "advance exit 0" || bad "advance 失败"
 grep -q -- 'node transition' "$STUB_STATE/calls.log" && ok "发起 confirm" || bad "未 confirm"
 grep -q -- '--action confirm' "$STUB_STATE/calls.log" && ok "action=confirm" || bad "action 不对"
-grep -qF -- '--node-ids ["前端开发"]' "$STUB_STATE/calls.log" && ok "node-ids 按名入参" || bad "node-ids: $(tail -1 "$STUB_STATE/calls.log")"
+# 单数 --node-id 且传 node_key：复数 --node-ids 或节点名真机均回 code=20018
+grep -qF -- '--node-id fe_development' "$STUB_STATE/calls.log" && ok "confirm 传单数 node_key" || bad "node-id: $(tail -1 "$STUB_STATE/calls.log")"
+grep -qF -- '--node-ids' "$STUB_STATE/calls.log" && bad "退回复数 --node-ids" || ok "未用复数入参"
+grep -qF -- '前端开发' "$STUB_STATE/calls.log" && bad "退回按名入参" || ok "未传节点名"
+: > "$STUB_STATE/calls.log"
+jq -n '{list:[{basic:{name:"前端开发", status:"doing"},
+             assignees:{owners:[{user_key:"6976056325272862721"}]}}], total:1}' > "$STUB_STATE/nodes.json"
+rc=0; out=$(bash "$MG" advance --ctx-dir "$ctx") || rc=$?
+grep -q 'node transition' "$STUB_STATE/calls.log" && bad "缺 node_key 仍 confirm" || ok "缺 node_key 跳过"
+printf '%s' "$out" | grep -q "缺 node_key" && ok "缺 node_key 回显" || bad "回显(exit $rc): $out"
 : > "$STUB_STATE/calls.log"
 jq -n '{list:[{basic:{name:"前端开发", node_key:"fe_development", status:"finished"},
              assignees:{owners:[{user_key:"6976056325272862721"}]}}], total:1}' > "$STUB_STATE/nodes.json"
@@ -201,6 +212,18 @@ touch "$STUB_STATE/transition_fail"
 rc=0; bash "$MG" advance --ctx-dir "$ctx" >/dev/null 2>&1 || rc=$?
 [ "$rc" = 1 ] && ok "confirm 失败 exit 1（可重试）" || bad "失败 exit $rc"
 rm -f "$STUB_STATE/transition_fail"
+# 20016：目标节点未到达（前序节点未推进），报位置转人工而非泛化失败文案
+jq -n '{list:[{basic:{name:"需求提出", node_key:"start", status:"doing"},
+             assignees:{owners:[{user_key:"6976056325272862721"}]}},
+            {basic:{name:"前端开发", node_key:"fe_development", status:"not_started"},
+             assignees:{owners:[{user_key:"6976056325272862721"}]}}], total:2}' > "$STUB_STATE/nodes.json"
+touch "$STUB_STATE/transition_not_arrived"
+rc=0; err=$(bash "$MG" advance --ctx-dir "$ctx" 2>&1 >/dev/null) || rc=$?
+[ "$rc" = 1 ] && ok "节点未到达 exit 1" || bad "未到达 exit $rc"
+case "$err" in *"尚未到达"*"需求提出"*) ok "未到达报当前停留节点" ;; *) bad "未到达文案: $err" ;; esac
+rm -f "$STUB_STATE/transition_not_arrived"
+jq -n '{list:[{basic:{name:"前端开发", node_key:"fe_development", status:"doing"},
+             assignees:{owners:[{user_key:"6976056325272862721"}]}}], total:1}' > "$STUB_STATE/nodes.json"
 # 多节点：stub 会读干 stdin（同真机 CLI），循环不隔离 stdin 就只流转首个节点
 : > "$STUB_STATE/calls.log"
 jq '.repos["lark/byteview-web"].story.done_transition=["前端开发","前端代码上线"]' "$BYTEDCLI_MEEGO_CONFIG" > "$T/cfg2" \
@@ -212,7 +235,7 @@ jq -n '{list:[{basic:{name:"前端开发", node_key:"fe_development", status:"do
 bash "$MG" advance --ctx-dir "$ctx" >/dev/null && ok "双节点 advance exit 0" || bad "双节点 advance 失败"
 [ "$(grep -c 'node transition' "$STUB_STATE/calls.log")" = 2 ] \
   && ok "双节点各流转一次" || bad "transition 次数=$(grep -c 'node transition' "$STUB_STATE/calls.log")（CLI 读 stdin 吞掉了剩余节点名）"
-grep -qF -- '--node-ids ["前端代码上线"]' "$STUB_STATE/calls.log" \
+grep -qF -- '--node-id fe_online' "$STUB_STATE/calls.log" \
   && ok "第二节点未被吞" || bad "第二节点缺失: $(tail -2 "$STUB_STATE/calls.log")"
 jq '.repos["lark/byteview-web"].story.done_transition=["前端开发"]' "$BYTEDCLI_MEEGO_CONFIG" > "$T/cfg2" \
   && mv "$T/cfg2" "$BYTEDCLI_MEEGO_CONFIG"

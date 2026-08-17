@@ -37,7 +37,7 @@ Meego 全生命周期管理的机械层单点。所有 bytedcli meego 调用收�
 | `create` | 按团队模板建需求（恒 story）并落 meta | meta 已有 meego_id 防重 die |
 | `comment` | 进度评论（`--message-file` 或 `--preset qa`，qa 文案带 meta.mr_id） | 【bot】前缀机械层强制 |
 | `schedule` | 回填 schedule_node 节点排期/估分/负责人 | 仅 story；issue 输出 skipped；`--points` 只收纯数字 |
-| `advance` | done 流转：story 按 done_transition 逐节点 confirm；issue 按 done_state 状态流转 | owner 守卫（不碰他端节点）；已完成空转、缺节点跳过；confirm 失败退出 1，幂等可重跑 |
+| `advance` | done 流转：story 按 done_transition 逐节点 confirm；issue 按 done_state 状态流转 | owner 守卫（不碰他端节点）；已完成空转、缺节点跳过；目标节点未到达报当前停留位置转人工；confirm 失败退出 1，幂等可重跑 |
 | `done` | advance + 收束评论组合（看板钩子入口） | 恒 exit 0，输出 `{advance:…, comment:…}` 或 `{"skipped":true}`，失败详情在 JSON |
 | `map get/set` | 映射配置读写单点 | set 收 JSON、原子替换 |
 
@@ -60,6 +60,8 @@ Meego 全生命周期管理的机械层单点。所有 bytedcli meego 调用收�
 ## 已知边界
 
 - 流转只发生在 done 时刻；返工在流转前发生，回滚场景不存在（撤销完成 → 人工处理）。
+- **节点 confirm 入参形状（2026-08-14 真机核对，脚本已按此实现）**：`node transition` 认**单数 `--node-id`**，值只收 **`node_key`**（如「需求开发」是 `state_97`）。复数 `--node-ids` 被工具忽略，等同没传，服务端回 `code=20018 Node ID Not Exist In Workflow`；传节点名同样 20018。CLI help 把 `--node-ids` 描述成「节点名称或节点id列表」，不成立——CLI 不做名→key 解析，`--dry-run` 可直接看到透传的 MCP 参数。
+- **节点流是串行的**：目标节点未到达时 confirm 回 `code=20016 Node Is Not Arrived`。`done_transition` 里的节点要能流转，前序节点必须已推进——而前序常含他人负责的评审节点（byteview-web 的「安全技术评审」owner 是 liujiahao.winnie）。advance 撞上 20016 时报出当前停留节点并转人工，不代推前序（推前序等于替别人声称评审完成）。
 - issue 转移带必填确认表单 → 一律转人工（不猜表单值，配置里也不设表单项）；当前状态无到 done_state 的合法转移同样转人工。
 - 检索能力弱：`workitem get` 不支持按标题查（报 invalid param）；`story --title` 相似检索有索引延迟且范围有限（刚建的条目查不到）。获取靠链接/ID；create 应答须完整捕获新 id，丢了用 `meego todo list` 找回（新建条目会进本人待办）。
 - **排期字段形状（2026-08-11 真机核对完成，脚本已按此实现）**：`node_schedule.estimate_start_date` / `estimate_end_date` 为**按时区 00:00:00 的毫秒级时间戳（number）**，传 "YYYY-MM-DD" 字符串会被 thrift 拒收；`points` 单位为天；未传估分时服务端 `is_auto` 默认按工期自动补（实测 10 天工期自动补 10 分）。
