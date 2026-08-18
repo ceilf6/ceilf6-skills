@@ -19,7 +19,7 @@ usage() {
       meego.sh create   (--ctx-dir <路径> | --repo <slug>) --title <标题> --description-file <文件> [--dry-run]
       meego.sh comment  (--ctx-dir <路径> | --repo <slug> --id <id>) (--message-file <文件> | --preset qa)
       meego.sh schedule (--ctx-dir <路径> | --repo <slug> --id <id> --type story|issue) --start <YYYY-MM-DD> --due <YYYY-MM-DD> [--points <数>]
-      meego.sh advance  (--ctx-dir <路径> | --repo <slug> --id <id> --type story|issue)
+      meego.sh advance  (--ctx-dir <路径> | --repo <slug> --id <id> --type story|issue) [--mr-id <MR id>]
       meego.sh done     --ctx-dir <路径>
       meego.sh map      get|set --repo <slug> [--json-file <文件>]
 EOF
@@ -29,7 +29,7 @@ EOF
 sub="${1:-}"; [ -n "$sub" ] || usage; shift
 mapop=""
 if [ "$sub" = map ]; then mapop="${1:-}"; case "$mapop" in get|set) shift ;; *) usage ;; esac; fi
-ctx="" repo="" id="" wtype="" url_in="" title="" descfile="" msgfile="" preset="" start="" due="" points="" jsonfile="" dry=""
+ctx="" repo="" id="" wtype="" url_in="" title="" descfile="" msgfile="" preset="" start="" due="" points="" jsonfile="" dry="" mr_id_opt=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) dry=1; shift ;;
@@ -46,6 +46,7 @@ while [ $# -gt 0 ]; do
     --due) due="${2:?--due 需要值}"; shift 2 ;;
     --points) points="${2:?--points 需要值}"; shift 2 ;;
     --json-file) jsonfile="${2:?--json-file 需要值}"; shift 2 ;;
+    --mr-id) mr_id_opt="${2:?--mr-id 需要值}"; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -142,18 +143,19 @@ case "$sub" in
     desc=$(cat "$descfile")
     # 走底层 workitem create：快捷 `meego create` 传不了模板必填自定义字段（498109 要求业务线、关联 Story），
     # 绑定空间的仓库必报 `{field} 必填`。必填项按仓库配置 story.create_fields 原样附加；
-    # 配了 dev_role 时把 dev_owner_key 挂到该角色。field_value 一律字符串：裸数字会被序列化成
-    # float64 遭 thrift 拒收，对象/数组按 tojson 字符串化（multi-select / role_owners 的入参形状即如此）。
+    # 配了 dev_roles 时把 dev_owner_key 挂到这些角色（如 tech_owner：技术评审 / 需求合入 节点 owner 由此而来）。
+    # field_value 一律字符串：裸数字会被序列化成 float64 遭 thrift 拒收，对象/数组按 tojson 字符串化
+    # （multi-select / role_owners 的入参形状即如此）。
     fields=$(printf '%s' "$rc_cfg" | jq -c --arg t "$TID" --arg n "$title" --arg d "$desc" '
       def s: if type == "string" then . elif type == "number" then tostring else tojson end;
       [ {field_key:"template", field_value:$t}, {field_key:"name", field_value:$n},
         {field_key:"description", field_value:$d} ]
-      + (if ((.dev_owner_key // "") | tostring) != "" and (.story.dev_role // "") != ""
+      + (if ((.dev_owner_key // "") | tostring) != "" and ((.story.dev_roles // []) | length) > 0
          then [ {field_key:"role_owners",
-                 field_value:([{role:.story.dev_role, owners:[(.dev_owner_key | tostring)]}] | tojson)} ]
+                 field_value:([ .dev_owner_key as $o | .story.dev_roles[] | {role:., owners:[($o | tostring)]} ] | tojson)} ]
          else [] end)
       + [ (.story.create_fields // [])[] | {field_key, field_value:(.field_value | s)} ]') \
-      || die "组装 create 字段失败（检查配置 story.create_fields 形状：[{field_key, field_value}]）"
+      || die "组装 create 字段失败（检查配置 story.create_fields 形状 [{field_key, field_value}] 与 story.dev_roles 形状 [角色key]）"
     if [ -n "$dry" ]; then
       bytedcli --json meego workitem create --project-key "$PK" --work-item-type story \
         --fields "$fields" --dry-run
@@ -229,12 +231,24 @@ case "$sub" in
     OWNER=$(printf '%s' "$rc_cfg" | jq -r '.dev_owner_key // empty')
     [ -n "$OWNER" ] || die "配置缺 dev_owner_key（repo ${repo}）：先 map set 落首次映射"
     if [ "$wtype" = story ]; then
+      # 「推到底」语义：done_transition 是按节点流顺序列出的、本端要经过的全部节点（含起点），
+      # 从当前停留位置逐个 confirm 到最后一个；已完成的空转、映射里没有的跳过。
+      # 他人 owner 的节点不代 confirm（等于替别人声称评审完成）——撞上即停下如实报位置，
+      # 后续节点串行依赖它，不再空试；owner 为空的节点（如无 QA 的需求测试）视为可推。
       names=$(printf '%s' "$rc_cfg" | jq -r '.story.done_transition // [] | .[]')
       [ -n "$names" ] || die "配置缺 story.done_transition（repo ${repo}）：先 map set 落首次映射"
-      out=$(bytedcli --json meego node get --project-key "$PK" --work-item-id "$id" 2>"$ERRF") \
-        || die "node get 失败（条目 ${id}）：$(err_tail)"
-      nodes=$(printf '%s' "$out" | mcp_text)
-      [ -n "$nodes" ] || die "node get 应答形状不符（条目 ${id}）：$(snippet "$out")"
+      # 表单占位 {{mr_url}}：ctx 模式取 meta.mr_id，--repo 模式取 --mr-id；都没有时含占位的表单项不填，
+      # 让服务端的「{field} 必填」如实报出来
+      mrid="$mr_id_opt"
+      if [ -z "$mrid" ] && [ -n "$META" ]; then mrid=$(jq -r '.mr_id // empty' "$META"); fi
+      mr_url=""; [ -z "$mrid" ] || mr_url="https://bits.bytedance.net/bytebus/devops/code/detail/${mrid}"
+      fetch_nodes() {
+        out=$(bytedcli --json meego node get --project-key "$PK" --work-item-id "$id" 2>"$ERRF" </dev/null) \
+          || die "node get 失败（条目 ${id}）：$(err_tail)"
+        nodes=$(printf '%s' "$out" | mcp_text)
+        [ -n "$nodes" ] || die "node get 应答形状不符（条目 ${id}）：$(snippet "$out")"
+      }
+      fetch_nodes
       fails=0
       while IFS= read -r n; do
         [ -n "$n" ] || continue
@@ -242,28 +256,47 @@ case "$sub" in
         if [ -z "$node" ]; then echo "meego: 节点「${n}」在条目 ${id} 上不存在，跳过（节点流与映射不符？）"; continue; fi
         st=$(printf '%s' "$node" | jq -r '.basic.status // empty')
         if [ "$st" = finished ]; then echo "meego: 节点「${n}」已完成，空转"; continue; fi
-        # owner 守卫：多端条目上他端节点分属别的同学，绝不代流转
-        if ! printf '%s' "$node" | jq -e --arg o "$OWNER" '[.assignees.owners[]?.user_key] | index($o)' >/dev/null; then
-          echo "meego: 节点「${n}」owner 非本人（dev_owner_key），拒绝流转，转人工"
-          continue
+        if ! printf '%s' "$node" | jq -e --arg o "$OWNER" \
+             '([.assignees.owners[]?.user_key] | length == 0) or ([.assignees.owners[]?.user_key] | index($o) != null)' >/dev/null; then
+          echo "meego: 节点「${n}」owner 非本人（dev_owner_key），拒绝流转，停在此处转人工"
+          fails=$((fails+1)); break
         fi
         # 入参形状按真机（2026-08-14 实测）：transition 认单数 --node-id 且只收 node_key。
         # --node-ids 复数被工具忽略（服务端等同没传 → code=20018），节点名同样 20018——
         # 「节点名称或节点id」的 CLI help 文案不成立，别照抄。
         nk=$(printf '%s' "$node" | jq -r '.basic.node_key // empty')
         if [ -z "$nk" ]; then echo "meego: 节点「${n}」应答缺 node_key，跳过"; continue; fi
+        # 必填表单按 node_forms[节点] 补，只补空值：用户在页面改过的以页面为准，不覆盖
+        forms=$(printf '%s' "$rc_cfg" | jq -c --arg n "$n" '.story.node_forms[$n] // []')
+        if [ "$forms" != "[]" ]; then
+          fill=$(printf '%s' "$node" | jq -c --argjson f "$forms" --arg mr "$mr_url" '
+            [ .form_items[]? | select(.value == null or .value == "" or .value == [] or .value == {}) | .field_key ] as $empty
+            | [ $f[] | select(.field_key as $k | ($empty | index($k)) != null)
+                | .field_value |= (if type == "string" then gsub("\\{\\{mr_url\\}\\}"; $mr) else tostring end)
+                | select(.field_value != "") ]') \
+            || die "组装节点「${n}」表单失败（检查配置 story.node_forms 形状：{节点名: [{field_key, field_value}]}）"
+          if [ "$fill" != "[]" ]; then
+            uout=$(bytedcli --json meego workitem update --project-key "$PK" --work-item-id "$id" \
+              --fields "$fill" 2>&1 </dev/null) \
+              || { echo "meego: 节点「${n}」表单回填失败：$(snippet "$uout")" >&2; fails=$((fails+1)); break; }
+            echo "meego: 节点「${n}」已补必填表单（$(printf '%s' "$fill" | jq -r '[.[].field_key] | join("、")')）"
+          fi
+        fi
         # </dev/null 必须：循环体共享 heredoc 作 stdin，CLI 若读 stdin 会吞掉剩余节点名（静默漏流转）
-        tout=$(bytedcli --json meego node transition --project-key "$PK" --work-item-id "$id" \
-          --action confirm --node-id "$nk" 2>&1 </dev/null) \
-          || { case "$tout" in
-                 *20016*|*"Node Is Not Arrived"*)
-                   # 目标节点未到达：前序节点未推进。推进前序属人工判断——前序可能是别人的评审节点，
-                   # 也可能是本人评审节点卡在必填表单（498109 的「技术评审」实测如此），机械层只如实报位置。
-                   at=$(printf '%s' "$nodes" | jq -r '[.list[]? | select(.basic.status == "doing") | .basic.name] | join("、") | if . == "" then "未知" else . end')
-                   echo "meego: 节点「${n}」尚未到达（节点流停在「${at}」），前序节点未推进，转人工（参见 SKILL.md「转人工后的处理参考」）" >&2 ;;
-                 *) echo "meego: 节点「${n}」confirm 失败：$(snippet "$tout")" >&2 ;;
-               esac
-               fails=$((fails+1)); continue; }
+        # 20016 可能只是上一节点刚 confirm、服务端还没把本节点推到 doing：重取节点流再试一次
+        try=0
+        while :; do
+          tout=$(bytedcli --json meego node transition --project-key "$PK" --work-item-id "$id" \
+            --action confirm --node-id "$nk" 2>&1 </dev/null) && break
+          case "$tout" in
+            *20016*|*"Node Is Not Arrived"*)
+              if [ "$try" = 0 ]; then try=1; sleep "${MEEGO_RETRY_SLEEP:-2}"; fetch_nodes; continue; fi
+              at=$(printf '%s' "$nodes" | jq -r '[.list[]? | select(.basic.status == "doing") | .basic.name] | join("、") | if . == "" then "未知" else . end')
+              echo "meego: 节点「${n}」尚未到达（节点流停在「${at}」），前序节点未推进，转人工（参见 SKILL.md「转人工后的处理参考」）" >&2 ;;
+            *) echo "meego: 节点「${n}」confirm 失败：$(snippet "$tout")" >&2 ;;
+          esac
+          fails=$((fails+1)); break 2
+        done
         echo "meego: 节点「${n}」已流转完成"
       done <<EOF
 $names

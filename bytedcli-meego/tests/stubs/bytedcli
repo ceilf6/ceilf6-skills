@@ -2,8 +2,9 @@
 # 假 bytedcli：整行 argv 追加 $STUB_STATE/calls.log；按子命令回放 $STUB_STATE 下的应答文件。
 # 应答一律用 MCP 信封（.data.result.content[0].text 内嵌字符串化 JSON），与真机同构。
 # 哨兵：comment_fail / node_get_fail / transition_fail / state_list_fail / state_transition_fail /
-#       create_fail / node_update_fail → 对应命令 exit 5（真机错误即非零退出）。
-#       transition_not_arrived → node transition 回真机 code=20016（目标节点未到达）。
+#       create_fail / node_update_fail / update_fail → 对应命令 exit 5（真机错误即非零退出）。
+#       transition_not_arrived → node transition 回真机 code=20016（目标节点未到达）；
+#       transition_not_arrived_once → 只回一次 20016，随后成功（服务端推进延迟窗口）。
 #       create_nonjson → workitem create 退 0 但吐非 JSON（网关降级形态）。
 set -euo pipefail
 printf '%s\n' "$*" >> "${STUB_STATE:?bytedcli stub 需要 STUB_STATE}/calls.log"
@@ -20,7 +21,14 @@ case "$*" in
     cat >/dev/null 2>/dev/null || true
     if [ -f "${STUB_STATE}/transition_not_arrived" ]; then
       echo '{"status":"error","error":{"message":"id=1000050166, code=20016, message=Node Is Not Arrived, Could Not Be operated "}}'; exit 5; fi
+    # 只 20016 一次：模拟上一节点刚 confirm、服务端尚未推进的短暂窗口，调用方重取后再试应成功
+    if [ -f "${STUB_STATE}/transition_not_arrived_once" ]; then
+      rm -f "${STUB_STATE}/transition_not_arrived_once"
+      echo '{"status":"error","error":{"message":"code=20016, message=Node Is Not Arrived"}}'; exit 5; fi
     if [ -f "${STUB_STATE}/transition_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    echo '{"status":"success"}' ;;
+  *"meego workitem update"*)
+    if [ -f "${STUB_STATE}/update_fail" ]; then echo '{"status":"error"}'; exit 5; fi
     echo '{"status":"success"}' ;;
   *"meego node update"*)
     if [ -f "${STUB_STATE}/node_update_fail" ]; then echo '{"status":"error"}'; exit 5; fi

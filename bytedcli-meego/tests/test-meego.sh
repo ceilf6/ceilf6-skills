@@ -21,7 +21,7 @@ make_fixture() {
   jq -n '{repos:{"lark/byteview-web":{
     project_key:"5e96d7bff4e7c525510f9156", space:"larksuite",
     template_id:"tmpl-1", dev_owner_key:"6976056325272862721",
-    story:{done_transition:["前端开发"], schedule_node:"前端开发", dev_role:"FE",
+    story:{done_transition:["前端开发"], schedule_node:"前端开发", dev_roles:["FE","tech_owner"],
            create_fields:[{field_key:"business", field_value:"biz-1"},
                           {field_key:"field_4225f8", field_value:3000712092},
                           {field_key:"apps", field_value:[{option_id:"option_1"}]}]},
@@ -110,7 +110,7 @@ case "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="description") |
 [ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="field_4225f8") | .field_value | type')" = "string" ] && ok "数字型 field_value 转字符串" || bad "数字未转字符串: $fields"
 [ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="apps") | .field_value | fromjson | .[0].option_id')" = "option_1" ] && ok "数组型 field_value 字符串化 JSON" || bad "数组未字符串化: $fields"
 [ "$(printf '%s' "$fields" | jq -r '[.[] | .field_value | type] | unique | join(",")')" = "string" ] && ok "全部 field_value 为字符串" || bad "存在非字符串 field_value: $fields"
-[ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="role_owners") | .field_value | fromjson | .[0] | "\(.role):\(.owners[0])"')" = "FE:6976056325272862721" ] && ok "dev_role 配置时挂 role_owners" || bad "role_owners: $fields"
+[ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="role_owners") | .field_value | fromjson | map("\(.role):\(.owners[0])") | join(",")')" = "FE:6976056325272862721,tech_owner:6976056325272862721" ] && ok "dev_roles 配置时逐角色挂 role_owners" || bad "role_owners: $fields"
 rc=0; bash "$MG" create --ctx-dir "$ctx" --title "再建" --description-file "$T/desc.md" 2>/dev/null || rc=$?
 [ "$rc" = 1 ] && ok "meta 已有 meego_id 防重 die" || bad "防重 exit $rc"
 touch "$STUB_STATE/create_fail"
@@ -127,13 +127,13 @@ chmod 000 "$T/desc.md"
 rc=0; err=$(bash "$MG" create --ctx-dir "$ctx" --title "z" --description-file "$T/desc.md" 2>&1 >/dev/null) || rc=$?
 chmod 644 "$T/desc.md"
 case "$err" in meego:*不可读*) ok "不可读 description 走 meego die" ;; *) bad "不可读 stderr: $err" ;; esac
-# 配置无 dev_role / 无 create_fields：只带 template / name / description（模板无必填字段的仓库）
-jq 'del(.repos["lark/byteview-web"].story.dev_role, .repos["lark/byteview-web"].story.create_fields)' \
+# 配置无 dev_roles / 无 create_fields：只带 template / name / description（模板无必填字段的仓库）
+jq 'del(.repos["lark/byteview-web"].story.dev_roles, .repos["lark/byteview-web"].story.create_fields)' \
   "$BYTEDCLI_MEEGO_CONFIG" > "$T/cfg2.json" && mv "$T/cfg2.json" "$BYTEDCLI_MEEGO_CONFIG"
 : > "$STUB_STATE/calls.log"
 bash "$MG" create --ctx-dir "$ctx" --title "裸建" --description-file "$T/desc.md" >/dev/null
 fields=$(grep -- "meego workitem create" "$STUB_STATE/calls.log" | head -1); fields=${fields#*--fields }
-[ "$(printf '%s' "$fields" | jq -r '[.[].field_key] | join(",")')" = "template,name,description" ] && ok "无 dev_role / create_fields 时只带基础三字段" || bad "基础字段集: $fields"
+[ "$(printf '%s' "$fields" | jq -r '[.[].field_key] | join(",")')" = "template,name,description" ] && ok "无 dev_roles / create_fields 时只带基础三字段" || bad "基础字段集: $fields"
 # --repo 模式（harness 之外给存量 MR 补建）：只建单、输出 id/url，不碰任何 meta
 jq 'del(.meego_id, .meego_type, .meego_url)' "$ctx/meta.json" > "$ctx/tmp" && mv "$ctx/tmp" "$ctx/meta.json"
 : > "$STUB_STATE/calls.log"
@@ -284,6 +284,96 @@ grep -qF -- '--node-id fe_online' "$STUB_STATE/calls.log" \
   && ok "第二节点未被吞" || bad "第二节点缺失: $(tail -2 "$STUB_STATE/calls.log")"
 jq '.repos["lark/byteview-web"].story.done_transition=["前端开发"]' "$BYTEDCLI_MEEGO_CONFIG" > "$T/cfg2" \
   && mv "$T/cfg2" "$BYTEDCLI_MEEGO_CONFIG"
+cleanup
+
+echo "== advance story 推到底：按序经过全部节点、补必填表单、空 owner 可推、他人 owner 停下 =="
+make_fixture
+jq -n '{meego_id:"7310638751", meego_type:"story", mr_id:"8300001"}' > "$ctx/meta.json"
+# 映射：起点 → 技术评审（带必填表单）→ 需求开发 → 需求测试（无 owner）→ 需求合入
+jq '.repos["lark/byteview-web"].story.done_transition=["需求提出","技术评审","需求开发","需求测试","需求合入"]
+  | .repos["lark/byteview-web"].story.node_forms={"技术评审":[
+      {field_key:"field_1", field_value:"{{mr_url}}"},
+      {field_key:"field_8e6a9f", field_value:"pbgnb05kk"},
+      {field_key:"field_d40cc0", field_value:"option_2"}]}' "$BYTEDCLI_MEEGO_CONFIG" > "$T/cfg2" \
+  && mv "$T/cfg2" "$BYTEDCLI_MEEGO_CONFIG"
+ME=6976056325272862721
+mk_nodes() { # <需求提出状态> <技术评审状态> <技术评审 field_1 值(json)> <需求开发状态> <需求测试状态> <需求合入状态>
+  jq -n --arg s1 "$1" --arg s2 "$2" --argjson f1 "$3" --arg s3 "$4" --arg s4 "$5" --arg s5 "$6" --arg me "$ME" '{list:[
+    {basic:{name:"需求提出", node_key:"start",     status:$s1}, assignees:{owners:[{user_key:$me}]}},
+    {basic:{name:"技术评审", node_key:"review",    status:$s2}, assignees:{owners:[{user_key:$me}]},
+     form_items:[{field_key:"field_1", is_required:true, value:$f1},
+                 {field_key:"field_8e6a9f", is_required:true, value:null},
+                 {field_key:"field_d40cc0", is_required:true, value:"option_1"},
+                 {field_key:"point", is_required:false, value:null}]},
+    {basic:{name:"安全技术评审", node_key:"state_100", status:"not_started"}, assignees:{owners:[{user_key:"liujiahao.winnie"}]}},
+    {basic:{name:"需求开发", node_key:"state_97",  status:$s3}, assignees:{owners:[{user_key:$me}]}},
+    {basic:{name:"需求测试", node_key:"state_98",  status:$s4}, assignees:{owners:[]}},
+    {basic:{name:"需求合入", node_key:"state_99",  status:$s5}, assignees:{owners:[{user_key:$me}]}}], total:6}' > "$STUB_STATE/nodes.json"
+}
+# 全程从起点推到底：5 个节点按序 confirm；技术评审只补空的必填项（field_1 空→MR 链接、field_8e6a9f 空→填；
+# field_d40cc0 已有值 option_1 不覆盖；非必填 point 不碰）；安全技术评审不在映射里，不碰
+mk_nodes doing not_started null not_started not_started not_started
+: > "$STUB_STATE/calls.log"
+rc=0; out=$(MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" 2>&1) || rc=$?
+[ "$rc" = 0 ] && ok "推到底 exit 0" || bad "推到底 exit $rc: $out"
+seq=$(grep -o -- '--node-id [a-z_0-9]*' "$STUB_STATE/calls.log" | awk '{print $2}' | tr '\n' ',')
+[ "$seq" = "start,review,state_97,state_98,state_99," ] && ok "按映射顺序逐节点 confirm（含空 owner 的需求测试）" || bad "confirm 顺序: $seq"
+grep -q -- '--node-id state_100' "$STUB_STATE/calls.log" && bad "碰了映射外的安全技术评审" || ok "映射外节点不碰"
+upd=$(grep -- "meego workitem update" "$STUB_STATE/calls.log" | head -1); upd=${upd#*--fields }
+[ "$(printf '%s' "$upd" | jq -r '.[] | select(.field_key=="field_1") | .field_value')" = "https://bits.bytedance.net/bytebus/devops/code/detail/8300001" ] && ok "{{mr_url}} 用 meta.mr_id 展开" || bad "field_1: $upd"
+[ "$(printf '%s' "$upd" | jq -r '.[] | select(.field_key=="field_8e6a9f") | .field_value')" = "pbgnb05kk" ] && ok "空必填项按 node_forms 补" || bad "field_8e6a9f: $upd"
+printf '%s' "$upd" | jq -e '.[] | select(.field_key=="field_d40cc0")' >/dev/null && bad "覆盖了已有值 field_d40cc0" || ok "已有值不覆盖"
+[ "$(grep -c -- "meego workitem update" "$STUB_STATE/calls.log")" = 1 ] && ok "只有技术评审一次表单回填" || bad "update 次数: $(grep -c -- 'meego workitem update' "$STUB_STATE/calls.log")"
+# 表单回填必须在该节点 confirm 之前
+u_line=$(grep -n -- "meego workitem update" "$STUB_STATE/calls.log" | cut -d: -f1); c_line=$(grep -n -- "--node-id review" "$STUB_STATE/calls.log" | cut -d: -f1)
+[ "$u_line" -lt "$c_line" ] && ok "表单先于 confirm" || bad "顺序: update@$u_line confirm@$c_line"
+# 幂等：全部已完成 → 空转零调用
+mk_nodes finished finished '"x"' finished finished finished
+: > "$STUB_STATE/calls.log"
+MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" >/dev/null && ok "全部完成时空转 exit 0" || bad "空转失败"
+grep -q -- "node transition\|workitem update" "$STUB_STATE/calls.log" && bad "空转仍有写调用" || ok "空转零写调用"
+# 中途起步：需求开发 doing，前面已 finished → 只 confirm 需求开发/需求测试/需求合入
+mk_nodes finished finished '"x"' doing not_started not_started
+: > "$STUB_STATE/calls.log"
+MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" >/dev/null || bad "中途起步失败"
+seq=$(grep -o -- '--node-id [a-z_0-9]*' "$STUB_STATE/calls.log" | awk '{print $2}' | tr '\n' ',')
+[ "$seq" = "state_97,state_98,state_99," ] && ok "从当前节点接着推" || bad "中途起步顺序: $seq"
+# 他人 owner 挡路：需求测试 owner 是别人 → 停在那里、后续需求合入不再空试、exit 1
+mk_nodes finished finished '"x"' doing not_started not_started
+jq '.list |= map(if .basic.name=="需求测试" then .assignees.owners=[{user_key:"别人"}] else . end)' "$STUB_STATE/nodes.json" > "$T/n" && mv "$T/n" "$STUB_STATE/nodes.json"
+: > "$STUB_STATE/calls.log"
+rc=0; out=$(MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" 2>&1) || rc=$?
+[ "$rc" = 1 ] && ok "他人 owner 挡路 exit 1" || bad "挡路 exit $rc"
+seq=$(grep -o -- '--node-id [a-z_0-9]*' "$STUB_STATE/calls.log" | awk '{print $2}' | tr '\n' ',')
+[ "$seq" = "state_97," ] && ok "挡路前的节点已推、挡路后的不再空试" || bad "挡路顺序: $seq"
+case "$out" in *"需求测试"*"拒绝流转"*) ok "报出被挡节点" ;; *) bad "挡路文案: $out" ;; esac
+# 20016 只出现一次（服务端推进延迟）：重取后再试成功，整体不失败
+mk_nodes doing not_started null not_started not_started not_started
+touch "$STUB_STATE/transition_not_arrived_once"
+: > "$STUB_STATE/calls.log"
+rc=0; MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" >/dev/null 2>&1 || rc=$?
+[ "$rc" = 0 ] && ok "一次 20016 重试后成功" || bad "20016 重试 exit $rc"
+[ "$(grep -c -- '--node-id start' "$STUB_STATE/calls.log")" = 2 ] && ok "同一节点重试一次" || bad "重试次数: $(grep -c -- '--node-id start' "$STUB_STATE/calls.log")"
+# 表单回填失败 → 停下 exit 1，不 confirm 该节点
+mk_nodes finished doing null not_started not_started not_started
+touch "$STUB_STATE/update_fail"; : > "$STUB_STATE/calls.log"
+rc=0; out=$(MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" 2>&1) || rc=$?
+[ "$rc" = 1 ] && ok "表单回填失败 exit 1" || bad "回填失败 exit $rc"
+grep -q -- "--node-id review" "$STUB_STATE/calls.log" && bad "回填失败仍 confirm" || ok "回填失败不 confirm"
+case "$out" in *"表单回填失败"*) ok "报出回填失败" ;; *) bad "回填失败文案: $out" ;; esac
+rm -f "$STUB_STATE/update_fail"
+# --repo 模式：{{mr_url}} 来自 --mr-id；不给 --mr-id 时含占位的项不填、其余照填
+mk_nodes finished doing null not_started not_started not_started
+: > "$STUB_STATE/calls.log"
+MEEGO_RETRY_SLEEP=0 bash "$MG" advance --repo lark/byteview-web --id 7310638751 --type story --mr-id 8300777 >/dev/null || bad "--repo advance 失败"
+upd=$(grep -- "meego workitem update" "$STUB_STATE/calls.log" | head -1); upd=${upd#*--fields }
+[ "$(printf '%s' "$upd" | jq -r '.[] | select(.field_key=="field_1") | .field_value')" = "https://bits.bytedance.net/bytebus/devops/code/detail/8300777" ] && ok "--repo 模式 {{mr_url}} 用 --mr-id" || bad "--repo field_1: $upd"
+mk_nodes finished doing null not_started not_started not_started
+: > "$STUB_STATE/calls.log"
+MEEGO_RETRY_SLEEP=0 bash "$MG" advance --repo lark/byteview-web --id 7310638751 --type story >/dev/null || bad "--repo 无 mr-id advance 失败"
+upd=$(grep -- "meego workitem update" "$STUB_STATE/calls.log" | head -1); upd=${upd#*--fields }
+printf '%s' "$upd" | jq -e '.[] | select(.field_key=="field_1")' >/dev/null && bad "无 mr_url 仍填了 field_1" || ok "无 mr_url 时含占位项不填"
+[ "$(printf '%s' "$upd" | jq -r '.[] | select(.field_key=="field_8e6a9f") | .field_value')" = "pbgnb05kk" ] && ok "无占位的项照填" || bad "无占位项: $upd"
 cleanup
 
 echo "== advance issue：state 通道、空转、表单转人工 =="
