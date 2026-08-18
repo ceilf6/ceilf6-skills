@@ -134,6 +134,16 @@ jq 'del(.repos["lark/byteview-web"].story.dev_role, .repos["lark/byteview-web"].
 bash "$MG" create --ctx-dir "$ctx" --title "裸建" --description-file "$T/desc.md" >/dev/null
 fields=$(grep -- "meego workitem create" "$STUB_STATE/calls.log" | head -1); fields=${fields#*--fields }
 [ "$(printf '%s' "$fields" | jq -r '[.[].field_key] | join(",")')" = "template,name,description" ] && ok "无 dev_role / create_fields 时只带基础三字段" || bad "基础字段集: $fields"
+# --repo 模式（harness 之外给存量 MR 补建）：只建单、输出 id/url，不碰任何 meta
+jq 'del(.meego_id, .meego_type, .meego_url)' "$ctx/meta.json" > "$ctx/tmp" && mv "$ctx/tmp" "$ctx/meta.json"
+: > "$STUB_STATE/calls.log"
+out=$(bash "$MG" create --repo lark/byteview-web --title "存量补建" --description-file "$T/desc.md")
+[ "$(printf '%s' "$out" | jq -r '.id')" = "7999000111" ] && ok "--repo 模式输出新 id" || bad "--repo create: $out"
+case "$(printf '%s' "$out" | jq -r '.url')" in */story/detail/7999000111) ok "--repo 模式输出 url" ;; *) bad "--repo url: $out" ;; esac
+[ "$(jq -r '.meego_id // empty' "$ctx/meta.json")" = "" ] && ok "--repo 模式不写 meta" || bad "--repo 写了 meta"
+grep -q -- "meego workitem create" "$STUB_STATE/calls.log" && ok "--repo 模式走 workitem create" || bad "--repo 未建单"
+rc=0; bash "$MG" create --repo lark/byteview-web --title "缺描述" 2>/dev/null || rc=$?
+[ "$rc" = 1 ] && ok "--repo 模式缺 --description-file 走 usage" || bad "缺描述 exit $rc"
 # create_fields 形状不对（不是数组）：组装期即 die，不把坏参数发给服务端
 jq '.repos["lark/byteview-web"].story.create_fields = {field_key:"business"}' \
   "$BYTEDCLI_MEEGO_CONFIG" > "$T/cfg2.json" && mv "$T/cfg2.json" "$BYTEDCLI_MEEGO_CONFIG"

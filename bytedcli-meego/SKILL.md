@@ -49,7 +49,7 @@ Meego 全生命周期管理的机械层单点。运行期动作（关联 / 创�
 | 子命令 | 职责 | 关键纪律 |
 |---|---|---|
 | `resolve` | 从链接/ID 解析条目并（ctx 模式）落 meta | 解析失败 die，不静默转创建；换绑不同 id 拒绝 |
-| `create` | 走底层 `workitem create --fields` 建需求（恒 story）并落 meta：template / name / description + `role_owners`（配了 dev_role）+ `create_fields` | meta 已有 meego_id 防重 die；field_value 一律字符串；`--dry-run` 只回显归一化载荷，不建单、不写 meta |
+| `create` | 走底层 `workitem create --fields` 建需求（恒 story）：template / name / description + `role_owners`（配了 dev_role）+ `create_fields`。ctx 模式落 meta；`--repo` 模式只建单、输出 id/url（harness 之外给存量 MR 补建，随后 `bits mr update --meego <url>` 绑 MR） | ctx 模式 meta 已有 meego_id 防重 die；field_value 一律字符串；`--dry-run` 只回显归一化载荷，不建单、不写 meta |
 | `comment` | 进度评论（`--message-file` 或 `--preset qa`，qa 文案带 meta.mr_id） | 【bot】前缀机械层强制 |
 | `schedule` | 回填 schedule_node 节点排期/估分/负责人 | 仅 story；issue 输出 skipped；`--points` 只收纯数字 |
 | `advance` | done 流转：story 按 done_transition 逐节点 confirm；issue 按 done_state 状态流转 | owner 守卫（不碰他端节点）；已完成空转、缺节点跳过；目标节点未到达报当前停留位置转人工；confirm 失败退出 1，幂等可重跑 |

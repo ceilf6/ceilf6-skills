@@ -16,7 +16,7 @@ CFG="${BYTEDCLI_MEEGO_CONFIG:-$HOME/.bytedcli-meego/config.json}"
 usage() {
   cat >&2 <<'EOF'
 用法：meego.sh resolve  (--ctx-dir <路径> | --repo <slug>) (--url <链接> | --id <id> --type story|issue)
-      meego.sh create   --ctx-dir <路径> --title <标题> --description-file <文件> [--dry-run]
+      meego.sh create   (--ctx-dir <路径> | --repo <slug>) --title <标题> --description-file <文件> [--dry-run]
       meego.sh comment  (--ctx-dir <路径> | --repo <slug> --id <id>) (--message-file <文件> | --preset qa)
       meego.sh schedule (--ctx-dir <路径> | --repo <slug> --id <id> --type story|issue) --start <YYYY-MM-DD> --due <YYYY-MM-DD> [--points <数>]
       meego.sh advance  (--ctx-dir <路径> | --repo <slug> --id <id> --type story|issue)
@@ -130,10 +130,13 @@ case "$sub" in
       '{id:$i, type:$t, url:$u, project_key:$p}'
     ;;
   create)
-    { [ -n "$ctx" ] && [ -n "$title" ] && [ -n "$descfile" ]; } || usage
+    # ctx 模式落 meta（harness 主路径）；--repo 模式只建单并输出 id/url（harness 之外的存量 MR 补建）
+    { [ -n "$title" ] && [ -n "$descfile" ]; } || usage
     [ -r "$descfile" ] || die "description 文件不可读：$descfile"
-    cur=$(jq -r '.meego_id // empty' "$META")
-    [ -z "$cur" ] || die "meta 已关联 meego ${cur}，拒绝重复创建（续入复用既有条目）"
+    if [ -n "$ctx" ]; then
+      cur=$(jq -r '.meego_id // empty' "$META")
+      [ -z "$cur" ] || die "meta 已关联 meego ${cur}，拒绝重复创建（续入复用既有条目）"
+    fi
     TID=$(printf '%s' "$rc_cfg" | jq -r '.template_id // empty')
     [ -n "$TID" ] || die "配置缺 template_id（repo ${repo}）：先 map set 落首次映射"
     desc=$(cat "$descfile")
@@ -163,7 +166,7 @@ case "$sub" in
     nid=$(printf '%s' "$out" | mcp_text | jq -r 'first(.. | objects | (.work_item_id? // .id? // empty) | select(type=="number" or (type=="string" and test("^[0-9]+$")))) // empty' 2>/dev/null | head -1)
     [ -n "$nid" ] || die "create 应答解析不出新条目 id：$(snippet "$out")"
     url_out="https://meego.larkoffice.com/$(printf '%s' "$rc_cfg" | jq -r '.space // "larksuite"')/story/detail/${nid}"
-    meta_write --arg i "$nid" --arg u "$url_out" \
+    [ -z "$ctx" ] || meta_write --arg i "$nid" --arg u "$url_out" \
       '.meego_id = ($i|tostring) | .meego_type = "story" | .meego_url = $u'
     jq -n --arg i "$nid" --arg u "$url_out" '{id:$i, url:$u}'
     ;;
