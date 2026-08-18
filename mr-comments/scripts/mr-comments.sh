@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
-# MR 评论的拉取、水位、回复单点。bot 巡检（mrwatch）与 claude 会话（交互模式手动处置）都只经
-# 本脚本读写评论水位 $CTX/mr-comments.json——谁处理都推进同一份水位，避免「会话处理过、bot 再触发」。
+# MR 评论的拉取、水位、回复单点。bot 巡检（mrwatch）与 claude 会话（值班 / 交互手动处置）都只经本脚本
+# 读写评论水位 $CTX/mr-comments.json——谁处理都推进同一份水位，避免「会话处理过、bot 再触发」。
+#
+# 来源：一次 `bytedcli codebase mr comment list` 拿齐 Codebase 应答里的 threads（讨论线程）与 review_notes
+# （Review 提交附言），每条带 source。BITS 详情页（bits.bytedance.net/…/code/detail/<mr_id>）与 Codebase MR 页
+# 展示的是同一份评论：BITS 自家的 CodeGuard 机器人评论就落在 Codebase 线程里，bytedcli 也没有 BITS 侧评论接口。
+#
+# 作者三分（快照里 author_kind / kind）：Username 等于 MR 作者 → self；CreatedBy.Type == app → bot；其余 → human。
+# 「只回复机器人」落在机械层：reply 对 kind=human（有人工评审参与）的线程与 review_note 一律拒绝，人工评论
+# 由开发者本人在页面处理。判定依据是最近一次 fetch 写入水位的 thread_kinds 缓存，reply 前须 fetch 过。
+#
 # 子命令：
 #   fetch   --ctx-dir <路径>                                    拉全量线程，与水位 diff，快照打到 stdout
 #   mark    --ctx-dir <路径> --from-snapshot <文件> [--count-trigger]   按快照推进水位（--count-trigger 计熔断配额）
@@ -63,7 +72,7 @@ fail4() { wm_write '.consecutive_failures += 1'; echo "mr-comments: $*" >&2; exi
 if [ ! -f "$WM" ]; then
   wm_init=$(mktemp)
   jq -n --arg m "$mr" \
-    '{mr_id:$m, threads:{}, trigger_count:0, auto_disabled:false, closed:false, consecutive_failures:0}' \
+    '{mr_id:$m, threads:{}, thread_kinds:{}, trigger_count:0, auto_disabled:false, closed:false, consecutive_failures:0}' \
     > "$wm_init" || die "水位初始化失败：$WM"
   mv "$wm_init" "$WM"
 fi
@@ -72,7 +81,7 @@ fi
 wm_mr=$(jq -r '.mr_id // empty' "$WM" 2>/dev/null || true)
 if [ "$wm_mr" != "$mr" ]; then
   wm_write --arg m "$mr" \
-    '.mr_id = $m | del(.repo, .iid) | .threads = {} | .closed = false | .consecutive_failures = 0'
+    '.mr_id = $m | del(.repo, .iid, .mr_url) | .threads = {} | .thread_kinds = {} | .closed = false | .consecutive_failures = 0'
 fi
 
 case "$sub" in
@@ -81,14 +90,21 @@ case "$sub" in
     if [ -z "$repo" ] || [ -z "$iid" ]; then
       gl=$(bytedcli --json bits mr code-review gitlab --mr-id "$mr" 2>"$ERRF") \
         || fail4 "GitLab MR 解析调用失败（mr ${mr}）：$(err_tail)"
-      # 应答形状按真机为准（同 cr-group.sh parse_chat_id 手法）：递归找第一个命中的键；真机不符只改本段。
+      # 真机应答：data.mrs[].host.{gitlab_url, iid, group_name, project_name}。repo 路径从 gitlab_url 截
+      # （…/<namespace>/<project>/merge_requests/<iid>）——group_name 是 BITS 侧分组名，不是 Codebase 命名空间；
+      # 显式的 project_path / path_with_namespace 键若存在则优先。
       # jq 的失败必须收进 fail4：裸 jq 会带着自己的退出码掀掉整个脚本，连败计数与 exit 4 契约都落空
-      repo=$(printf '%s' "$gl" | jq -r 'first(.. | objects | (.project_path? // .path_with_namespace? // empty)) // empty' 2>/dev/null) \
+      repo=$(printf '%s' "$gl" | jq -r '
+        first(.. | objects | (.project_path? // .path_with_namespace? // empty))
+        // (first(.. | objects | (.gitlab_url? // .web_url? // empty))
+            | capture("^https?://[^/]+/(?<p>.+?)/(-/)?merge_requests/[0-9]+").p)
+        // empty' 2>/dev/null) \
         || fail4 "GitLab MR 应答不是 JSON（mr ${mr}）：$(snippet "$gl")"
       iid=$(printf '%s' "$gl" | jq -r 'first(.. | objects | (.iid? // empty)) // empty' 2>/dev/null) \
         || fail4 "GitLab MR 应答不是 JSON（mr ${mr}）：$(snippet "$gl")"
+      mr_url=$(printf '%s' "$gl" | jq -r 'first(.. | objects | (.gitlab_url? // .web_url? // empty)) // empty' 2>/dev/null || true)
       { [ -n "$repo" ] && [ -n "$iid" ]; } || fail4 "GitLab MR 解析不出 repo/iid（输出形状不符？）：$(snippet "$gl")"
-      wm_write --arg r "$repo" --arg i "$iid" '.repo = $r | .iid = $i'
+      wm_write --arg r "$repo" --arg i "$iid" --arg u "$mr_url" '.repo = $r | .iid = $i | .mr_url = $u'
     fi
     out=$(bytedcli --json codebase mr comment list -R "$repo" "$iid" 2>"$ERRF") || {
       list_err=$(err_tail)
@@ -105,32 +121,74 @@ case "$sub" in
       esac
       fail4 "comment list 拉取失败（repo ${repo} iid ${iid}）：${list_err}${st_err:+ | mr status: ${st_err}}"
     }
-    # 本人 username 从需求仓 git 配置读（ctx 固定在 <检出>/.harness-ceilf6/<分支> 两层之下，同 cr-group.sh）
-    repo_root=$(cd "$ctx/../.." && pwd -P)
-    me=$(git -C "$repo_root" config user.name 2>/dev/null || true)
-    # 线程归一：字段名按真机为准，递归收集「有 id + 回复数组」形状的对象；真机不符只改本段 jq
-    norm=$(printf '%s' "$out" | jq '
-      [.. | objects
-        | select((.id? // .Id?) != null and (((.comments? // .Comments? // .notes?) | type) == "array"))
-        | { id: ((.id // .Id) | tostring),
-            resolved: ((((.resolved // .Resolved // "") | tostring) | ascii_downcase) == "true"),
-            replies: [ (.comments // .Comments // .notes)[]
-                       | { author: ((.author.username? // .author.name? // .author? // "") | tostring),
-                           body: ((.body // .Body // .content // "") | tostring) } ] } ]' 2>/dev/null) \
+    # 应答里 merge_request.Status 直接说明 MR 是否已合入/关闭——不必等拉取失败再去探
+    mr_state=$(printf '%s' "$out" | jq -r '.data.merge_request.Status // .data.merge_request.State // "" | ascii_downcase' 2>/dev/null) \
+      || fail4 "comment list 应答不是 JSON（repo ${repo} iid ${iid}）：$(snippet "$out")"
+    case "$mr_state" in
+      merged|closed)
+        wm_write '.closed = true'
+        jq -n --arg m "$mr" '{mr_id:$m, closed:true}'
+        exit 0 ;;
+    esac
+    # 本人 = MR 作者（应答自带，与 Codebase 用户名天然一致）；应答缺作者时退回需求仓 git user.name
+    # （ctx 固定在 <检出>/.harness-ceilf6/<分支> 两层之下，同 cr-group.sh）
+    me=$(printf '%s' "$out" | jq -r '.data.merge_request.CreatedBy.Username // empty' 2>/dev/null || true)
+    if [ -z "$me" ]; then
+      repo_root=$(cd "$ctx/../.." && pwd -P)
+      me=$(git -C "$repo_root" config user.name 2>/dev/null || true)
+    fi
+    url_in=$(printf '%s' "$out" | jq -r '.data.merge_request.URL // empty' 2>/dev/null || true)
+    if [ -n "$url_in" ] && [ "$(jq -r '.mr_url // empty' "$WM")" != "$url_in" ]; then
+      wm_write --arg u "$url_in" '.mr_url = $u'
+    fi
+    # 线程归一（字段名按真机为准）：threads[].{Id,Status,Positions,Comments[].{Content,CreatedAt,CreatedBy.{Username,Type}}}；
+    # review_notes 按 Comments 同构解析（真机样本为 0 时按此假定，缺 Id 的条目丢弃并在 stderr 报数）。
+    norm=$(printf '%s' "$out" | jq --arg me "$me" '
+      def kind_of: if ((.CreatedBy.Username // "") | tostring) == $me then "self"
+                   elif (((.CreatedBy.Type // "") | tostring) | ascii_downcase) == "app" then "bot"
+                   else "human" end;
+      def as_reply: { author: ((.CreatedBy.Username // .CreatedBy.DisplayName.Content // "") | tostring),
+                      author_kind: kind_of,
+                      body: ((.Content // "") | tostring),
+                      at: (.CreatedAt // null) };
+      def thread_kind: if any(.replies[]; .author_kind == "human") then "human"
+                       elif any(.replies[]; .author_kind == "bot") then "bot" else "self" end;
+      ((.data.threads // []) | map(select(.Id != null and ((.Comments | type) == "array"))
+        | { id: (.Id | tostring), source: "codebase_thread",
+            resolved: ((((.Status // "") | tostring) | ascii_downcase) as $s | ($s == "resolved" or $s == "closed")),
+            path: (.Positions[0]?.Path // .Comments[0].Position.Path // null),
+            line: (.Positions[0]?.StartLine // .Comments[0].Position.StartLine // null),
+            replies: [ .Comments[] | as_reply ] }
+        | .kind = thread_kind))
+      + ((.data.review_notes // []) | map(select(.Id != null)
+        | { id: (.Id | tostring), source: "codebase_review_note", resolved: false, path: null, line: null,
+            replies: [ as_reply ] }
+        | .kind = thread_kind))' 2>/dev/null) \
       || fail4 "comment list 输出无法归一（非 JSON 或形状不符）：$(snippet "$out")"
+    dropped=$(printf '%s' "$out" | jq '((.data.review_notes // []) | map(select(.Id == null)) | length)' 2>/dev/null || echo 0)
+    [ "$dropped" = 0 ] || echo "mr-comments: 警告：${dropped} 条 review_note 缺 Id，已丢弃（形状与假定不符）" >&2
     snapshot=$(printf '%s' "$norm" | jq --arg me "$me" --arg m "$mr" --arg r "$repo" --arg i "$iid" \
-      --arg at "$(now)" --slurpfile wm "$WM" '
+      --arg u "$(jq -r '.mr_url // empty' "$WM")" --arg at "$(now)" --slurpfile wm "$WM" '
       ($wm[0].threads) as $seen
-      | { mr_id:$m, repo:$r, iid:$i, fetched_at:$at, closed:false, threads: .,
+      | { mr_id:$m, repo:$r, iid:$i, mr_url:$u, me:$me, fetched_at:$at, closed:false, threads: .,
           new: [ .[]
                  | select(.resolved | not)
                  | ($seen[.id].reply_count // 0) as $known
                  | select((.replies | length) > $known)
-                 | { id, handled_before: ($seen[.id].handled // null), new_replies: .replies[$known:] }
-                 | select([.new_replies[].author] | any(. != $me)) ] }
-      | .loop_suspect = ((.new | length) > 0 and ([.new[] | .handled_before != null] | all))') \
+                 | . + { new_replies: .replies[$known:] }
+                 | select(any(.new_replies[]; .author_kind != "self"))
+                 | { id, source, path, line,
+                     handled_before: ($seen[.id].handled // null),
+                     kind: (if any(.new_replies[]; .author_kind == "human") then "human" else "bot" end),
+                     new_replies } ] }
+      | .new_bot_count = ([.new[] | select(.kind == "bot")] | length)
+      | .new_human_count = ([.new[] | select(.kind == "human")] | length)
+      | ([.new[] | select(.kind == "bot")]) as $b
+      | .loop_suspect = (($b | length) > 0 and all($b[]; .handled_before != null))') \
       || fail4 "快照构建失败（水位 ${WM} 不可解析？）"
-    wm_write '.consecutive_failures = 0'
+    # thread_kinds 是 reply 守卫的依据：每次 fetch 全量刷新（线程一旦有人工参与就永久归 human）
+    kinds=$(printf '%s' "$norm" | jq 'map({key: .id, value: {kind, source}}) | from_entries')
+    wm_write --argjson k "$kinds" '.thread_kinds = $k | .consecutive_failures = 0'
     printf '%s\n' "$snapshot"
     ;;
   mark)
@@ -169,8 +227,14 @@ case "$sub" in
     fi
     repo=$(jq -r '.repo // empty' "$WM"); iid=$(jq -r '.iid // empty' "$WM")
     { [ -n "$repo" ] && [ -n "$iid" ]; } || die "水位缺 repo/iid：先执行 fetch"
+    # 只回复机器人：守卫落在这里，值班会话与交互会话都绕不过。依据是最近一次 fetch 的 thread_kinds 缓存。
+    kind_info=$(jq -r --arg t "$thread" '.thread_kinds[$t] // empty | "\(.kind) \(.source)"' "$WM")
+    [ -n "$kind_info" ] || die "线程 ${thread} 不在最近一次 fetch 的线程表里：先执行 fetch"
+    t_kind=${kind_info%% *}; t_source=${kind_info#* }
+    [ "$t_source" = codebase_thread ] || die "线程 ${thread} 是 ${t_source}，不走自动回复（在页面上处理）"
+    [ "$t_kind" != human ] || die "线程 ${thread} 有人工评审参与，不自动回复——人工评论由开发者本人处理"
     # handled 落在回复成功之后：先落再发会让失败的线程被当成已处置，永远不再触发
-    bytedcli codebase mr comment reply -R "$repo" "$iid" --thread "$thread" -m "$msg" >/dev/null \
+    bytedcli codebase mr comment reply -R "$repo" "$iid" --thread-id "$thread" -b "$msg" >/dev/null \
       || die "回复失败（thread ${thread}），handled 未落位，可重试"
     if [ -n "$handled" ]; then
       wm_write --arg t "$thread" --arg h "$handled" '.threads[$t] = ((.threads[$t] // {}) + {handled:$h})'

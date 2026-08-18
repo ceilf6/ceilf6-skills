@@ -1,16 +1,23 @@
-// MR 评论巡检（发现层，零 LLM）：枚举 harness 线程 → mr-comments.sh fetch → 门禁判定 → 主路起
-// 值班任务。评论水位只由 mr-comments.sh 写，本模块对水位文件只读（auto_disabled/closed/计数门禁）。
-// 全部外部依赖可注入（run/lark/launchDuty/hasCapacity/hasActiveTaskAt），单测不碰真进程。
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+// MR 评论巡检（发现层，零 LLM）：枚举 harness 线程 → mr-comments skill 的 fetch → 按作者分流 →
+// 人工评论只私信开发者并推进水位；机器人评论过门禁后起值班任务。评论水位只由 mr-comments.sh 写，
+// 本模块对水位文件只读（auto_disabled/closed/计数门禁）。
+// 值班的对外出口不开新话题：线程若源自任务大厅某个话题（bot 线程登记按 worktree 反查），就在该话题
+// 里回帖并以回帖当任务锚点；没有话题的线程（交互会话开的）走私信。值班不受接单水位限制——处置 MR
+// 评论是在清积压，不是接新单。
+// 全部外部依赖可注入（run/lark/launchDuty/hasCapacity/hasActiveTaskAt/findTopic），单测不碰真进程。
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRIPTS_DIR = join(HERE, '..', '..', 'harness-ceilf6', 'scripts');
+const MR_COMMENTS_DIR = join(HERE, '..', '..', 'mr-comments', 'scripts');
 const DUTY_TPL = join(HERE, '..', 'duty-prompt.md');
 
-export const DEFAULTS = { enabled: true, intervalMs: 300_000, maxTriggersPerThread: 5 };
+// 出厂关闭：MR 评论默认由开发者在 harness 会话里主动调 mr-comments skill 处理；要 bot 轮询就在
+// config.mrWatch 打开 enabled。
+export const DEFAULTS = { enabled: false, intervalMs: 300_000, maxTriggersPerThread: 5 };
 
 function sh(bin, args) {
   return new Promise((res) => {
@@ -23,11 +30,13 @@ function sh(bin, args) {
 export function makeMrWatch(deps) {
   const {
     config, lark, launchDuty, hasCapacity, hasActiveTaskAt,
-    scriptsDir = SCRIPTS_DIR, run = sh,
+    // findTopic(row) → { rootMessageId, threadId } | null：该 harness 线程在任务大厅的话题（无则 null）
+    findTopic = () => null,
+    scriptsDir = SCRIPTS_DIR, mrCommentsDir = MR_COMMENTS_DIR, run = sh,
     log = (...a) => console.error('[mrwatch]', ...a),
   } = deps;
   const cfg = { ...DEFAULTS, ...(config.mrWatch ?? {}) };
-  const mc = join(scriptsDir, 'mr-comments.sh');
+  const mc = join(mrCommentsDir, 'mr-comments.sh');
   // 一次性提醒去重（进程生命周期内）：closed 与熔断各提醒一次即到达，反复播报是骚扰。
   // bot 重启后最多再提醒一次，可接受。
   const notified = { closed: new Set(), fused: new Set() };
@@ -37,13 +46,26 @@ export function makeMrWatch(deps) {
     try { return JSON.parse(readFileSync(join(ctxDir, 'mr-comments.json'), 'utf8')); } catch { return {}; }
   }
 
-  function writeSnapshot(row, snap) {
+  // 同一轮的机器人快照（snapshot.json，值班任务输入）与人工快照（human.json，只留档）落同一时间戳目录
+  function writeSnapshot(row, snap, name = 'snapshot.json') {
     const ts = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
     const dir = join(row.ctx_dir, 'mr-cr', ts);
     mkdirSync(dir, { recursive: true });
-    const p = join(dir, 'snapshot.json');
+    const p = join(dir, name);
     writeFileSync(p, JSON.stringify(snap, null, 2));
     return p;
+  }
+
+  // 人工评论私信：作者 / 文件:行 / 首条新增回复摘要，最多列 10 条，其余指向快照文件
+  function renderHumanDm(row, snap, items, snapPath) {
+    const excerpt = (t) => String(t ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    const lines = items.slice(0, 10).map((n, i) => {
+      const r = n.new_replies?.[0] ?? {};
+      const where = n.path ? `${n.path}${n.line != null ? `:${n.line}` : ''}` : (n.source === 'codebase_review_note' ? 'Review 附言' : '总评');
+      return `${i + 1}. ${r.author ?? '?'}｜${where}｜${excerpt(r.body)}`;
+    });
+    const more = items.length > 10 ? `\n…另 ${items.length - 10} 条见快照 ${snapPath}` : '';
+    return `【bot】MR ${row.mr_id} 有 ${items.length} 条人工 CR 评论待你处理（人工评论不自动回复、不自动修复）：\n${lines.join('\n')}${more}\nMR：${snap.mr_url || row.mr_id}`;
   }
 
   function renderDuty(row, snapPath, loopSuspect, task) {
@@ -103,6 +125,21 @@ export function makeMrWatch(deps) {
       return;
     }
     if (!snap.new?.length) return;
+    const humanNew = snap.new.filter((n) => n.kind === 'human');
+    const botNew = snap.new.filter((n) => n.kind !== 'human');
+    if (humanNew.length) {
+      // 人工评论：不起任务、不回复，私信开发者一次。只推这些线程的水位——机器人线程留给下面的主路
+      // 决定（并发满/被占时不 mark，并入下轮），否则这里一并推掉就再也触发不了。
+      const humanIds = new Set(humanNew.map((n) => n.id));
+      const humanSnap = { ...snap, threads: (snap.threads ?? []).filter((t) => humanIds.has(t.id)), new: humanNew, loop_suspect: false };
+      const hp = writeSnapshot(row, humanSnap, 'human.json');
+      const hm = await run('bash', [mc, 'mark', '--ctx-dir', row.ctx_dir, '--from-snapshot', hp]);
+      if (hm.code !== 0) log(`MR ${row.mr_id} 人工评论 mark 失败（exit ${hm.code}）：${hm.stderr.trim().split('\n')[0] ?? ''}`);
+      await lark.sendDm(config.dmOpenId, renderHumanDm(row, snap, humanNew, hp));
+    }
+    if (!botNew.length) return;
+    // 机器人快照：threads 仍全量（人工线程再推一遍是幂等的），new 只含机器人条目
+    snap = { ...snap, new: botNew };
     if ((wm.trigger_count ?? 0) >= cfg.maxTriggersPerThread) {
       await run('bash', [mc, 'disable', '--ctx-dir', row.ctx_dir]);
       if (!notified.fused.has(row.ctx_dir)) {
@@ -121,30 +158,43 @@ export function makeMrWatch(deps) {
       // mark 失败即水位未推进，同批评论下轮会再次提醒——log 留因，流程照走
       if (m.code !== 0) log(`MR ${row.mr_id} mark 失败（exit ${m.code}）：${m.stderr.trim().split('\n')[0] ?? ''}`);
       await lark.sendDm(config.dmOpenId,
-        `【bot】MR ${row.mr_id} 有 ${snap.new.length} 条新 CR 评论，但线程检出${why}，未自动处置——请人工处理。快照：${snapPath}`);
+        `【bot】MR ${row.mr_id} 有 ${snap.new.length} 条新机器人 CR 评论，但线程检出${why}，未自动处置——请人工处理。快照：${snapPath}`);
       return;
     }
     if (!hasCapacity()) return; // 并发满：不 mark，下轮自然重试
-    const anchorText = `【bot】MR ${row.mr_id} 发现 ${snap.new.length} 条新 CR 评论，自动处置中（${row.branch}）`;
-    const sent = await lark.sendToChat(config.chatId, anchorText);
-    if (!sent?.messageId) { log(`锚点消息发送失败（MR ${row.mr_id}），本轮放弃`); return; }
     const snapPath = writeSnapshot(row, snap);
+    const anchor = await announce(row, findTopic(row), `MR ${row.mr_id} 发现 ${snap.new.length} 条新机器人 CR 评论，自动处置中`);
+    if (!anchor) { log(`值班锚点发送失败（MR ${row.mr_id}），本轮放弃`); return; }
     const mk = await run('bash', [mc, 'mark', '--ctx-dir', row.ctx_dir, '--from-snapshot', snapPath, '--count-trigger']);
     if (mk.code !== 0) log(`MR ${row.mr_id} mark 失败（exit ${mk.code}）：${mk.stderr.trim().split('\n')[0] ?? ''}`);
-    const task = {
-      messageId: sent.messageId, threadId: sent.threadId ?? '', senderOpenId: config.dmOpenId,
-      text: anchorText, receivedAt: new Date().toISOString(),
-    };
-    const ok = launchDuty(task, {
-      cwd: row.cwd, branch: row.branch, title: `MR ${row.mr_id} 评论处置`,
-      firstMessage: `${renderDuty(row, snapPath, Boolean(snap.loop_suspect), task)}\n\n快照：${snapPath}`,
-    });
+    const task = { messageId: anchor.messageId, threadId: anchor.threadId, senderOpenId: config.dmOpenId,
+      text: anchor.text, receivedAt: new Date().toISOString() };
+    const ok = launchDuty(task, dutyOpts(row, snapPath, Boolean(snap.loop_suspect), task));
     // 已 mark 未起任务的窗口只在并发竞争时出现：不静默——这批评论不会再自动触发
     if (!ok) {
       await lark.sendDm(config.dmOpenId,
         `【bot】MR ${row.mr_id} 值班任务未能启动（并发竞争），评论已记录不再自动触发——请人工处置。快照：${snapPath}`);
     }
   }
+
+  // 值班的对外出口：有话题回帖到话题（回帖当锚点），没有就私信（私信当锚点）。绝不开新话题。
+  async function announce(row, topic, text) {
+    if (topic) {
+      const r = await lark.replyInThread(topic.rootMessageId, text);
+      return r?.messageId ? { messageId: r.messageId, threadId: topic.threadId, text } : null;
+    }
+    const full = `【bot】${text}（${row.branch}）`;
+    const id = await lark.sendDm(config.dmOpenId, full);
+    return id ? { messageId: id, threadId: '', text: full } : null;
+  }
+
+  function dutyOpts(row, snapPath, loopSuspect, task) {
+    return {
+      cwd: row.cwd, branch: row.branch, title: `MR ${row.mr_id} 评论处置`,
+      firstMessage: `${renderDuty(row, snapPath, loopSuspect, task)}\n\n快照：${snapPath}`,
+    };
+  }
+
 
   async function tick() {
     if (ticking) return; // 上一轮未完不叠加
@@ -160,12 +210,10 @@ export function makeMrWatch(deps) {
     } finally { ticking = false; }
   }
 
+  // 鉴权不设开机门禁：bytedcli 走 ByteCloud 登录态，过期与否只有真拉一次才知道——fetch 的 exit 4 与
+  // 连败私信就是那条通知路径。
   function start() {
     if (!cfg.enabled) { log('评论巡检已在配置停用'); return null; }
-    if (!process.env.CLIENT_BITS_TOKEN && !existsSync(join(config.repoPath, '.bits_client_config.json'))) {
-      log('缺 CLIENT_BITS_TOKEN 且仓库无 .bits_client_config.json，评论巡检自禁用（不影响主职）');
-      return null;
-    }
     const t = setInterval(() => { tick().catch((e) => log(`tick 异常：${e.message}`)); }, cfg.intervalMs);
     t.unref?.();
     log(`评论巡检启动（每 ${Math.round(cfg.intervalMs / 1000)}s，熔断上限 ${cfg.maxTriggersPerThread}）`);

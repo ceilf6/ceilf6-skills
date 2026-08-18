@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# 假 bytedcli：整行 argv 追加进 $STUB_STATE/calls.log；按子命令回放 $STUB_STATE 下的应答文件。
+# 应答文件形状与真机一致（gitlab.json / comments.json / status.json 由测试写入）。
+# 哨兵：list_fail → comment list 失败；reply_fail → comment reply 失败。
+set -euo pipefail
+printf '%s\n' "$*" >> "${STUB_STATE:?bytedcli stub 需要 STUB_STATE}/calls.log"
+case "$*" in
+  *"code-review gitlab"*) cat "${STUB_STATE}/gitlab.json" 2>/dev/null || echo '{}' ;;
+  *"comment list"*)
+    if [ -f "${STUB_STATE}/list_fail" ]; then echo "list failed" >&2; exit 1; fi
+    cat "${STUB_STATE}/comments.json" 2>/dev/null || echo '{"data":{"threads":[]}}' ;;
+  *"comment reply"*)
+    if [ -f "${STUB_STATE}/reply_fail" ]; then echo "reply failed" >&2; exit 1; fi ;;
+  *"mr status"*) cat "${STUB_STATE}/status.json" 2>/dev/null || echo '{}' ;;
+  *) : ;;
+esac

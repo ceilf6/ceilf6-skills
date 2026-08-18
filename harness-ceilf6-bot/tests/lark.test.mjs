@@ -33,7 +33,7 @@ test('deleteReaction 走 DELETE 且返回 true', async () => {
 });
 test('replyInThread 与 sendDm：sendDm 返回 message_id', async () => {
   const { dir, log, lark } = setup();
-  assert.equal(await lark.replyInThread('om_1', '回帖文本'), true);
+  assert.deepEqual(await lark.replyInThread('om_1', '回帖文本'), { messageId: 'om_send_1', threadId: 'omt_send_1' }); // 回帖返回自身 message_id（值班锚点用）
   assert.equal(await lark.sendDm('ou_me', '私信文本'), 'om_send_2'); // 本用例第 2 次调用
   const calls = readFileSync(log, 'utf8');
   assert.ok(calls.includes('messages-reply'));

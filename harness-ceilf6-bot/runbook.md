@@ -88,34 +88,47 @@ bot 跑起来后随时可用，**控制命令由 listener 直接执行、不进�
 
 ## MR 评论巡检（mrwatch）
 
-listener 内置定时巡检（`config.mrWatch`，出厂 `{enabled:true, intervalMs:300000, maxTriggersPerThread:5}`）：
-读 `~/.harness-ceilf6/threads.jsonl` 里有 MR、未完成、未归档的线程，经 `mr-comments.sh fetch` 发现新
-CR 评论后在任务大厅发【bot】锚点消息并起值班任务（占 concurrency 槽，/tasks、/stop、看板徽标全部适用）。
+listener 内置定时巡检（`config.mrWatch`，出厂 `{enabled:false, intervalMs:300000, maxTriggersPerThread:5}`，**默认关闭**：
+MR 评论默认由开发者在 harness 会话里主动调 skill `mr-comments` 处理；要 bot 轮询就把 `enabled` 改成 true 重跑 install）。
+打开后读 `~/.harness-ceilf6/threads.jsonl` 里有 MR、未完成、未归档的线程，经 skill `mr-comments`
+（`~/.claude/skills/mr-comments/scripts/mr-comments.sh fetch`）拉 MR 全部评论——Codebase 讨论线程 +
+Review 附言，BITS 详情页展示的是同一份——并按作者分流：
 
-- **依赖**：BITS 凭据二选一——`CLIENT_BITS_TOKEN` 环境变量（launchd plist 里自行加键，模板出厂只带
-  `PATH`），或 repoPath 下 `.bits_client_config.json`（推荐，token 不进 plist 明文）；配法见下文
-  「一次性：本机绑定与配置」第 5 步。两者都缺时巡检自禁用（listener 日志一条），不影响接单主职。
-- **水位**：`$CTX/mr-comments.json`，只由 `harness-ceilf6/scripts/mr-comments.sh` 写。会话手动处理评论
+- **机器人评论**（`kind=bot`，`CreatedBy.Type=app`，如 Bits CodeGuard）：起值班任务处置（占 concurrency 槽，
+  /tasks、/stop、看板徽标全部适用），值班只处置这些。**对外出口不开新话题**：线程若源自任务大厅某个话题
+  （bot 线程登记按 worktree 反查），在该话题里回帖「MR x 发现 N 条新机器人 CR 评论，自动处置中」并以回帖当任务
+  锚点（表情落在回帖上）；交互会话开的线程没有话题，改为私信开发者同一句话、以私信当锚点。群里永远不多出话题。
+- **人工评论**（`kind=human`，含机器人线程被人跟评）：不起任务、不回复，把清单（作者 / 文件:行 / 摘要 / MR
+  链接，最多 10 条，其余指向 `$CTX/mr-cr/<时间戳>/human.json`）私信开发者一次并推进水位，之后不再提醒；由开发者
+  本人在页面处理。`mr-comments.sh reply` 对人工参与过的线程机械拒绝，值班会话绕不过。
+- **话题里的 /stop**：同一话题可能先后跑过首帖任务与值班（值班以回帖当锚点，线程登记仍指首帖）——话题里的
+  控制命令先找这棵工作树上正在跑的任务，没有活的才退回登记的首帖。
+
+- **依赖**：`bytedcli` 登录态（`bytedcli auth status` 显示 Authenticated 即可，ByteCloud 登录）；不需要 BITS token。
+  登录过期时 fetch exit 4 计连败，连败约 1 小时私信一次，`bytedcli login` 后自动恢复。
+- **水位**：`$CTX/mr-comments.json`，只由 `mr-comments/scripts/mr-comments.sh` 写。会话手动处理评论
   也走它（fetch/reply/mark），bot 不会重复触发。
 - **熔断**：同线程自动触发达上限即停并私信；人工确认后
-  `bash ~/.claude/skills/harness-ceilf6/scripts/mr-comments.sh enable --ctx-dir <ctx>` 复位。
+  `bash ~/.claude/skills/mr-comments/scripts/mr-comments.sh enable --ctx-dir <ctx>` 复位。人工评论不计配额。
 - **现场被占**（分支漂移/未提交改动）：不抢占，私信一次，评论标记为已见——人工处理，不会反复提醒。
 - **任务失败/被 /stop**：水位不回退、不自动重试，失败私信是唯一兜底；补处置走人工或下次新评论触发。
 - **发现延迟**：最坏 = intervalMs；bot 未运行期间静默，评论不丢（回来首轮即发现）。
+- **MR 合入/关闭**：应答里 `merge_request.Status` 为 merged/closed 即停巡检并私信一次提醒点「完成」。
 
 ### 待演练清单（真机，人工执行）
 
 按序验证，每项演练后在该行末尾补「日期 + 结论」一句：
 
-- [ ] 起 bot，`logs/launchd.err.log` 出现「评论巡检启动」。
-- [ ] 挑一个有开放 MR 的 harness 线程，在 MR 上人工留一条评论。
-- [ ] ≤5 分钟内任务大厅出现【bot】锚点消息、任务起跑（`/tasks` 里看得见）。
+- [ ] `config.mrWatch.enabled=true` 起 bot，`logs/launchd.err.log` 出现「评论巡检启动」。
+- [ ] 挑一个有开放 MR 的 harness 线程，在 MR 上以本人身份留一条评论：≤5 分钟内**无**锚点、无任务、无私信（本人评论被滤）。
+- [ ] 请一位同事在 MR 上留一条评论（或等一条真实人工评论）：≤5 分钟内收到人工清单私信（作者 / 文件:行 / 摘要 / MR 链接），无锚点、无任务；再等一轮确认不重复私信。
+- [ ] 等一条 Bits CodeGuard 评论（或 MR 重新触发机审）：≤5 分钟内——线程源自任务大厅话题的，在**该话题里**收到回帖「MR x 发现 N 条新机器人 CR 评论，自动处置中」且任务起跑（`/tasks` 可见）；交互会话开的线程收到同款私信。群里不多出任何话题。
 - [ ] 会话回复评论带【bot】前缀、`dispositions.md` 落盘、RESULT 收轮、私信到达。
-- [ ] 值班回复落地后等一轮巡检（≤5 分钟），确认无新锚点消息、无新任务——自评论过滤（git user.name 对 GitLab username）生效；若重触发，说明两者不一致，须先对齐再启用巡检。
-- [ ] 再留一条只回「收到」的跟评，验证环路速判不再修复。
+- [ ] 值班回复落地后等一轮巡检（≤5 分钟），确认无新锚点消息、无新任务（本人 = MR 作者，来自应答，无需对齐 git user.name）。
+- [ ] 在已回复的机器人线程下由同事跟评一句：下一轮走人工清单私信，值班不再碰这条线程。
 - [ ] `/stop` 一次值班任务，确认线程检出与分支完好（停止路径现场保留的验证）。
 - [ ] 在锚点话题里回一句 ≥10 字的讨论，确认落 📝 进该任务 ctx/context/（threadId 路由生效）。
-- [ ] MR 合入后先不点「完成」，在 MR 上留一条评论，观察下一轮巡检行为——若仍触发值班任务，说明平台合入后 comment list 依旧可用，需要给触发路径补 MR 状态探测（届时经 mr-comments.sh 加子命令，不在 mrwatch 直调 bytedcli）。
+- [ ] MR 合入后先不点「完成」，观察下一轮巡检：收到「已合入/关闭，请去看板收束」私信一次，之后静默。
 
 skip 清场保护是防御性守卫——值班会话按契约不产出 skip，真机演练不可触发，由 `tests/duty.test.mjs` 的突变用例守护。
 
@@ -150,7 +163,7 @@ skip 清场保护是防御性守卫——值班会话按契约不产出 skip，�
    **两条路径都必须带 `--profile taskhall`**：open_id 是 **app 维度**的，不带它会拿到另一个应用下同样合法的 `ou_` 值——正好穿过 install 脚本的 `ou_` 前缀守卫，装出一个 reaction 正常、私信全投空的半哑 bot。2026-07-30 首次部署实测：同一个人在默认 app 下是 `ou_c50103…`、在 taskhall app 下是 `ou_19c19d…`，毫无相似性可供肉眼识别。
    install 脚本会用 config 里的 profile 反查真值做交叉校验：**不一致直接拒装**；反查不到（未授权或离线）只告警放行，此时本步骤就是唯一防线。
    `config.json` 是 git 跟踪文件：填进去的是你的个人 open_id，**别提交**；日后升级拉取如报冲突，先 `git stash` 再拉，拉完 `git stash pop`。
-5. **MR 评论巡检的 BITS 凭据**（不配就只是没有巡检，接单主职照常）：巡检经 `bytedcli` 读 MR 评论，需要 `CLIENT_BITS_TOKEN` 环境变量或 repoPath 下的 `.bits_client_config.json`。plist 模板的 `EnvironmentVariables` 只写 `PATH`，**推荐用 `.bits_client_config.json`**——token 不进 plist 明文；确要走环境变量就在 `com.ceilf6.harness-ceilf6-bot.plist.tpl` 的 `EnvironmentVariables` 里加一对 `CLIENT_BITS_TOKEN` 键值再重跑 install。
+5. **MR 评论巡检的 bytedcli 登录态**：巡检经 `bytedcli` 读 MR 评论，`bytedcli auth status` 显示 Authenticated 即可（ByteCloud 登录，launchd 下同一用户可直接复用）；未登录只是没有巡检，接单主职照常。
 6. `bash harness-ceilf6-bot/install.sh`。
 
 ## 验收演练（对应 spec 验收方式）

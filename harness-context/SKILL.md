@@ -53,7 +53,7 @@ description: 按 git 分支管理当前需求的本地上下文仓（<仓库根>
    | IM 群聊 chat/session id + 起止消息引文 | `im` | lark-cli im 拉消息列表，按引文截取区间（含两端） |
    | 飞书文档 / wiki 链接 | `doc` | `lark-cli docs +fetch --doc '<链接>'`（遵循 lark-doc 技能前置） |
    | Meego 链接 | `meego` | bytedcli-meego 技能查询工单详情 |
-   | MR 号 / 链接 | `mr` | bytedcli-bits-mr 技能拉 MR 评论 |
+   | MR 号 / 链接 | `mr` | mr-comments 技能 `fetch --ctx-dir "$CTX"` 拉全部评论快照（线程带 kind：bot/human/self 与 path:line）；MR 基本信息用 bytedcli-bits-mr |
    | 其他一切 | `note` | 原文即内容 |
 
 2. 运行 `bash ~/.claude/skills/harness-context/scripts/ctx-dir.sh new-entry <类型> <英文短slug>` 得到目标文件路径，用 Write 写入，头部 provenance 同上（来源、抓取时间、区间说明），正文为摘录内容。

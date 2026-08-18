@@ -2,7 +2,6 @@
 # 假 bytedcli：整行 argv 追加进 $STUB_STATE/calls.log；按子命令回放 $STUB_STATE 下的应答文件。
 # 哨兵：create_fail → chat create 失败（模拟群已存在）；add_fail → chat add 失败；
 #       update_fail → mr update 失败；qa_fail → remind-qa 失败；
-#       list_fail → comment list 失败；reply_fail → comment reply 失败；
 #       start_wip → code-review start 被 WIP 挡（mr update --wip false 会清除它，模拟摘除后可发起）；
 #       start_started → start 报评审已在运行；start_fail → start 恒失败；
 #       remind_review_fail → remind-review 失败；no_qa → qa-status 回空 QA 名单。
@@ -29,12 +28,6 @@ case "$*" in
     if [ -f "${STUB_STATE}/remind_review_fail" ]; then echo "remind review failed" >&2; exit 1; fi ;;
   *"qa-status"*)
     if [ -f "${STUB_STATE}/no_qa" ]; then echo '{"qa_review_info":[]}'; else echo '{"qa_review_info":[{"username":"qa1"}]}'; fi ;;
-  *"code-review gitlab"*) cat "${STUB_STATE}/gitlab.json" 2>/dev/null || echo '{}' ;;
-  *"comment list"*)
-    if [ -f "${STUB_STATE}/list_fail" ]; then echo "list failed" >&2; exit 1; fi
-    cat "${STUB_STATE}/comments.json" 2>/dev/null || echo '{"threads":[]}' ;;
-  *"comment reply"*)
-    if [ -f "${STUB_STATE}/reply_fail" ]; then echo "reply failed" >&2; exit 1; fi ;;
   *"mr status"*) cat "${STUB_STATE}/status.json" 2>/dev/null || echo '{}' ;;
   *) : ;;
 esac

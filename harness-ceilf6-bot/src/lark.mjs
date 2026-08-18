@@ -33,8 +33,9 @@ export function makeLark(config) {
       // --content 必须是 JSON（lark-cli 校验），裸文本会被 invalid_argument 拒绝。
       const res = await call(['im', '+messages-reply', '--message-id', messageId,
         '--msg-type', 'text', '--content', JSON.stringify({ text }), '--reply-in-thread']);
-      if (!res?.ok) { console.error(`[lark] replyInThread 失败 ${messageId}`); return false; }
-      return true;
+      if (!res?.ok) { console.error(`[lark] replyInThread 失败 ${messageId}`); return null; }
+      // 回帖自身的 message_id 供 mrwatch 当值班任务锚点；只关心成败的调用方按真值判断即可。
+      return { messageId: res.data?.message_id ?? '', threadId: res.data?.thread_id ?? '' };
     },
     async sendDm(openId, text) {
       const res = await call(['im', '+messages-send', '--user-id', openId,

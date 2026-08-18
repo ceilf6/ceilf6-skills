@@ -652,7 +652,10 @@ if (isMain) {
         if (ctl) {
           // 控制命令是对任务的操作，不是给会话的补充信息：不写 context 条目、不打 📝。
           store.markProcessed(ev.messageId);
-          const sel = (taskInfo ? { messageId: taskInfo.messageId } : startingByThread(ev.threadId)) ?? {};
+          // 同一话题里可能先后跑过首帖任务与值班任务（值班以回帖当锚点，登记仍指首帖）：
+          // 这棵工作树上正在跑的那个才是 /stop 的对象，没有活的再退回登记的首帖。
+          const live = taskInfo ? registry().find((t) => t.worktree === taskInfo.worktree) : null;
+          const sel = (live ? { messageId: live.messageId } : taskInfo ? { messageId: taskInfo.messageId } : startingByThread(ev.threadId)) ?? {};
           const act = ctl.name === 'tasks' || sel.messageId
             ? runControl(sel, ctl)
             : lark.sendDm(config.dmOpenId, `该话题没有登记的任务，无法执行 /${ctl.name}。`);
@@ -724,6 +727,13 @@ if (isMain) {
     hasCapacity: () => running < config.concurrency,
     // 有 worktree 归属的在册任务（运行/等待/后台/滞留/启动中）都算占用；queued 无 worktree 不会误配
     hasActiveTaskAt: (cwd) => registry().some((t) => t.worktree === cwd),
+    // harness 线程 → 任务大厅话题：bot 线程登记按 worktree 反查（登记里 messageId 是话题首帖）
+    findTopic: (row) => {
+      for (const [threadId, info] of store.threads) {
+        if (info?.worktree === row.cwd && info.messageId) return { rootMessageId: info.messageId, threadId };
+      }
+      return null;
+    },
   }).start();
   startConsumer();
   pump(); // 处理重启前遗留队列
