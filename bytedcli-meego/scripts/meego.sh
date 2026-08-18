@@ -16,7 +16,7 @@ CFG="${BYTEDCLI_MEEGO_CONFIG:-$HOME/.bytedcli-meego/config.json}"
 usage() {
   cat >&2 <<'EOF'
 用法：meego.sh resolve  (--ctx-dir <路径> | --repo <slug>) (--url <链接> | --id <id> --type story|issue)
-      meego.sh create   --ctx-dir <路径> --title <标题> --description-file <文件>
+      meego.sh create   --ctx-dir <路径> --title <标题> --description-file <文件> [--dry-run]
       meego.sh comment  (--ctx-dir <路径> | --repo <slug> --id <id>) (--message-file <文件> | --preset qa)
       meego.sh schedule (--ctx-dir <路径> | --repo <slug> --id <id> --type story|issue) --start <YYYY-MM-DD> --due <YYYY-MM-DD> [--points <数>]
       meego.sh advance  (--ctx-dir <路径> | --repo <slug> --id <id> --type story|issue)
@@ -29,9 +29,10 @@ EOF
 sub="${1:-}"; [ -n "$sub" ] || usage; shift
 mapop=""
 if [ "$sub" = map ]; then mapop="${1:-}"; case "$mapop" in get|set) shift ;; *) usage ;; esac; fi
-ctx="" repo="" id="" wtype="" url_in="" title="" descfile="" msgfile="" preset="" start="" due="" points="" jsonfile=""
+ctx="" repo="" id="" wtype="" url_in="" title="" descfile="" msgfile="" preset="" start="" due="" points="" jsonfile="" dry=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    --dry-run) dry=1; shift ;;
     --ctx-dir) ctx="${2:?--ctx-dir 需要值}"; shift 2 ;;
     --repo) repo="${2:?--repo 需要值}"; shift 2 ;;
     --id) id="${2:?--id 需要值}"; shift 2 ;;
@@ -136,9 +137,28 @@ case "$sub" in
     TID=$(printf '%s' "$rc_cfg" | jq -r '.template_id // empty')
     [ -n "$TID" ] || die "配置缺 template_id（repo ${repo}）：先 map set 落首次映射"
     desc=$(cat "$descfile")
-    out=$(bytedcli --json meego create --space "$PK" --title "$title" \
-      --description "$desc" --template-id "$TID" 2>"$ERRF") \
-      || die "meego create 失败：$(err_tail)"
+    # 走底层 workitem create：快捷 `meego create` 传不了模板必填自定义字段（498109 要求业务线、关联 Story），
+    # 绑定空间的仓库必报 `{field} 必填`。必填项按仓库配置 story.create_fields 原样附加；
+    # 配了 dev_role 时把 dev_owner_key 挂到该角色。field_value 一律字符串：裸数字会被序列化成
+    # float64 遭 thrift 拒收，对象/数组按 tojson 字符串化（multi-select / role_owners 的入参形状即如此）。
+    fields=$(printf '%s' "$rc_cfg" | jq -c --arg t "$TID" --arg n "$title" --arg d "$desc" '
+      def s: if type == "string" then . elif type == "number" then tostring else tojson end;
+      [ {field_key:"template", field_value:$t}, {field_key:"name", field_value:$n},
+        {field_key:"description", field_value:$d} ]
+      + (if ((.dev_owner_key // "") | tostring) != "" and (.story.dev_role // "") != ""
+         then [ {field_key:"role_owners",
+                 field_value:([{role:.story.dev_role, owners:[(.dev_owner_key | tostring)]}] | tojson)} ]
+         else [] end)
+      + [ (.story.create_fields // [])[] | {field_key, field_value:(.field_value | s)} ]') \
+      || die "组装 create 字段失败（检查配置 story.create_fields 形状：[{field_key, field_value}]）"
+    if [ -n "$dry" ]; then
+      bytedcli --json meego workitem create --project-key "$PK" --work-item-type story \
+        --fields "$fields" --dry-run
+      exit $?
+    fi
+    out=$(bytedcli --json meego workitem create --project-key "$PK" --work-item-type story \
+      --fields "$fields" 2>"$ERRF") \
+      || die "meego workitem create 失败：$(err_tail)"
     # 新条目 id 的键名按真机为准：递归找第一个数字型 work_item_id / id（同 cr-group.sh 手法）
     nid=$(printf '%s' "$out" | mcp_text | jq -r 'first(.. | objects | (.work_item_id? // .id? // empty) | select(type=="number" or (type=="string" and test("^[0-9]+$")))) // empty' 2>/dev/null | head -1)
     [ -n "$nid" ] || die "create 应答解析不出新条目 id：$(snippet "$out")"
@@ -234,10 +254,10 @@ case "$sub" in
           --action confirm --node-id "$nk" 2>&1 </dev/null) \
           || { case "$tout" in
                  *20016*|*"Node Is Not Arrived"*)
-                   # 节点流是串行的：目标节点未到达时无法直接 confirm，推进前序节点属人工判断
-                   # （前序常含他人负责的评审节点），机械层只如实报位置。
-                   at=$(printf '%s' "$nodes" | jq -r 'first(.list[]? | select(.basic.status == "doing") | .basic.name) // "未知"')
-                   echo "meego: 节点「${n}」尚未到达（节点流停在「${at}」），前序节点未推进，转人工" >&2 ;;
+                   # 目标节点未到达：前序节点未推进。推进前序属人工判断——前序可能是别人的评审节点，
+                   # 也可能是本人评审节点卡在必填表单（498109 的「技术评审」实测如此），机械层只如实报位置。
+                   at=$(printf '%s' "$nodes" | jq -r '[.list[]? | select(.basic.status == "doing") | .basic.name] | join("、") | if . == "" then "未知" else . end')
+                   echo "meego: 节点「${n}」尚未到达（节点流停在「${at}」），前序节点未推进，转人工（参见 SKILL.md「转人工后的处理参考」）" >&2 ;;
                  *) echo "meego: 节点「${n}」confirm 失败：$(snippet "$tout")" >&2 ;;
                esac
                fails=$((fails+1)); continue; }

@@ -4,7 +4,7 @@
 # 哨兵：comment_fail / node_get_fail / transition_fail / state_list_fail / state_transition_fail /
 #       create_fail / node_update_fail → 对应命令 exit 5（真机错误即非零退出）。
 #       transition_not_arrived → node transition 回真机 code=20016（目标节点未到达）。
-#       create_nonjson → meego create 退 0 但吐非 JSON（网关降级形态）。
+#       create_nonjson → workitem create 退 0 但吐非 JSON（网关降级形态）。
 set -euo pipefail
 printf '%s\n' "$*" >> "${STUB_STATE:?bytedcli stub 需要 STUB_STATE}/calls.log"
 envelope() { jq -n --arg t "$(cat "$1")" '{status:"success", data:{result:{content:[{type:"text", text:$t}]}}}'; }
@@ -31,7 +31,9 @@ case "$*" in
   *"meego state transition"*)
     if [ -f "${STUB_STATE}/state_transition_fail" ]; then echo '{"status":"error"}'; exit 5; fi
     echo '{"status":"success"}' ;;
-  *"meego create"*)
+  *"meego workitem create"*)
+    # 建单走底层 workitem create（--fields）；--dry-run 同真机：只回显参数、不建单
+    case "$*" in *"--dry-run"*) echo '{"status":"success","data":{"dry_run":true}}'; exit 0 ;; esac
     if [ -f "${STUB_STATE}/create_nonjson" ]; then echo 'NOT JSON'; exit 0; fi
     if [ -f "${STUB_STATE}/create_fail" ]; then echo '{"status":"error"}'; exit 5; fi
     envelope "${STUB_STATE}/created.json" ;;

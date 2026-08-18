@@ -21,7 +21,10 @@ make_fixture() {
   jq -n '{repos:{"lark/byteview-web":{
     project_key:"5e96d7bff4e7c525510f9156", space:"larksuite",
     template_id:"tmpl-1", dev_owner_key:"6976056325272862721",
-    story:{done_transition:["前端开发"], schedule_node:"前端开发"},
+    story:{done_transition:["前端开发"], schedule_node:"前端开发", dev_role:"FE",
+           create_fields:[{field_key:"business", field_value:"biz-1"},
+                          {field_key:"field_4225f8", field_value:3000712092},
+                          {field_key:"apps", field_value:[{option_id:"option_1"}]}]},
     issue:{done_state:"RESOLVED"}}}}' > "$BYTEDCLI_MEEGO_CONFIG"
   export STUB_STATE="$T/stub"; mkdir -p "$STUB_STATE"
 }
@@ -81,16 +84,33 @@ out=$(bash "$MG" resolve --repo lark/byteview-web --url "https://meego.larkoffic
 [ "$(printf '%s' "$out" | jq -r '.type')" = "issue" ] && ok "issue 链接解析" || bad "issue: $out"
 cleanup
 
-echo "== create：模板创建、落 meta、防重 =="
+echo "== create：workitem create 直建、模板必填字段、落 meta、防重 =="
 make_fixture
 jq -n '{work_item_id:7999000111}' > "$STUB_STATE/created.json"
 printf '目标：…\n来源：…\n' > "$T/desc.md"
+# --dry-run：只回显参数，不建单、不写 meta
+out=$(bash "$MG" create --ctx-dir "$ctx" --title "预演" --description-file "$T/desc.md" --dry-run)
+grep -q -- "meego workitem create .*--dry-run" "$STUB_STATE/calls.log" && ok "dry-run 透传给 CLI" || bad "dry-run 未透传"
+[ "$(jq -r '.meego_id // empty' "$ctx/meta.json")" = "" ] && ok "dry-run 不写 meta" || bad "dry-run 写了 meta"
+: > "$STUB_STATE/calls.log"
 out=$(bash "$MG" create --ctx-dir "$ctx" --title "测试短题" --description-file "$T/desc.md")
 [ "$(printf '%s' "$out" | jq -r '.id')" = "7999000111" ] && ok "create 输出新 id" || bad "create: $out"
 [ "$(jq -r '.meego_id' "$ctx/meta.json")" = "7999000111" ] && ok "meta 落 id" || bad "meta 未落"
 [ "$(jq -r '.meego_type' "$ctx/meta.json")" = "story" ] && ok "create 恒 story" || bad "type 不对"
-grep -q -- "--template-id tmpl-1" "$STUB_STATE/calls.log" && ok "带模板 id" || bad "未带模板"
-grep -q -- "--space 5e96d7bff4e7c525510f9156" "$STUB_STATE/calls.log" && ok "space 传 project_key" || bad "space 参数不对"
+line=$(grep -- "meego workitem create" "$STUB_STATE/calls.log" | head -1)
+case "$line" in *"--project-key 5e96d7bff4e7c525510f9156"*"--work-item-type story"*) ok "走 workitem create，显式 project_key + story" ;; *) bad "create 调用形态: $line" ;; esac
+# 快捷 `meego create` 传不了模板必填字段，绑定空间的仓库必报 `{field} 必填`——不得回退到它
+grep -q -- "meego create " "$STUB_STATE/calls.log" && bad "退回了快捷 meego create" || ok "不走快捷 meego create"
+fields=${line#*--fields }
+[ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="template") | .field_value')" = "tmpl-1" ] && ok "fields 带模板 id" || bad "模板: $fields"
+[ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="name") | .field_value')" = "测试短题" ] && ok "fields 带标题" || bad "标题: $fields"
+case "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="description") | .field_value')" in *"目标"*"来源"*) ok "fields 带描述全文" ;; *) bad "描述: $fields" ;; esac
+[ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="business") | .field_value')" = "biz-1" ] && ok "配置 create_fields 原样附加" || bad "create_fields: $fields"
+# field_value 一律字符串：裸数字会被序列化成 float64 遭 thrift 拒收；对象/数组按 tojson 字符串化
+[ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="field_4225f8") | .field_value | type')" = "string" ] && ok "数字型 field_value 转字符串" || bad "数字未转字符串: $fields"
+[ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="apps") | .field_value | fromjson | .[0].option_id')" = "option_1" ] && ok "数组型 field_value 字符串化 JSON" || bad "数组未字符串化: $fields"
+[ "$(printf '%s' "$fields" | jq -r '[.[] | .field_value | type] | unique | join(",")')" = "string" ] && ok "全部 field_value 为字符串" || bad "存在非字符串 field_value: $fields"
+[ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="role_owners") | .field_value | fromjson | .[0] | "\(.role):\(.owners[0])"')" = "FE:6976056325272862721" ] && ok "dev_role 配置时挂 role_owners" || bad "role_owners: $fields"
 rc=0; bash "$MG" create --ctx-dir "$ctx" --title "再建" --description-file "$T/desc.md" 2>/dev/null || rc=$?
 [ "$rc" = 1 ] && ok "meta 已有 meego_id 防重 die" || bad "防重 exit $rc"
 touch "$STUB_STATE/create_fail"
@@ -107,6 +127,21 @@ chmod 000 "$T/desc.md"
 rc=0; err=$(bash "$MG" create --ctx-dir "$ctx" --title "z" --description-file "$T/desc.md" 2>&1 >/dev/null) || rc=$?
 chmod 644 "$T/desc.md"
 case "$err" in meego:*不可读*) ok "不可读 description 走 meego die" ;; *) bad "不可读 stderr: $err" ;; esac
+# 配置无 dev_role / 无 create_fields：只带 template / name / description（模板无必填字段的仓库）
+jq 'del(.repos["lark/byteview-web"].story.dev_role, .repos["lark/byteview-web"].story.create_fields)' \
+  "$BYTEDCLI_MEEGO_CONFIG" > "$T/cfg2.json" && mv "$T/cfg2.json" "$BYTEDCLI_MEEGO_CONFIG"
+: > "$STUB_STATE/calls.log"
+bash "$MG" create --ctx-dir "$ctx" --title "裸建" --description-file "$T/desc.md" >/dev/null
+fields=$(grep -- "meego workitem create" "$STUB_STATE/calls.log" | head -1); fields=${fields#*--fields }
+[ "$(printf '%s' "$fields" | jq -r '[.[].field_key] | join(",")')" = "template,name,description" ] && ok "无 dev_role / create_fields 时只带基础三字段" || bad "基础字段集: $fields"
+# create_fields 形状不对（不是数组）：组装期即 die，不把坏参数发给服务端
+jq '.repos["lark/byteview-web"].story.create_fields = {field_key:"business"}' \
+  "$BYTEDCLI_MEEGO_CONFIG" > "$T/cfg2.json" && mv "$T/cfg2.json" "$BYTEDCLI_MEEGO_CONFIG"
+jq 'del(.meego_id, .meego_type, .meego_url)' "$ctx/meta.json" > "$ctx/tmp" && mv "$ctx/tmp" "$ctx/meta.json"
+: > "$STUB_STATE/calls.log"
+rc=0; err=$(bash "$MG" create --ctx-dir "$ctx" --title "坏配置" --description-file "$T/desc.md" 2>&1 >/dev/null) || rc=$?
+[ "$rc" = 1 ] && case "$err" in *create_fields*) ok "create_fields 形状不对 die 并点名" ;; *) bad "坏配置 stderr: $err" ;; esac || bad "坏配置 exit $rc"
+grep -q -- "meego workitem create" "$STUB_STATE/calls.log" && bad "坏配置仍发了 create" || ok "坏配置不发 create"
 cleanup
 
 echo "== comment：【bot】前缀强制、preset、失败非零 =="
