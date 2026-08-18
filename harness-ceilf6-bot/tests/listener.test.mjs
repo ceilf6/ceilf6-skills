@@ -11,6 +11,12 @@ import { validateConfig } from '../src/listener.mjs';
 const SRC = resolve(import.meta.dirname, '../src/listener.mjs');
 const LARK_STUB = resolve(import.meta.dirname, 'stubs/lark-cli');
 const CLAUDE_STUB = resolve(import.meta.dirname, 'stubs/claude');
+// 接单水位要读 harness 线程台账。不钉住脚本位置就会读到本机真实台账，用例结果随开发者手头
+// 积压了几个需求漂。钉在自己的 env 上，所有 spawn 出去的 listener 都继承得到。
+process.env.HARNESS_THREADS_SH = resolve(import.meta.dirname, 'stubs/threads.sh');
+// 台账行只取水位判定用得上的三个字段，其余留空——多写就得跟着 threads.sh 的输出走。
+const ledgerRow = (branch, over = {}) => ({ branch, status: 'awaiting_human', archived: false, ...over });
+const ledger = (rows) => ({ STUB_THREADS_JSON: JSON.stringify(rows) });
 
 function evLine(over = {}) {
   return JSON.stringify({
@@ -223,6 +229,62 @@ test('接单水位：@ 了 bot 的消息无视水位照接', async () => {
   });
   assert.ok(ok, '被 @ 的任务应照常起会话');
   assert.equal(readFileSync(larkLogPath, 'utf8').includes('先不接新单'), false, '被 @ 的消息不得收到拒单回复');
+  rmFixture(root);
+});
+
+test('接单水位：台账里 5 个线程没走完，bot 运行时一个任务都没有也不接单', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-ledger-')));
+  const cfgPath = writeConfig(root, makeRepo(root), { botName: 'harness-ceilf6' });
+  const larkLogPath = join(root, 'lark-calls.log');
+  const rows = [...Array(5)].map((_, i) => ledgerRow(`bot/led-${i}`));
+  // 已完成与已归档的不算，否则台账只增不减，水位一旦满就再也降不下来
+  rows.push(ledgerRow('bot/done', { status: 'done' }), ledgerRow('bot/arch', { archived: true }));
+  const { ok, stderr } = await runFedListener({
+    cfgPath, root, turns: 'ask:先确认一下需求边界', env: ledger(rows),
+    feed: async (send) => {
+      send(evLine({ message_id: 'om_led_aaaaaa', content: '这个任务描述足够长，够起一单' }));
+      return poll(() => existsSync(larkLogPath) && readFileSync(larkLogPath, 'utf8').includes('先不接新单'));
+    },
+  });
+  assert.ok(ok, '台账满水位时新任务应被拒');
+  assert.ok(readFileSync(larkLogPath, 'utf8').includes('压着 5 个'), '拒单回执报的数应是台账口径');
+  assert.ok(/接单水位 5\/5/.test(stderr()), '开机应报一次水位，否则台账读不通时无从发现');
+  assert.equal(new Store(join(root, 'state')).size(), 0, '拒单不得入队');
+  rmFixture(root);
+});
+
+test('接单水位：同一个任务在台账与运行时各有一份，按分支只算一笔', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-dedup-')));
+  const cfgPath = writeConfig(root, makeRepo(root), { botName: 'harness-ceilf6' });
+  const larkLogPath = join(root, 'lark-calls.log');
+  seedAwaiting(root, 4); // 分支 bot/seed-0..3，同时也是台账里那四行
+  const { ok } = await runFedListener({
+    cfgPath, root, turns: 'ask:先确认一下需求边界',
+    env: ledger([...Array(4)].map((_, i) => ledgerRow(`bot/seed-${i}`))),
+    feed: async (send) => {
+      send(evLine({ message_id: 'om_dedup_aaaa', content: '这个任务描述足够长，够起一单' }));
+      return poll(() => sessionUp(root, 'om_dedup_aaaa'));
+    },
+  });
+  assert.ok(ok, '两本账重复计数会把 4 个任务算成 8 个，本该照接的单会被拒');
+  assert.equal(readFileSync(larkLogPath, 'utf8').includes('先不接新单'), false);
+  rmFixture(root);
+});
+
+test('接单水位：台账读不出来时回落到运行时在册数，并在日志里留因', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'thb-lis-degraded-')));
+  const cfgPath = writeConfig(root, makeRepo(root), { botName: 'harness-ceilf6' });
+  const larkLogPath = join(root, 'lark-calls.log');
+  seedAwaiting(root, 5);
+  const { ok, stderr } = await runFedListener({
+    cfgPath, root, turns: 'ask:先确认一下需求边界', env: { STUB_THREADS_FAIL: '1' },
+    feed: async (send) => {
+      send(evLine({ message_id: 'om_degr_aaaaa', content: '这个任务描述足够长，够起一单' }));
+      return poll(() => existsSync(larkLogPath) && readFileSync(larkLogPath, 'utf8').includes('先不接新单'));
+    },
+  });
+  assert.ok(ok, '台账读不出来也不该让限流整个失效');
+  assert.ok(/threads\.sh list 失败/.test(stderr()), '降级必须留痕，否则台账坏掉后只表现为「该拒的没拒」');
   rmFixture(root);
 });
 

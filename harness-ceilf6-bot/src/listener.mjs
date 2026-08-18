@@ -13,6 +13,7 @@ import { runTask, runDutyTask, runErrandTask, errandCwd, resumeTask, injectReply
 import { parseDmReply, mergeFlags, parseControl, parseErrand, SUPPORTED_HINT, ERRAND_HINT } from './commands.mjs';
 import { scanStranded } from './stranded.mjs';
 import { makeMrWatch } from './mrwatch.mjs';
+import { makeBacklog } from './backlog.mjs';
 import { startControlServer } from './control.mjs';
 
 // 控制端口出厂值：config 省略 controlPort 即用它（spec 与 runbook 以此为准）。
@@ -20,7 +21,8 @@ import { startControlServer } from './control.mjs';
 // 命令就永远连不上，且现象是「连不上」而非「起不来」，无从排查。
 export const DEFAULT_CONTROL_PORT = 7659;
 
-// 接单水位出厂值：在册未完成任务（/tasks 列出的全部，含等人工 CR 的那些）达到它就不再接新单。
+// 接单水位出厂值：未完成任务达到它就不再接新单。口径见 backlog.mjs：harness 线程台账
+// （等人工 CR 的任务只剩它记着）∪ 运行时在册表。
 // 限的是「人处理不过来」，不是「机器跑不过来」——后者由 concurrency 管。
 export const DEFAULT_MAX_OPEN_TASKS = 5;
 
@@ -202,8 +204,26 @@ if (isMain) {
   async function rejectForBacklog(ev, open) {
     store.markProcessed(ev.messageId);
     // 首行进日志：@ 旁路只能按字面匹配 mention，不生效时这一行是唯一能看出 mention 渲染成什么样的地方。
-    console.error(`[listener] 拒单 ${ev.messageId}（在册 ${open} ≥ ${maxOpenTasks}）：${ev.text.split('\n')[0].slice(0, 60)}`);
+    console.error(`[listener] 拒单 ${ev.messageId}（未完成 ${open} ≥ ${maxOpenTasks}）：${ev.text.split('\n')[0].slice(0, 60)}`);
     await lark.replyInThread(ev.messageId, backlogReply(open));
+  }
+
+  const backlog = makeBacklog({ log: (m) => console.error(`[listener] ${m}`) });
+  // 接单水位：未完成任务满 maxOpenTasks 就不再接新单——积压的主体是等人工 CR 的任务，
+  // 机器再接只会让队伍更长。@ 了 bot 的是明确的人工指派，照接。
+  // 办事条目不计入：水位限的是「人处理不过来的需求单」，办事不产 MR、不等人工 CR，
+  // 让它垫水位会把群里的接单能力挂在几件杂活上。
+  // 判定串成一条链：读台账是秒级的进程调用，并发判定会各自读到对方入队之前的账、双双放行；
+  // 串行后，后一条判定时前一条已经在运行时在册表里（排队中也算数）。链上任何一次抛出都必须
+  // 就地咽掉——否则整条链变成 rejected，此后每一条消息都走不到判定。
+  let gate = Promise.resolve();
+  function gateAdmit(ev) {
+    gate = gate.then(async () => {
+      const { open } = await backlog.count(registry().filter((t) => !t.errand));
+      if (open >= maxOpenTasks && !mentionsBot(ev.text, config.botName)) return rejectForBacklog(ev, open);
+      admit(ev);
+    }).catch((e) => console.error(`[listener] 水位判定异常（${ev.messageId}）：${e.message}`));
+    return gate;
   }
 
   // 话题内回复并进归属任务的 context/。已在跑的会话不会中途重读上下文，
@@ -647,17 +667,8 @@ if (isMain) {
           return;
         }
       }
-      // 接单水位：在册未完成任务满 maxOpenTasks 就不再接新单——积压的主体是等人工 CR 的任务，
-      // 机器再接只会让队伍更长。@ 了 bot 的是明确的人工指派，照接。
-      // 办事条目不计入：水位限的是「人处理不过来的需求单」，办事不产 MR、不等人工 CR，
-      // 让它垫水位会把群里的接单能力挂在几件杂活上。
-      const open = registry().filter((t) => !t.errand).length;
-      if (open >= maxOpenTasks && !mentionsBot(ev.text, config.botName)) {
-        // 本回调是同步的，未捕获的 rejection 会按默认策略掀掉常驻进程。
-        rejectForBacklog(ev, open).catch((e) => console.error(`[listener] 拒单回复异常：${e.message}`));
-        return;
-      }
-      admit(ev);
+      // 入队前要过接单水位，判定是异步的（读台账），故本条消息的去向在 gateAdmit 的续段里定。
+      gateAdmit(ev);
     });
     child.on('close', (code) => {
       if (stopping) return;
@@ -716,6 +727,11 @@ if (isMain) {
   }).start();
   startConsumer();
   pump(); // 处理重启前遗留队列
+  // 开机报一次水位：台账路径不对、jq 缺失这类故障平时要等到第一条该拒的消息才现形，
+  // 而那一刻的现象是「该拒的没拒」，没人会去查。
+  backlog.count(registry().filter((t) => !t.errand))
+    .then(({ open, degraded }) => console.error(`[listener] 接单水位 ${open}/${maxOpenTasks}${degraded ? '（台账读取降级，只数了运行时在册）' : ''}`))
+    .catch((e) => console.error(`[listener] 开机水位读取异常：${e.message}`));
   // 补回群里那枚接单表情的 reaction_id：条目是扫描凭空造出来的，无从继承它。缺了 rid，处置路径
   // （/stop、看板停止、续跑失败出口）只会再叠一枚新表情，而要收拾的那枚接单表情永远挂着——撞
   // 「一条被处理的消息上，本 bot 的状态表情恒为恰好一个」。飞书 reaction 按 (user, emoji) 唯一，
