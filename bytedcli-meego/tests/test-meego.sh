@@ -319,19 +319,19 @@ rc=0; out=$(MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" 2>&1) || rc=
 seq=$(grep -o -- '--node-id [a-z_0-9]*' "$STUB_STATE/calls.log" | awk '{print $2}' | tr '\n' ',')
 [ "$seq" = "start,review,state_97,state_98,state_99," ] && ok "按映射顺序逐节点 confirm（含空 owner 的需求测试）" || bad "confirm 顺序: $seq"
 grep -q -- '--node-id state_100' "$STUB_STATE/calls.log" && bad "碰了映射外的安全技术评审" || ok "映射外节点不碰"
-upd=$(grep -- "meego workitem update" "$STUB_STATE/calls.log" | head -1); upd=${upd#*--fields }
+upd=$(grep -- "meego workitem update .*--fields" "$STUB_STATE/calls.log" | head -1); upd=${upd#*--fields }
 [ "$(printf '%s' "$upd" | jq -r '.[] | select(.field_key=="field_1") | .field_value')" = "https://bits.bytedance.net/bytebus/devops/code/detail/8300001" ] && ok "{{mr_url}} 用 meta.mr_id 展开" || bad "field_1: $upd"
 [ "$(printf '%s' "$upd" | jq -r '.[] | select(.field_key=="field_8e6a9f") | .field_value')" = "pbgnb05kk" ] && ok "空必填项按 node_forms 补" || bad "field_8e6a9f: $upd"
 printf '%s' "$upd" | jq -e '.[] | select(.field_key=="field_d40cc0")' >/dev/null && bad "覆盖了已有值 field_d40cc0" || ok "已有值不覆盖"
-[ "$(grep -c -- "meego workitem update" "$STUB_STATE/calls.log")" = 1 ] && ok "只有技术评审一次表单回填" || bad "update 次数: $(grep -c -- 'meego workitem update' "$STUB_STATE/calls.log")"
+[ "$(grep -c -- "meego workitem update .*--fields" "$STUB_STATE/calls.log")" = 1 ] && ok "只有技术评审一次表单回填" || bad "update 次数: $(grep -c -- 'meego workitem update .*--fields' "$STUB_STATE/calls.log")"
 # 表单回填必须在该节点 confirm 之前
-u_line=$(grep -n -- "meego workitem update" "$STUB_STATE/calls.log" | cut -d: -f1); c_line=$(grep -n -- "--node-id review" "$STUB_STATE/calls.log" | cut -d: -f1)
+u_line=$(grep -n -- "meego workitem update .*--fields" "$STUB_STATE/calls.log" | cut -d: -f1); c_line=$(grep -n -- "--node-id review" "$STUB_STATE/calls.log" | cut -d: -f1)
 [ "$u_line" -lt "$c_line" ] && ok "表单先于 confirm" || bad "顺序: update@$u_line confirm@$c_line"
 # 幂等：全部已完成 → 空转零调用
 mk_nodes finished finished '"x"' finished finished finished
 : > "$STUB_STATE/calls.log"
 MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" >/dev/null && ok "全部完成时空转 exit 0" || bad "空转失败"
-grep -q -- "node transition\|workitem update" "$STUB_STATE/calls.log" && bad "空转仍有写调用" || ok "空转零写调用"
+grep -q -- "node transition\|workitem update .*--fields" "$STUB_STATE/calls.log" && bad "空转仍有写调用" || ok "空转零写调用"
 # 中途起步：需求开发 doing，前面已 finished → 只 confirm 需求开发/需求测试/需求合入
 mk_nodes finished finished '"x"' doing not_started not_started
 : > "$STUB_STATE/calls.log"
@@ -366,14 +366,54 @@ rm -f "$STUB_STATE/update_fail"
 mk_nodes finished doing null not_started not_started not_started
 : > "$STUB_STATE/calls.log"
 MEEGO_RETRY_SLEEP=0 bash "$MG" advance --repo lark/byteview-web --id 7310638751 --type story --mr-id 8300777 >/dev/null || bad "--repo advance 失败"
-upd=$(grep -- "meego workitem update" "$STUB_STATE/calls.log" | head -1); upd=${upd#*--fields }
+upd=$(grep -- "meego workitem update .*--fields" "$STUB_STATE/calls.log" | head -1); upd=${upd#*--fields }
 [ "$(printf '%s' "$upd" | jq -r '.[] | select(.field_key=="field_1") | .field_value')" = "https://bits.bytedance.net/bytebus/devops/code/detail/8300777" ] && ok "--repo 模式 {{mr_url}} 用 --mr-id" || bad "--repo field_1: $upd"
 mk_nodes finished doing null not_started not_started not_started
 : > "$STUB_STATE/calls.log"
 MEEGO_RETRY_SLEEP=0 bash "$MG" advance --repo lark/byteview-web --id 7310638751 --type story >/dev/null || bad "--repo 无 mr-id advance 失败"
-upd=$(grep -- "meego workitem update" "$STUB_STATE/calls.log" | head -1); upd=${upd#*--fields }
+upd=$(grep -- "meego workitem update .*--fields" "$STUB_STATE/calls.log" | head -1); upd=${upd#*--fields }
 printf '%s' "$upd" | jq -e '.[] | select(.field_key=="field_1")' >/dev/null && bad "无 mr_url 仍填了 field_1" || ok "无 mr_url 时含占位项不填"
 [ "$(printf '%s' "$upd" | jq -r '.[] | select(.field_key=="field_8e6a9f") | .field_value')" = "pbgnb05kk" ] && ok "无占位的项照填" || bad "无占位项: $upd"
+# 角色自愈：节点表单字段按角色授权，dev_roles 里缺本人时先补角色，否则回填必撞 ErrEditFieldNoPermission
+mk_nodes finished doing null not_started not_started not_started
+rm -f "$STUB_STATE/workitem.json"   # 默认应答 role_members 为空
+: > "$STUB_STATE/calls.log"
+MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" >/dev/null 2>&1 || true
+rop=$(grep -- "meego workitem update .*--role-operate" "$STUB_STATE/calls.log" | head -1); rop=${rop#*--role-operate }
+[ "$(printf '%s' "$rop" | jq -r 'map("\(.role_key):\(.op):\(.user_keys[0])") | join(",")')" = "FE:add:$ME,tech_owner:add:$ME" ] && ok "角色缺本人时按 dev_roles 补齐" || bad "role-operate: $rop"
+r_line=$(grep -n -- "--role-operate" "$STUB_STATE/calls.log" | cut -d: -f1); f_line=$(grep -n -- "--fields" "$STUB_STATE/calls.log" | head -1 | cut -d: -f1)
+[ "$r_line" -lt "$f_line" ] && ok "补角色先于表单回填" || bad "顺序: role@$r_line fields@$f_line"
+# 角色已在位：不重复写
+mk_nodes finished doing null not_started not_started not_started
+jq -n --arg me "$ME" '{work_item_attribute:{role_members:[{key:"FE",members:[{key:$me}]},{key:"tech_owner",members:[{key:$me}]}]}}' > "$STUB_STATE/workitem.json"
+: > "$STUB_STATE/calls.log"
+MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" >/dev/null 2>&1 || true
+grep -q -- "--role-operate" "$STUB_STATE/calls.log" && bad "角色已在位仍写" || ok "角色已在位不重复写"
+# 角色补位失败：停下 exit 1，不碰表单也不 confirm（继续跑必然无权编辑）
+mk_nodes finished doing null not_started not_started not_started
+rm -f "$STUB_STATE/workitem.json"; touch "$STUB_STATE/role_fail"; : > "$STUB_STATE/calls.log"
+rc=0; out=$(MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" 2>&1) || rc=$?
+[ "$rc" = 1 ] && ok "角色补位失败 exit 1" || bad "角色失败 exit $rc"
+grep -q -- "--fields\|node transition" "$STUB_STATE/calls.log" && bad "角色失败仍继续写" || ok "角色失败不继续"
+case "$out" in *角色补位失败*) ok "报出角色补位失败" ;; *) bad "角色失败文案: $out" ;; esac
+rm -f "$STUB_STATE/role_fail"
+jq -n --arg me "$ME" '{work_item_attribute:{role_members:[{key:"FE",members:[{key:$me}]},{key:"tech_owner",members:[{key:$me}]}]}}' > "$STUB_STATE/workitem.json"
+# confirm 应答成功但节点没动：不得报「已流转完成」，停下转人工（真机 2026-08-19 见过）
+mk_nodes doing not_started null not_started not_started not_started
+touch "$STUB_STATE/transition_noop"; : > "$STUB_STATE/calls.log"
+rc=0; out=$(MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" 2>&1) || rc=$?
+[ "$rc" = 1 ] && ok "confirm 未生效 exit 1" || bad "未生效 exit $rc"
+case "$out" in *"已流转完成"*) bad "未生效仍报已流转完成: $out" ;; *) ok "未生效不报已流转完成" ;; esac
+case "$out" in *"回读仍为"*) ok "报出回读结果" ;; *) bad "未生效文案: $out" ;; esac
+[ "$(grep -c -- "--node-id start" "$STUB_STATE/calls.log")" = 1 ] && ok "未生效不重复 confirm" || bad "confirm 次数: $(grep -c -- '--node-id start' "$STUB_STATE/calls.log")"
+rm -f "$STUB_STATE/transition_noop"
+# 节点已完成（ErrAPIReCompleteNode）：当作已完成继续，不算失败
+mk_nodes finished finished '"x"' finished finished doing
+jq '.list |= map(if .basic.node_key=="state_99" then .basic.status="doing" else . end)' "$STUB_STATE/nodes.json" > "$T/n" && mv "$T/n" "$STUB_STATE/nodes.json"
+touch "$STUB_STATE/transition_completed"; : > "$STUB_STATE/calls.log"
+rc=0; out=$(MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" 2>&1) || rc=$?
+rm -f "$STUB_STATE/transition_completed"
+[ "$rc" = 1 ] && case "$out" in *"回读仍为 doing"*) ok "已完成应答但回读未完成时如实报" ;; *) bad "ReComplete 文案: $out" ;; esac || bad "ReComplete exit $rc: $out"
 cleanup
 
 echo "== advance issue：state 通道、空转、表单转人工 =="
@@ -425,6 +465,9 @@ rc=0; out=$(bash "$MG" done --ctx-dir "$ctx") || rc=$?
 [ "$(printf '%s' "$out" | jq -r '.advance' 2>/dev/null)" = "ok" ] && ok "done advance=ok" || bad "done(exit $rc): $out"
 [ "$(printf '%s' "$out" | jq -r '.comment' 2>/dev/null)" = "ok" ] && ok "done comment=ok" || bad "done(exit $rc): $out"
 grep -q "已合入" "$STUB_STATE/calls.log" && ok "收束评论文案" || bad "评论未发"
+# 上一轮 confirm 已把节点推成 finished（stub 同真机）：重置回 doing，否则这轮是空转而非失败
+jq -n '{list:[{basic:{name:"前端开发", node_key:"fe_development", status:"doing"},
+             assignees:{owners:[{user_key:"6976056325272862721"}]}}], total:1}' > "$STUB_STATE/nodes.json"
 touch "$STUB_STATE/transition_fail"
 rc=0; out=$(bash "$MG" done --ctx-dir "$ctx") || rc=$?
 [ "$rc" = 0 ] && ok "advance 失败 done 仍 exit 0" || bad "done exit $rc"

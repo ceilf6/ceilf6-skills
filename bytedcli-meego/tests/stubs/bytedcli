@@ -2,9 +2,12 @@
 # 假 bytedcli：整行 argv 追加 $STUB_STATE/calls.log；按子命令回放 $STUB_STATE 下的应答文件。
 # 应答一律用 MCP 信封（.data.result.content[0].text 内嵌字符串化 JSON），与真机同构。
 # 哨兵：comment_fail / node_get_fail / transition_fail / state_list_fail / state_transition_fail /
-#       create_fail / node_update_fail / update_fail → 对应命令 exit 5（真机错误即非零退出）。
+#       create_fail / node_update_fail / update_fail / role_fail（workitem update --role-operate）
+#       → 对应命令 exit 5（真机错误即非零退出）。
 #       transition_not_arrived → node transition 回真机 code=20016（目标节点未到达）；
-#       transition_not_arrived_once → 只回一次 20016，随后成功（服务端推进延迟窗口）。
+#       transition_not_arrived_once → 只回一次 20016，随后成功（服务端推进延迟窗口）；
+#       transition_completed → 回 ErrAPIReCompleteNode；transition_noop → 应答成功但不改节点状态。
+#       node transition 成功会把 nodes.json 里该节点标 finished（模拟真机的状态推进）。
 #       create_nonjson → workitem create 退 0 但吐非 JSON（网关降级形态）。
 set -euo pipefail
 printf '%s\n' "$*" >> "${STUB_STATE:?bytedcli stub 需要 STUB_STATE}/calls.log"
@@ -26,10 +29,26 @@ case "$*" in
       rm -f "${STUB_STATE}/transition_not_arrived_once"
       echo '{"status":"error","error":{"message":"code=20016, message=Node Is Not Arrived"}}'; exit 5; fi
     if [ -f "${STUB_STATE}/transition_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    if [ -f "${STUB_STATE}/transition_completed" ]; then
+      echo '{"status":"error","error":{"message":"error=ErrAPIReCompleteNode,message=Node Is Completed, Could Not Be Completed"}}'; exit 5; fi
+    # 成功即把该节点在 nodes.json 里标 finished：真机 confirm 后回读就是这样，调用方的回读校验才有意义。
+    # transition_noop 应答成功但不改状态，模拟真机见过的「exit 0 而节点仍 doing」。
+    if [ ! -f "${STUB_STATE}/transition_noop" ]; then
+      _nk=$(printf '%s\n' "$*" | sed -E 's/.*--node-id ([^ ]+).*/\1/')
+      jq --arg k "$_nk" '.list |= map(if .basic.node_key == $k then .basic.status = "finished" else . end)' \
+        "${STUB_STATE}/nodes.json" > "${STUB_STATE}/nodes.tmp" && mv "${STUB_STATE}/nodes.tmp" "${STUB_STATE}/nodes.json"
+    fi
     echo '{"status":"success"}' ;;
   *"meego workitem update"*)
+    case "$*" in *--role-operate*)
+      if [ -f "${STUB_STATE}/role_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+      echo '{"status":"success"}'; exit 0 ;;
+    esac
     if [ -f "${STUB_STATE}/update_fail" ]; then echo '{"status":"error"}'; exit 5; fi
     echo '{"status":"success"}' ;;
+  *"meego workitem get"*)
+    if [ -f "${STUB_STATE}/workitem.json" ]; then envelope "${STUB_STATE}/workitem.json"
+    else envelope <(jq -n '{work_item_attribute:{role_members:[]}}'); fi ;;
   *"meego node update"*)
     if [ -f "${STUB_STATE}/node_update_fail" ]; then echo '{"status":"error"}'; exit 5; fi
     echo '{"status":"success"}' ;;

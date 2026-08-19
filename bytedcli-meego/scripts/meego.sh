@@ -248,6 +248,26 @@ case "$sub" in
         nodes=$(printf '%s' "$out" | mcp_text)
         [ -n "$nodes" ] || die "node get 应答形状不符（条目 ${id}）：$(snippet "$out")"
       }
+      # 节点表单字段按角色分组授权（498109 的「是否支持私有化」属技术负责人组）：角色空着时
+      # 任何人都无权编辑，服务端回 ErrEditFieldNoPermission。dev_roles 配置的角色缺本人就补上——
+      # 只加本人、只加不删（早于 dev_roles 配置建的存量条目靠这一步自愈）。
+      roles_cfg=$(printf '%s' "$rc_cfg" | jq -c '.story.dev_roles // []')
+      if [ "$roles_cfg" != "[]" ]; then
+        wout=$(bytedcli --json meego workitem get --project-key "$PK" --work-item-id "$id" 2>"$ERRF" </dev/null) \
+          || die "workitem get 失败（条目 ${id}）：$(err_tail)"
+        wattr=$(printf '%s' "$wout" | mcp_text)
+        [ -n "$wattr" ] || die "workitem get 应答形状不符（条目 ${id}）：$(snippet "$wout")"
+        miss=$(printf '%s' "$wattr" | jq -c --arg o "$OWNER" --argjson r "$roles_cfg" '
+          [ .work_item_attribute.role_members[]? ] as $rm
+          | [ $r[] | select(. as $k | ([ $rm[] | select(.key == $k) | .members[]?.key ] | index($o)) == null) ]')
+        if [ "$miss" != "[]" ]; then
+          rop=$(printf '%s' "$miss" | jq -c --arg o "$OWNER" '[ .[] | {role_key:., op:"add", user_keys:[$o]} ]')
+          rout=$(bytedcli --json meego workitem update --project-key "$PK" --work-item-id "$id" \
+            --role-operate "$rop" 2>&1 </dev/null) \
+            || die "角色补位失败（$(printf '%s' "$miss" | jq -r 'join("、")')）：$(snippet "$rout")"
+          echo "meego: 已补角色（$(printf '%s' "$miss" | jq -r 'join("、")')）"
+        fi
+      fi
       fetch_nodes
       fails=0
       while IFS= read -r n; do
@@ -289,7 +309,8 @@ case "$sub" in
           tout=$(bytedcli --json meego node transition --project-key "$PK" --work-item-id "$id" \
             --action confirm --node-id "$nk" 2>&1 </dev/null) && break
           case "$tout" in
-            *20016*|*"Node Is Not Arrived"*)
+            *ErrAPIReCompleteNode*|*"Node Is Completed"*) break ;;
+            *20016*|*ErrAPIOperateNotArrivedNode*|*"Node Is Not Arrived"*)
               if [ "$try" = 0 ]; then try=1; sleep "${MEEGO_RETRY_SLEEP:-2}"; fetch_nodes; continue; fi
               at=$(printf '%s' "$nodes" | jq -r '[.list[]? | select(.basic.status == "doing") | .basic.name] | join("、") | if . == "" then "未知" else . end')
               echo "meego: 节点「${n}」尚未到达（节点流停在「${at}」），前序节点未推进，转人工（参见 SKILL.md「转人工后的处理参考」）" >&2 ;;
@@ -297,6 +318,14 @@ case "$sub" in
           esac
           fails=$((fails+1)); break 2
         done
+        # 应答成功不等于节点真的完成（真机见过 exit 0 而节点仍 doing）：回读校验，否则看板收到的是假报告。
+        # 顺带刷新 nodes，后续节点的状态与表单值都取最新。
+        fetch_nodes
+        nst=$(printf '%s' "$nodes" | jq -r --arg n "$n" 'first(.list[]? | select(.basic.name == $n) | .basic.status) // empty')
+        if [ "$nst" != finished ]; then
+          echo "meego: 节点「${n}」confirm 应答成功但回读仍为 ${nst:-未知}，未生效，停下转人工" >&2
+          fails=$((fails+1)); break
+        fi
         echo "meego: 节点「${n}」已流转完成"
       done <<EOF
 $names
