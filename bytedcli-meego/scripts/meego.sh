@@ -242,6 +242,8 @@ case "$sub" in
       mrid="$mr_id_opt"
       if [ -z "$mrid" ] && [ -n "$META" ]; then mrid=$(jq -r '.mr_id // empty' "$META"); fi
       mr_url=""; [ -z "$mrid" ] || mr_url="https://bits.bytedance.net/bytebus/devops/code/detail/${mrid}"
+      # nodes 由 fetch_nodes 刷新，故不能在子 shell 里取（命令替换拿不回刷新结果）
+      node_status() { printf '%s' "$nodes" | jq -r --arg n "$1" 'first(.list[]? | select(.basic.name == $n) | .basic.status) // empty'; }
       fetch_nodes() {
         out=$(bytedcli --json meego node get --project-key "$PK" --work-item-id "$id" 2>"$ERRF" </dev/null) \
           || die "node get 失败（条目 ${id}）：$(err_tail)"
@@ -304,12 +306,26 @@ case "$sub" in
         fi
         # </dev/null 必须：循环体共享 heredoc 作 stdin，CLI 若读 stdin 会吞掉剩余节点名（静默漏流转）
         # 20016 可能只是上一节点刚 confirm、服务端还没把本节点推到 doing：重取节点流再试一次
-        try=0
+        try=0 owner_try=0
         while :; do
           tout=$(bytedcli --json meego node transition --project-key "$PK" --work-item-id "$id" \
             --action confirm --node-id "$nk" 2>&1 </dev/null) && break
           case "$tout" in
             *ErrAPIReCompleteNode*|*"Node Is Completed"*) break ;;
+            *ErrOwnerRequired*|*负责人必填*)
+              # 设了「负责人必填」的节点 owner 空着不让 confirm。补本人再试一次——
+              # 他人 owner 的节点在上面已停下，走到这里的只可能是空 owner
+              if [ "$owner_try" = 0 ]; then
+                owner_try=1
+                if oout=$(bytedcli --json meego node update --project-key "$PK" --work-item-id "$id" \
+                     --node-id "$nk" --node-owners "[\"${OWNER}\"]" 2>&1 </dev/null); then
+                  echo "meego: 节点「${n}」负责人为空，已补本人"
+                  fetch_nodes; continue
+                fi
+                echo "meego: 节点「${n}」补负责人失败：$(snippet "$oout")" >&2
+              else
+                echo "meego: 节点「${n}」补了负责人仍报必填：$(snippet "$tout")" >&2
+              fi ;;
             *20016*|*ErrAPIOperateNotArrivedNode*|*"Node Is Not Arrived"*)
               if [ "$try" = 0 ]; then try=1; sleep "${MEEGO_RETRY_SLEEP:-2}"; fetch_nodes; continue; fi
               at=$(printf '%s' "$nodes" | jq -r '[.list[]? | select(.basic.status == "doing") | .basic.name] | join("、") | if . == "" then "未知" else . end')
@@ -319,9 +335,10 @@ case "$sub" in
           fails=$((fails+1)); break 2
         done
         # 应答成功不等于节点真的完成（真机见过 exit 0 而节点仍 doing）：回读校验，否则看板收到的是假报告。
-        # 顺带刷新 nodes，后续节点的状态与表单值都取最新。
-        fetch_nodes
-        nst=$(printf '%s' "$nodes" | jq -r --arg n "$n" 'first(.list[]? | select(.basic.name == $n) | .basic.status) // empty')
+        # 首读可能撞上服务端传播延迟（真机 2026-08-19 见过 confirm 已生效、紧接的 node get 仍是 doing），
+        # 隔一拍再读一次才判死。顺带刷新 nodes，后续节点的状态与表单值都取最新。
+        fetch_nodes; nst=$(node_status "$n")
+        if [ "$nst" != finished ]; then sleep "${MEEGO_RETRY_SLEEP:-2}"; fetch_nodes; nst=$(node_status "$n"); fi
         if [ "$nst" != finished ]; then
           echo "meego: 节点「${n}」confirm 应答成功但回读仍为 ${nst:-未知}，未生效，停下转人工" >&2
           fails=$((fails+1)); break

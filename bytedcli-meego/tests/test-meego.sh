@@ -414,6 +414,43 @@ touch "$STUB_STATE/transition_completed"; : > "$STUB_STATE/calls.log"
 rc=0; out=$(MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" 2>&1) || rc=$?
 rm -f "$STUB_STATE/transition_completed"
 [ "$rc" = 1 ] && case "$out" in *"回读仍为 doing"*) ok "已完成应答但回读未完成时如实报" ;; *) bad "ReComplete 文案: $out" ;; esac || bad "ReComplete exit $rc: $out"
+# 节点设了「负责人必填」：owner 空着 confirm 被服务端拒（ErrOwnerRequired）→ 补本人再试一次
+mk_nodes finished finished '"x"' doing not_started not_started
+jq '.list |= map(if .basic.node_key=="state_97" then .assignees.owners=[] else . end)' "$STUB_STATE/nodes.json" > "$T/n" && mv "$T/n" "$STUB_STATE/nodes.json"
+: > "$STUB_STATE/transition_owner_required"; : > "$STUB_STATE/calls.log"
+rc=0; out=$(MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" 2>&1) || rc=$?
+[ "$rc" = 0 ] && ok "负责人必填时补本人后推到底 exit 0" || bad "负责人必填 exit $rc: $out"
+own=$(grep -- "meego node update .*--node-owners" "$STUB_STATE/calls.log" | head -1)
+case "$own" in *"--node-id state_97"*"$ME"*) ok "给撞上的节点补本人当负责人" ;; *) bad "node-owners: $own" ;; esac
+[ "$(grep -c -- "node transition .*--node-id state_97" "$STUB_STATE/calls.log")" = 2 ] && ok "补完负责人重试一次" || bad "confirm 次数: $(grep -c -- "node transition .*--node-id state_97" "$STUB_STATE/calls.log")"
+grep -q -- "meego node update .*--node-id state_99" "$STUB_STATE/calls.log" && bad "给有 owner 的节点也改了负责人" || ok "有 owner 的节点不碰负责人"
+case "$out" in *"负责人为空，已补本人"*) ok "报出补负责人" ;; *) bad "补负责人文案: $out" ;; esac
+# 补负责人失败：停下 exit 1，不再重试 confirm
+mk_nodes finished finished '"x"' doing not_started not_started
+jq '.list |= map(if .basic.node_key=="state_97" then .assignees.owners=[] else . end)' "$STUB_STATE/nodes.json" > "$T/n" && mv "$T/n" "$STUB_STATE/nodes.json"
+touch "$STUB_STATE/node_update_fail"; : > "$STUB_STATE/calls.log"
+rc=0; out=$(MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" 2>&1) || rc=$?
+[ "$rc" = 1 ] && ok "补负责人失败 exit 1" || bad "补负责人失败 exit $rc: $out"
+case "$out" in *"补负责人失败"*) ok "报出补负责人失败" ;; *) bad "补负责人失败文案: $out" ;; esac
+[ "$(grep -c -- "node transition .*--node-id state_97" "$STUB_STATE/calls.log")" = 1 ] && ok "补负责人失败不重试 confirm" || bad "confirm 次数: $(grep -c -- "node transition .*--node-id state_97" "$STUB_STATE/calls.log")"
+rm -f "$STUB_STATE/node_update_fail"
+# 补了负责人仍报必填：只重试一次就停，不空转
+mk_nodes finished finished '"x"' doing not_started not_started
+jq '.list |= map(if .basic.node_key=="state_97" then .assignees.owners=[] else . end)' "$STUB_STATE/nodes.json" > "$T/n" && mv "$T/n" "$STUB_STATE/nodes.json"
+printf 'always' > "$STUB_STATE/transition_owner_required"; : > "$STUB_STATE/calls.log"
+rc=0; out=$(MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" 2>&1) || rc=$?
+[ "$rc" = 1 ] && ok "补完仍必填 exit 1" || bad "补完仍必填 exit $rc: $out"
+[ "$(grep -c -- "node transition .*--node-id state_97" "$STUB_STATE/calls.log")" = 2 ] && ok "补完仍必填只试两次" || bad "confirm 次数: $(grep -c -- "node transition .*--node-id state_97" "$STUB_STATE/calls.log")"
+[ "$(grep -c -- "meego node update .*--node-owners" "$STUB_STATE/calls.log")" = 1 ] && ok "补负责人不重复写" || bad "node update 次数: $(grep -c -- "meego node update .*--node-owners" "$STUB_STATE/calls.log")"
+rm -f "$STUB_STATE/transition_owner_required"
+# 回读传播延迟：confirm 生效但下一次 node get 还看得见旧状态 → 隔一拍重读，不误报未生效
+mk_nodes finished finished '"x"' finished finished doing
+touch "$STUB_STATE/transition_lag"; : > "$STUB_STATE/calls.log"
+rc=0; out=$(MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" 2>&1) || rc=$?
+[ "$rc" = 0 ] && ok "回读延迟不误报 exit 0" || bad "回读延迟 exit $rc: $out"
+case "$out" in *"需求合入」已流转完成"*) ok "隔一拍读到 finished" ;; *) bad "回读延迟文案: $out" ;; esac
+[ "$(grep -c -- "node transition .*--node-id state_99" "$STUB_STATE/calls.log")" = 1 ] && ok "回读重试不重复 confirm" || bad "confirm 次数: $(grep -c -- "node transition .*--node-id state_99" "$STUB_STATE/calls.log")"
+rm -f "$STUB_STATE/transition_lag" "$STUB_STATE/lag_pending"
 cleanup
 
 echo "== advance issue：state 通道、空转、表单转人工 =="

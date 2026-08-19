@@ -6,7 +6,10 @@
 #       → 对应命令 exit 5（真机错误即非零退出）。
 #       transition_not_arrived → node transition 回真机 code=20016（目标节点未到达）；
 #       transition_not_arrived_once → 只回一次 20016，随后成功（服务端推进延迟窗口）；
-#       transition_completed → 回 ErrAPIReCompleteNode；transition_noop → 应答成功但不改节点状态。
+#       transition_completed → 回 ErrAPIReCompleteNode；transition_noop → 应答成功但不改节点状态；
+#       transition_lag → 应答成功但状态推迟到下一次 node get 之后才可见（服务端传播延迟）。
+#       transition_owner_required → 目标节点 owner 为空时回 ErrOwnerRequired（节点设了负责人必填），
+#         文件内容为 always 时无视 owner 恒回该错（模拟补了负责人也不放行）。
 #       node transition 成功会把 nodes.json 里该节点标 finished（模拟真机的状态推进）。
 #       create_nonjson → workitem create 退 0 但吐非 JSON（网关降级形态）。
 set -euo pipefail
@@ -18,7 +21,12 @@ case "$*" in
     echo '{"status":"success"}' ;;
   *"meego node get"*)
     if [ -f "${STUB_STATE}/node_get_fail" ]; then echo '{"status":"error"}'; exit 5; fi
-    envelope "${STUB_STATE}/nodes.json" ;;
+    envelope "${STUB_STATE}/nodes.json"
+    if [ -f "${STUB_STATE}/lag_pending" ]; then
+      _lk=$(cat "${STUB_STATE}/lag_pending"); rm -f "${STUB_STATE}/lag_pending"
+      jq --arg k "$_lk" '.list |= map(if .basic.node_key == $k then .basic.status = "finished" else . end)' \
+        "${STUB_STATE}/nodes.json" > "${STUB_STATE}/nodes.tmp" && mv "${STUB_STATE}/nodes.tmp" "${STUB_STATE}/nodes.json"
+    fi ;;
   *"meego node transition"*)
     # 读干 stdin：真机 CLI 会读，调用方若不隔离 stdin 就会吞掉自己循环的剩余输入
     cat >/dev/null 2>/dev/null || true
@@ -29,10 +37,21 @@ case "$*" in
       rm -f "${STUB_STATE}/transition_not_arrived_once"
       echo '{"status":"error","error":{"message":"code=20016, message=Node Is Not Arrived"}}'; exit 5; fi
     if [ -f "${STUB_STATE}/transition_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    # 节点设了「负责人必填」：owner 空着 confirm 会被服务端拒绝
+    if [ -f "${STUB_STATE}/transition_owner_required" ]; then
+      _nk=$(printf '%s\n' "$*" | sed -E 's/.*--node-id ([^ ]+).*/\1/')
+      if [ "$(cat "${STUB_STATE}/transition_owner_required")" = always ] \
+         || jq -e --arg k "$_nk" 'first(.list[] | select(.basic.node_key == $k) | .assignees.owners) | length == 0' \
+              "${STUB_STATE}/nodes.json" >/dev/null 2>&1; then
+        echo '{"status":"error","error":{"message":"error=ErrOwnerRequired,message={node_name}负责人必填,需求开发负责人必填,retriable=false"}}'; exit 5; fi
+    fi
     if [ -f "${STUB_STATE}/transition_completed" ]; then
       echo '{"status":"error","error":{"message":"error=ErrAPIReCompleteNode,message=Node Is Completed, Could Not Be Completed"}}'; exit 5; fi
     # 成功即把该节点在 nodes.json 里标 finished：真机 confirm 后回读就是这样，调用方的回读校验才有意义。
     # transition_noop 应答成功但不改状态，模拟真机见过的「exit 0 而节点仍 doing」。
+    if [ -f "${STUB_STATE}/transition_lag" ]; then
+      printf '%s\n' "$*" | sed -E 's/.*--node-id ([^ ]+).*/\1/' > "${STUB_STATE}/lag_pending"
+      echo '{"status":"success"}'; exit 0; fi
     if [ ! -f "${STUB_STATE}/transition_noop" ]; then
       _nk=$(printf '%s\n' "$*" | sed -E 's/.*--node-id ([^ ]+).*/\1/')
       jq --arg k "$_nk" '.list |= map(if .basic.node_key == $k then .basic.status = "finished" else . end)' \
@@ -51,6 +70,16 @@ case "$*" in
     else envelope <(jq -n '{work_item_attribute:{role_members:[]}}'); fi ;;
   *"meego node update"*)
     if [ -f "${STUB_STATE}/node_update_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    # --node-owners 写进 nodes.json：调用方回读节点流时才能看见补上的负责人
+    case "$*" in *--node-owners*)
+      if [ -f "${STUB_STATE}/nodes.json" ]; then
+        _nk=$(printf '%s\n' "$*" | sed -E 's/.*--node-id ([^ ]+).*/\1/')
+        _ow=$(printf '%s\n' "$*" | sed -E 's/.*--node-owners (\[[^]]*\]).*/\1/')
+        jq --arg k "$_nk" --argjson o "$_ow" \
+          '.list |= map(if .basic.node_key == $k then .assignees.owners = [$o[] | {user_key:.}] else . end)' \
+          "${STUB_STATE}/nodes.json" > "${STUB_STATE}/nodes.tmp" && mv "${STUB_STATE}/nodes.tmp" "${STUB_STATE}/nodes.json"
+      fi ;;
+    esac
     echo '{"status":"success"}' ;;
   *"meego state list"*)
     if [ -f "${STUB_STATE}/state_list_fail" ]; then echo '{"status":"error"}'; exit 5; fi
