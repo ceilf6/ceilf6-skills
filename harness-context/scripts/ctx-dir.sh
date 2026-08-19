@@ -66,6 +66,7 @@ cmd_init() {
     --arg created "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     '{branch: $branch,
       wiki_url: (if $wiki_url == "" then null else $wiki_url end),
+      selftest_url: null,
       base_branch: $base,
       status: "planning",
       max_rounds: null,

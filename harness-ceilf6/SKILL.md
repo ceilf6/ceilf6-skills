@@ -76,8 +76,8 @@ description: 个人需求交付 harness：装载 harness-context 的需求上下
      2. **rebase**：`bash ~/.claude/skills/harness-ceilf6/scripts/rebase-base.sh --dir "$CTX"`——fetch 后把分支变基到 base 远端最新（本地跟踪 ref 常年滞后，脚本 fetch 失败即停、不降级），MR 必须基于最新 base 才能干净合入。已在最新上则空转通过。放在 squash 之后：单提交重放，冲突至多解一次。发生变基 → push 前重跑自检（typecheck + 相关测试），挂了回阶段 1 修复后从收尾第 1 步重来；解过冲突 → 冲突解决属未经机审的新改动，记入 `$CTX/cr/round-N/fixes.md` 并建议补一轮 cr-round 复核（通过后继续收尾，squash 无需重做——变基不新增提交）。冲突由会话解决；无人值守下解法拿不准按「模式」节关键决策分叉走 ask。
      3. **push**：`git push --force-with-lease origin <分支>`。force-with-lease 仅限 harness 需求分支——2026-07-30 用户裁定方案 A（MR 恒单 commit），是既有自动 push 豁免（2026-07-29）的延伸。
      4. **MR**：调用 bytedcli-bits-mr 建 MR——标题 = 需求短题，描述必含：任务来源（bot 场景带 chat/message id）、plan 四段摘要、CR 轮次表、遗留 minor/nit 清单、范围外存量清单（out-of-scope.md 非空时）。**Meego 硬门**：绑定空间的仓库里 meta 缺 meego_id → 先按阶段 0 第 5 步补 resolve/create，补建仍失败则停在建 MR 之前（交互如实报告 / 无人值守 ask），不降级建非正规 MR。建 MR 用 create-mr-with-meego.js 带 `--meego <meta.meego_id>`，`--meego-type` 按 meta.meego_type 映射（story→feature、issue→bug；缺失按分支前缀 feat/fix 兜底）。**续入不重复建 MR**：当前分支已存在开放 MR 时只在既有 MR 追加一条评论（本轮变更摘要 + 新增 CR 轮次 + 注明历史已重写），MR 链接沿用；既有 MR 若缺 meego 绑定（meego 集成前建的存量 MR），补 meego 后用 `bytedcli --json bits mr update --mr-id <meta.mr_id> --meego <meta.meego_url>` 原地补绑即可——2026-08-11 实测非正规（optimize）MR 也可绑，应答 `meego_bindings[].status=="success"` 即校验通过，不必重建 MR；MR 建成或复用既有 MR 后，后续动作顺序固定：① 回写 mr_id（`jq '.mr_id="<id>"'`，meego.sh comment 的 qa preset 与 cr-group.sh 都依赖它）；② **挂 WIP**：`bash ~/.claude/skills/harness-ceilf6/scripts/cr-group.sh wip --ctx-dir "$CTX"`——MR 从建成到用户点「发起CR」之间恒为 WIP，摘除只发生在 cr-group.sh 的拉群 / 发起CR 步；挂载失败只告警、不回滚 MR，汇总里如实报；③ `bash ~/.claude/skills/bytedcli-meego/scripts/meego.sh comment --ctx-dir "$CTX" --message-file <(MR 链接 + 一句变更摘要)`，失败如实报告后继续；④ `bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh mark --ctx-dir "$CTX" mr_created`。挂 WIP 排在 meego 评论之前：评论是外部命令、会失败，挂 WIP 不能排在任何可失败步骤之后。
-     5. **自测矩阵**：在 meta.wiki_url 需求子文档追加「自测场景矩阵」，结构与随附说明**必读并遵循 references/selftest-matrix.md**——先列分发面（哪些产品线 × 哪些端会加载这份代码，vc-ai 为视频会议/妙记/豆包/文档空间四条线），两级列头（首行 = 产品线分组，次行 = 该线下用户可感知场景），行 = 端/环境；格子状态（待测留白 / 未涉及 / 测后 ✅/❌）、表前填写约定、表后「环境准入与版本确认」均按该文件执行。该矩阵是阶段 3 自测节点的执行清单。
-     6. **沉淀**：harness-context 供料 + lark-sediment 流程——需求结论、CR 往返要点、踩坑追加到 meta.wiki_url 需求子文档（wiki_url 为空则先按阶段 0 第 4 步补建）；同批产出 B 线四问叙事节（lark-sediment「两条沉淀线」）追加到**同一篇**需求子文档；跨需求通用经验按 lark-sediment 正常去重、分类落位，不塞进需求文档；写 `$CTX/sediment.md` 台账。沉淀失败如实报告后继续汇总（MR 已建，不因沉淀失败回滚）。无人值守模式沉淀全程不需人工。沉淀完成后 `… meego.sh comment --ctx-dir "$CTX" --message-file <(需求 wiki 子文档链接)`——meego 成为 wiki（自测矩阵与沉淀）的入口，失败如实报告不回滚。
+     5. **自测矩阵**：矩阵独立成一篇 wiki 文档，挂在 meta.wiki_url 需求子文档**之下**。meta.selftest_url 已有 → 复用不重建，按本轮改动面就地更新（分发面变了加行列、涉及判定变了改格子与依据），已填的结果与截图保留；为空 → `lark-cli wiki +node-get --node-token '<meta.wiki_url>' --as user --format json` 取 `.data.node_token` 作父节点，`lark-cli wiki +node-create --parent-node-token <父 node_token> --obj-type docx --title '<短题> · 自测矩阵'` 建子文档并写入正文（机械用法见 `lark-cli skills read lark-wiki` 与 `lark-doc`），回写 meta.selftest_url（`jq '.selftest_url="<url>"' "$CTX/meta.json" > "$CTX/tmp" && mv "$CTX/tmp" "$CTX/meta.json"`），并在需求子文档正文追加一行「自测矩阵：<链接>」——子节点只在 wiki 树里露出，正文这行是给只拿到需求文档链接的人的入口。结构与随附说明**必读并遵循 references/selftest-matrix.md**——先列分发面（哪些产品线 × 哪些端会加载这份代码，vc-ai 为视频会议/妙记/豆包/文档空间四条线），两级列头（首行 = 产品线分组，次行 = 该线下用户可感知场景），行 = 端/环境；格子状态（待测留白 / 未涉及 / 测后 ✅/❌）、表前填写约定、表后「环境准入与版本确认」均按该文件执行。该文档是阶段 3 自测节点的执行清单。wiki 操作失败如实报告后继续，不阻塞收尾。
+     6. **沉淀**：harness-context 供料 + lark-sediment 流程——需求结论、CR 往返要点、踩坑追加到 meta.wiki_url 需求子文档（wiki_url 为空则先按阶段 0 第 4 步补建）；同批产出 B 线四问叙事节（lark-sediment「两条沉淀线」）追加到**同一篇**需求子文档；跨需求通用经验按 lark-sediment 正常去重、分类落位，不塞进需求文档；写 `$CTX/sediment.md` 台账。沉淀失败如实报告后继续汇总（MR 已建，不因沉淀失败回滚）。无人值守模式沉淀全程不需人工。沉淀完成后 `… meego.sh comment --ctx-dir "$CTX" --message-file <(需求 wiki 子文档链接 + 自测矩阵子文档链接)`——meego 成为 wiki（需求沉淀与自测矩阵）的入口，失败如实报告不回滚。
      7. 输出收尾汇总（模板见下，首行进度图、次行未自测警示，MR 为过程产物行）。
 
      失败/熔断/超时**不 squash、不 rebase、不 push、不建 MR、不沉淀**——半成品不进团队远端视野、不上 wiki。
@@ -106,16 +106,17 @@ meta.max_rounds 非 null 时，达到该轮数也停下交用户（默认 null �
 - 结果：机审通过（第 N 轮），人工 CR 与自测未开始 ｜ 熔断待裁决
 - MR（已建、已挂 WIP，待人工 CR → 自测；WIP 在看板点「发起CR」时摘除）：<链接>（失败/熔断时写「未创建」；挂 WIP 失败时注明）
 - wiki 沉淀：<需求子文档链接>（失败/熔断时写「未沉淀」）
+- 自测矩阵：<矩阵子文档链接>（自测按此逐格执行；失败/熔断时写「未建」）
 - 改动概览：<一段话>
 - 轮次记录：cr/round-1..N（verdict / fixes 齐全）
 - 遗留 minor/nit：<清单，含文件位置>（修不修由你定）
 - 范围外存量：<out-of-scope.md 条目摘要>（不进本 MR，另开 harness 线程处理；无则省略本行）
-- 下一步（两步闭环）：① 人工 CR ② 自测（按需求子文档中的自测场景矩阵逐格验证、填结果贴截图）。每完成一步就确认——会话里说「人工 CR 完成 / 自测完成」，或 `ht mark <序号> human-cr|selftest`，或 web 看板按钮。两步齐后输出「可交付版汇总」，那才是可外发版本。发现问题用 harness-context add 存入后喊我续跑
+- 下一步（两步闭环）：① 人工 CR ② 自测（打开自测矩阵子文档逐格验证、填结果贴截图）。每完成一步就确认——会话里说「人工 CR 完成 / 自测完成」，或 `ht mark <序号> human-cr|selftest`，或 web 看板按钮。两步齐后输出「可交付版汇总」，那才是可外发版本。发现问题用 harness-context add 存入后喊我续跑
 ```
 
 ### 阶段 3：人工节点与可交付
 
-收尾后进入人工区间，两节点顺序：人工 CR → 自测（依据需求子文档中的自测场景矩阵逐格执行；矩阵缺失时先按收尾第 5 步补建）。自测完成后由用户在看板上逐个点拉群、发起CR、发起QA（等价命令 `bash ~/.claude/skills/harness-ceilf6/scripts/cr-group.sh group --ctx-dir "$CTX"`、`… request --ctx-dir "$CTX"`、`… qa --ctx-dir "$CTX"`）——三步都往外喊人，时机归用户，会话不代点、不代跑，除非用户明确要求；MR 合入后在看板点「完成」收束。用户在会话说「人工 CR 完成」「自测完成」→ `bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh mark --ctx-dir "$CTX" <human_cr_done|selftest_done>` 并转发进度图。另两条渠道（`ht mark`、web 看板）与此同一写入口、可能发生在会话外——收到用户后续消息时先 `progress` 一次核对现状再回应。
+收尾后进入人工区间，两节点顺序：人工 CR → 自测（依据 meta.selftest_url 指向的自测矩阵子文档逐格执行；该字段为空时先按收尾第 5 步补建）。自测完成后由用户在看板上逐个点拉群、发起CR、发起QA（等价命令 `bash ~/.claude/skills/harness-ceilf6/scripts/cr-group.sh group --ctx-dir "$CTX"`、`… request --ctx-dir "$CTX"`、`… qa --ctx-dir "$CTX"`）——三步都往外喊人，时机归用户，会话不代点、不代跑，除非用户明确要求；MR 合入后在看板点「完成」收束。用户在会话说「人工 CR 完成」「自测完成」→ `bash ~/.claude/skills/harness-ceilf6/scripts/threads.sh mark --ctx-dir "$CTX" <human_cr_done|selftest_done>` 并转发进度图。另两条渠道（`ht mark`、web 看板）与此同一写入口、可能发生在会话外——收到用户后续消息时先 `progress` 一次核对现状再回应。
 
 **MR 评论处置**：MR 存续期间用户说「看看 / 处理 MR 评论」时，当前会话经 skill `mr-comments`（`fetch --ctx-dir "$CTX"`）拉 MR 全部评论（Codebase 讨论线程 + Review 附言；BITS 详情页展示的是同一份）并按作者三分：**机器人评论**（`kind=bot`，如 Bits CodeGuard）在本会话按 references/mr-comment-duty.md 处置——评判三分法、需修复走续入返工、回复一律经 `mr-comments.sh reply`（强制【bot】前缀）、人工里程碑不代 mark、处置完 `mark` 推进水位；**人工评论**（`kind=human`）不评判、不回复，列给用户本人处理（`reply` 对人工参与的线程机械拒绝）。bot 的 mrwatch 轮询出厂关闭（`harness-ceilf6-bot/config.json` 的 `mrWatch.enabled`），打开后同一套纪律以无人值守值班任务跑、水位同源。熔断后人工确认再 `bash ~/.claude/skills/mr-comments/scripts/mr-comments.sh enable --ctx-dir "$CTX"` 复位。
 
@@ -135,6 +136,6 @@ meta.max_rounds 非 null 时，达到该轮数也停下交用户（默认 null �
 ## 约束
 
 - 收尾自动 squash + 变基到 base 远端最新 + force-with-lease push + 建 MR + 沉淀是本技能职责（squash/force-with-lease：用户 2026-07-30 裁定方案 A；自动 push：2026-07-29 裁定；rebase：2026-08-11 裁定，方案 A 恒单 commit 的延伸——变基后必然 force push，沿用既有豁免；均仅限 harness 需求分支）。Meego 经 bytedcli-meego 技能收敛管理（关联/创建于计划门、评论于关键时刻、流转仅在 done——挂点见流程各步）；不打 SCM 包（workflow-bugfix / scm 技能另行处理）。
-- **文档行文**：本技能产出的一切给人看的文本都受此约束——需求 wiki 子文档（plan 四段、自测矩阵说明、沉淀正文、B 线叙事节）、MR 描述、收尾汇总与可交付版汇总。只管行文，字段名、清单、表格、代码块与 URL 属结构、不受管。散文型行文（沉淀正文、B 线叙事节、MR 的改动说明、汇总里的改动概览）动笔前先加载 human-writing skill。技术型行文（plan 四段、矩阵说明、fixes.md、commit message）不套其散文形态，但四条硬约束始终生效：材料关（列不出具体材料就写短，不换四种说法灌字数）、禁翻案腔、禁名词化与黑话、禁洞察路标。自查脚本与判读口径见 lark-sediment 第 2 步，两处同一口径。
+- **文档行文**：本技能产出的一切给人看的文本都受此约束——需求 wiki 子文档（plan 四段、沉淀正文、B 线叙事节）、自测矩阵子文档（矩阵说明与准入段）、MR 描述、收尾汇总与可交付版汇总。只管行文，字段名、清单、表格、代码块与 URL 属结构、不受管。散文型行文（沉淀正文、B 线叙事节、MR 的改动说明、汇总里的改动概览）动笔前先加载 human-writing skill。技术型行文（plan 四段、矩阵说明、fixes.md、commit message）不套其散文形态，但四条硬约束始终生效：材料关（列不出具体材料就写短，不换四种说法灌字数）、禁翻案腔、禁名词化与黑话、禁洞察路标。自查脚本与判读口径见 lark-sediment 第 2 步，两处同一口径。
 - 不修改 cr/round-*/ 下的历史产物；每轮产物只写本轮目录。
 - 对 verdict 的每条 blocker/major 必须显式处置（修复或书面不采纳），禁止静默忽略。

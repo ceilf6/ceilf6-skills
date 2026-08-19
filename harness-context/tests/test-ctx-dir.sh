@@ -46,7 +46,7 @@ if grep -qxF '.harness-ceilf6/' "$excl"; then ok "exclude 写入"; else bad "exc
 [ "$(jq -r .branch "$dir/meta.json")" = feat/x ] && ok "branch 记录" || bad "branch"
 [ "$(jq -r .base_branch "$dir/meta.json")" = master ] && ok "base_branch 探测" || bad "base_branch"
 [ "$(jq -r .wiki_url "$dir/meta.json")" = "https://x/wiki/abc" ] && ok "wiki_url 记录" || bad "wiki_url"
-jq -e '.max_rounds == null and .mr_id == null' "$dir/meta.json" >/dev/null && ok "max_rounds/mr_id 默认 null" || bad "默认 null"
+jq -e '.max_rounds == null and .mr_id == null and .selftest_url == null' "$dir/meta.json" >/dev/null && ok "max_rounds/mr_id/selftest_url 默认 null" || bad "默认 null"
 jq -e '.created_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T")' "$dir/meta.json" >/dev/null && ok "created_at ISO" || bad "created_at"
 
 bash "$CTX" init >/dev/null 2>&1

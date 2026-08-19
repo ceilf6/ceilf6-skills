@@ -13,7 +13,7 @@ description: 按 git 分支管理当前需求的本地上下文仓（<仓库根>
 
 ```
 <仓库根>/.harness-ceilf6/<分支名，/ 替换为 __>/
-├── meta.json       # branch / wiki_url / base_branch / status / max_rounds / mr_id / created_at / milestones
+├── meta.json       # branch / wiki_url / selftest_url / base_branch / status / max_rounds / mr_id / created_at / milestones
 ├── context/        # 上下文条目，只增不改，命名 <YYMMDD-HHmm>-<im|doc|meego|mr|note>-<slug>.md
 │   └── 00-seed.md  # wiki 子文档种子
 ├── plan.md         # 计划门产物（由 harness-ceilf6 写入）
@@ -91,4 +91,4 @@ init / add / get 任一动作完成后，**不等用户指示，立即接续调�
 
 - `context/` 只增不改：勘误用新条目说明，不回改旧文件。
 - 本技能不写代码仓文件、不建 MR、不动 Meego 状态。
-- status 变更用 `ctx-dir.sh set-status <状态>`，不手改 meta.json 其他字段。例外三处：wiki_url 补写（`jq '.wiki_url="<url>"' "$CTX/meta.json" > "$CTX/tmp" && mv "$CTX/tmp" "$CTX/meta.json"`）；milestones 节点时间戳由 harness-ceilf6 的 `threads.sh mark` 写入；harness-ceilf6 看板手控的 `threads.sh set-node` / `threads.sh undone` 在钉节点与撤销完成时连带改写 status。
+- status 变更用 `ctx-dir.sh set-status <状态>`，不手改 meta.json 其他字段。例外三处：wiki_url / selftest_url 补写（`jq '.wiki_url="<url>"' "$CTX/meta.json" > "$CTX/tmp" && mv "$CTX/tmp" "$CTX/meta.json"`，selftest_url 同形，由 harness-ceilf6 收尾建自测矩阵子文档后写入）；milestones 节点时间戳由 harness-ceilf6 的 `threads.sh mark` 写入；harness-ceilf6 看板手控的 `threads.sh set-node` / `threads.sh undone` 在钉节点与撤销完成时连带改写 status。

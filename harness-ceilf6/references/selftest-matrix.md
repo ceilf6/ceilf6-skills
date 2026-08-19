@@ -1,6 +1,6 @@
 # 自测场景矩阵
 
-追加到需求 wiki 子文档的自测执行清单，是阶段 3 自测节点逐格执行的依据。范例（vc-ai 真实矩阵，结构照此）：https://bytedance.larkoffice.com/wiki/WwzgwKqpPivnVkkxSzdcI6N1nKc#share-F6z2dFuGqoAoSMxU1ekcrACyn7d
+挂在需求 wiki 子文档下的独立子文档，标题 `<短题> · 自测矩阵`，是阶段 3 自测节点逐格执行的依据。正文首行回链需求子文档，其下按本文各节的顺序写：分发面判定 → 矩阵表 → 表前填写约定 → 表后环境准入与版本确认。范例（vc-ai 真实矩阵，结构照此）：https://bytedance.larkoffice.com/wiki/WwzgwKqpPivnVkkxSzdcI6N1nKc#share-F6z2dFuGqoAoSMxU1ekcrACyn7d
 
 ## 先定分发面，再画表
 
