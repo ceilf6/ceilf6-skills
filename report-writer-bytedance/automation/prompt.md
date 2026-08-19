@@ -14,7 +14,7 @@
 6. 如果平台映射、项目、仓库或归属不明确，不要猜测；停止发布并在最终结果中列出待用户确认的具体问题。
 7. Meego 必需覆盖以技能列出的 OAuth 状态和 `todo list` 等普通接口为准；`workitem get --rich` 属于可选补充证据。若它返回 `MEEGO_GOAPI_AUTH_REQUIRED`，记录为“Meego 富文本详情跳过（缺 GoAPI Web session）”，改用普通 Meego 结果、MR 与飞书文档交叉核验，不得仅因此停止日报。
 8. 先检查日结父 Wiki 的同名子页面；存在则更新，不存在才创建，确保同一天重复执行不会创建重复页面。
-9. 严格执行 mentor → 主管 → HR 的串行评审与最多两轮修订。两轮后仍有 blocking finding 时停止发布。
+9. 完成证据归一化后，先把本任务或上一轮自动生成的日结页面标记为 `self_generated_report_artifact`，仅计入覆盖，不得映射为 WorkEvent。若其余证据中不存在任何具有目标日活动的 `completed`、`in_progress` 或 `blocked` WorkEvent，则不得创建或更新日报、不得追加 SOP/成长沉淀库；在覆盖摘要后直接输出 `no_reportable_activity` 的 skipped sentinel。存在可报告 WorkEvent 时，严格执行 mentor → 主管 → HR 的串行评审与最多两轮修订；两轮后仍有 blocking finding 时停止发布。
 10. 写入后必须重新获取文档并验证标题、日期和预期章节；按技能规则处理 SOP/成长沉淀库。
 11. 本 agent 不得发送任何 IM、邮件、群消息、机器人或 webhook 通知。
 12. Oncall 是可选来源。Oncall 未登录、令牌过期或查询失败时，记录 skipped 并继续生成日报，不得仅因此停止发布。`not logged in` 时，在最终 sentinel 前输出：
@@ -23,6 +23,7 @@
     `<daily-report-warning kind="source_unavailable" source="oncall" code="<stable_lowercase_code>" />`
 13. 仅 runner 可向当前用户发送配置提醒或失败提醒；本 agent 不得发送群消息、邮件、广播或常规成功通知。
 14. 最终输出必须完整满足技能的 Output Contract；失败时输出失败阶段、具体错误和是否发生任何写入。
-15. 最终回复的最后一个非空行必须是下列二者之一，不得在其后添加任何内容：
+15. 最终回复的最后一个非空行必须是下列三者之一，不得在其后添加任何内容：
     - 全部写入和回读验证成功：`<daily-report-result status="success" date="{{TARGET_DATE}}" />`
+    - 无目标日可报告活动且未写入：`<daily-report-result status="skipped" date="{{TARGET_DATE}}" reason="no_reportable_activity" />`
     - 任一阶段失败或未发布：`<daily-report-result status="failed" date="{{TARGET_DATE}}" />`

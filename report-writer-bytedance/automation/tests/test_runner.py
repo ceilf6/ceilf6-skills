@@ -53,10 +53,15 @@ class ResultContractTests(unittest.TestCase):
         )
         self.assertEqual(node["node_token"], "node-20")
 
-    def test_document_requires_all_expected_sections(self):
+    def test_document_allows_optional_highlight_section(self):
         runner.verify_document_content("# 今日重点\nA\n# 今日完成\nB\n# 明日展望\nC")
+        runner.verify_document_content("# 今日完成\nB\n# 明日展望\nC")
+
+    def test_document_requires_done_and_next_headings(self):
         with self.assertRaises(runner.VerificationError):
-            runner.verify_document_content("# 今日完成\nB\n# 明日展望\nC")
+            runner.verify_document_content("# 明日展望\nC")
+        with self.assertRaises(runner.VerificationError):
+            runner.verify_document_content("今日完成\nB\n# 明日展望\nC")
 
 
 class PromptContractTests(unittest.TestCase):
@@ -356,6 +361,28 @@ class FullRunExitStatusTests(unittest.TestCase):
             ), mock.patch.object(runner, "notify_best_effort") as notify:
                 status = runner.run_full("2026-07-20", {})
         self.assertEqual(status, 0)
+        notify.assert_not_called()
+
+    def test_no_activity_result_skips_wiki_verification(self):
+        def write_no_activity_message(prompt, last_message, env, handle):
+            last_message.write_text(
+                '<daily-report-result status="skipped" date="2026-07-20" '
+                'reason="no_reportable_activity" />\n',
+                encoding="utf-8",
+            )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with mock.patch.object(runner, "LOG_DIR", Path(temp_dir)), mock.patch.object(
+                runner, "run_preflight"
+            ), mock.patch.object(runner, "render_prompt", return_value="prompt"), mock.patch.object(
+                runner, "run_trae", side_effect=write_no_activity_message
+            ), mock.patch.object(runner, "verify_wiki") as verify, mock.patch.object(
+                runner, "notify_best_effort"
+            ) as notify:
+                status = runner.run_full("2026-07-20", {})
+
+        self.assertEqual(status, 0)
+        verify.assert_not_called()
         notify.assert_not_called()
 
 

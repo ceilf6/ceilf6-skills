@@ -33,11 +33,32 @@ class SourcePolicyContractTests(unittest.TestCase):
 
     def test_prompt_ends_with_complete_result_sentinel_block(self):
         prompt = self.read("automation/prompt.md")
-        sentinel_block = """15. 最终回复的最后一个非空行必须是下列二者之一，不得在其后添加任何内容：
+        sentinel_block = """15. 最终回复的最后一个非空行必须是下列三者之一，不得在其后添加任何内容：
     - 全部写入和回读验证成功：`<daily-report-result status="success" date="{{TARGET_DATE}}" />`
+    - 无目标日可报告活动且未写入：`<daily-report-result status="skipped" date="{{TARGET_DATE}}" reason="no_reportable_activity" />`
     - 任一阶段失败或未发布：`<daily-report-result status="failed" date="{{TARGET_DATE}}" />`"""
 
         self.assertTrue(prompt.rstrip().endswith(sentinel_block))
+
+    def test_no_activity_skip_policy_is_consistent(self):
+        expected = "no_reportable_activity"
+        for relative in (
+            "SKILL.md",
+            "references/event-schema.md",
+            "references/report-template.md",
+            "automation/prompt.md",
+        ):
+            self.assertIn(expected, self.read(relative), relative)
+
+    def test_self_generated_report_artifacts_are_not_work_events(self):
+        expected = "self_generated_report_artifact"
+        for relative in (
+            "SKILL.md",
+            "references/event-schema.md",
+            "references/source-map.md",
+            "automation/prompt.md",
+        ):
+            self.assertIn(expected, self.read(relative), relative)
 
     def test_required_sources_remain_explicit(self):
         config = self.read("references/config.yaml")

@@ -71,6 +71,7 @@ Keep parser `path` values and local filesystem diagnostics in the assistant cove
 - Use low confidence for weak clues and avoid overstating them as completed work.
 - Calendar attendance without outcome is coverage-only.
 - Empty source results are coverage-only.
+- Daily report pages created by this automation are `self_generated_report_artifact` coverage-only, including a prior-date report written just after midnight. They must never become WorkEvents.
 - Local AI sessions can be direct evidence when they show user-owned outcome, progress, decision, blocker, validation, or next action; do not paste raw transcript text or local filesystem paths into the report.
 
 ## Highlight Selection
@@ -90,9 +91,10 @@ Score each candidate event against four dimensions. Mark `highlight: true` only 
 
 ## Draft Mapping
 
+- No reportable target-date events: when there are no `completed`, `in_progress`, or `blocked` events with target-date activity, do not create or update a report. Return `no_reportable_activity` through the skipped result contract.
 - `今日重点`: events with `highlight: true`, rendered as deep blocks per report-template.md. Omit the section when no event qualifies.
-- `今日完成`: all remaining completed, in-progress, or blocked events with target-date activity.
-- `明日展望`: event `next_actions`, explicit user plans, and relevant items from the configured plan reference.
+- `今日完成`: required for every published report; render all remaining completed, in-progress, or blocked events with target-date activity.
+- `明日展望`: required for every published report; render 1-3 event `next_actions`, explicit user plans, and relevant items from the configured plan reference.
 - SOP library append trigger (post-publish step in SKILL.md): `sop_candidate` is non-empty, or a highlight event's `reflection` is a reusable method or pitfall the main loop judges worth keeping long-term.
 
 Prefer one rich event over several link-only bullets. Every artifact link in the final body must come from `evidence`.

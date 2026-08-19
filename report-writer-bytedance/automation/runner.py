@@ -35,7 +35,7 @@ TRAE_STARTUP_RETRY_DELAY_SECONDS = 5
 VERIFY_TIMEOUT_SECONDS = 120
 FEISHU_OPEN_ID = "ou_c501034db06707b7116eb9ec11896a7d"
 NOTIFICATION_TIMEOUT_SECONDS = 30
-EXPECTED_SECTIONS = ("今日重点", "今日完成", "明日展望")
+REQUIRED_SECTIONS = ("今日完成", "明日展望")
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 DEFAULT_SKILL_DIR = HOME / ".local/share/trae-skills/report-writer-bytedance"
 DEFAULT_PROMPT_FILE = HOME / ".config/trae-daily-report/prompt.md"
@@ -253,14 +253,27 @@ def run_preflight(env: Dict[str, str], handle=sys.stdout) -> None:
         )
 
 
-def has_success_sentinel(message: str, target_date: str) -> bool:
+def result_status(message: str, target_date: str) -> Optional[str]:
     lines = [line.strip() for line in message.splitlines() if line.strip()]
     if not lines:
-        return False
-    expected = '<daily-report-result status="success" date="{}" />'.format(
-        target_date
-    )
-    return lines[-1] == expected
+        return None
+    sentinels = {
+        "success": '<daily-report-result status="success" date="{}" />'.format(
+            target_date
+        ),
+        "skipped": (
+            '<daily-report-result status="skipped" date="{}" '
+            'reason="no_reportable_activity" />'
+        ).format(target_date),
+    }
+    for status, sentinel in sentinels.items():
+        if lines[-1] == sentinel:
+            return status
+    return None
+
+
+def has_success_sentinel(message: str, target_date: str) -> bool:
+    return result_status(message, target_date) == "success"
 
 
 def select_unique_node(nodes: List[dict], title: str) -> dict:
@@ -277,7 +290,8 @@ def select_unique_node(nodes: List[dict], title: str) -> dict:
 
 
 def verify_document_content(content: str) -> None:
-    missing = [section for section in EXPECTED_SECTIONS if section not in content]
+    headings = set(re.findall(r"(?m)^#\s+(.+?)\s*$", content))
+    missing = [section for section in REQUIRED_SECTIONS if section not in headings]
     if missing:
         raise VerificationError(
             "written report is missing sections: {}".format(", ".join(missing))
@@ -592,16 +606,25 @@ def run_full(target_date: str, env: Dict[str, str]) -> int:
                 raise VerificationError("TRAE did not write its final message")
             message = last_message.read_text(encoding="utf-8")
             warnings = parse_report_warnings(message)
-            if not has_success_sentinel(message, target_date):
-                raise VerificationError("TRAE final message lacks the success sentinel")
-            stage = "wiki_verification"
-            verified = verify_wiki(target_date, env)
-            log_line(
-                handle,
-                "daily report verified title={} node_token={}".format(
-                    verified["title"], verified["node_token"]
-                ),
-            )
+            outcome = result_status(message, target_date)
+            if outcome is None:
+                raise VerificationError(
+                    "TRAE final message lacks a recognized result sentinel"
+                )
+            if outcome == "success":
+                stage = "wiki_verification"
+                verified = verify_wiki(target_date, env)
+                log_line(
+                    handle,
+                    "daily report verified title={} node_token={}".format(
+                        verified["title"], verified["node_token"]
+                    ),
+                )
+            else:
+                log_line(
+                    handle,
+                    "daily report skipped reason=no_reportable_activity",
+                )
             for warning in warnings:
                 if warning.kind == "configuration_required":
                     notify_best_effort(
@@ -610,7 +633,10 @@ def run_full(target_date: str, env: Dict[str, str]) -> int:
                         run_log,
                         handle,
                     )
-            log_line(handle, "daily report finished status=0")
+            log_line(
+                handle,
+                "daily report finished status=0 outcome={}".format(outcome),
+            )
             return 0
         except DailyReportError as error:
             log_line(handle, "daily report failed: {}".format(error))

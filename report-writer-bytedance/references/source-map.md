@@ -87,6 +87,7 @@ Rules:
 - Read the current `lark-doc` embedded create/update/Markdown guidance before writing.
 - Do not create duplicate pages for the same title.
 - Do not drop a target-date doc solely by title; fetch content first when it may contain work evidence.
+- Classify daily report pages created by this automation as `self_generated_report_artifact` coverage only. Do not use a current or prior automated report as evidence of target-date work.
 
 ## Feishu Messages
 
