@@ -423,6 +423,9 @@ async function load(){
   try { rows = await (await fetch('/api/threads' + all)).json(); }
   catch(e){ return; }
   if (!Array.isArray(rows)) return;
+  // 进门那次 editing 检查拦不住 await 期间才开始的编辑：render 前必须重查，
+  // 否则在飞的这一轮整表重建会把正在输入的编辑框连同未存内容一起冲掉
+  if (editing) return;
   render(rows);
 }
 if (PUB){
