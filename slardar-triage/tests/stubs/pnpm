@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+echo "pnpm $*" >> "$STUB_STATE/calls"
+mkdir -p node_modules/.pnpm/a node_modules/.pnpm/b

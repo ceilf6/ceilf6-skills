@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# 只拦截 worktree add 与 fetch，其余透传给真 git。
+case "$*" in
+  *"worktree add"*) echo "git $*" >> "$STUB_STATE/calls"; d=""; for a in "$@"; do case "$a" in /*) d="$a";; esac; done; mkdir -p "$d/node_modules/.pnpm"; echo "omh" > "$d/omh.config.yaml"; exit 0 ;;
+  *"fetch origin"*) echo "git $*" >> "$STUB_STATE/calls"; exit 0 ;;
+  *) exec /usr/bin/git "$@" ;;
+esac

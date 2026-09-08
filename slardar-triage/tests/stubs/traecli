@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+echo "$(basename "$0") $*" >> "$STUB_STATE/calls"
+# traecli exec 的假实现：立刻在工作区造出一个 task 目录，模拟 omh-loop 建单。
+if [ "${1:-}" = exec ]; then
+  mkdir -p "$PWD/.omh/tasks/task_stub/" && echo '{}' > "$PWD/.omh/tasks/task_stub/meta.json"
+fi
+exit 0

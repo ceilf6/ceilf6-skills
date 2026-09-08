@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+echo "orchestrator $*" >> "$STUB_STATE/calls"
+case "$1" in
+  task-get) echo "{\"task\":{\"task_id\":\"task_stub\",\"phase\":\"running\",\"host\":{\"runtime\":\"${STUB_RUNTIME:-traecli}\"},\"extras\":{\"platform_workflow_key\":\"pc-web-bugfix\"}}}" ;;
+  task-cancel) echo '{"ok":true}' ;;
+esac

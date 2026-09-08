@@ -35,6 +35,22 @@ function latestFrame(logDetail, projectDir) {
   };
 }
 
+// 最新几条事件常处于 Slardar 的处理队列里，log detail 会报「正在处理」，逐条往前试到成功为止。
+const DETAIL_ATTEMPTS = 5;
+
+function fetchDetail(rows, bid, window, runner) {
+  let lastError = null;
+  for (const row of rows.slice(0, DETAIL_ATTEMPTS)) {
+    if (!row.dh_key) continue;
+    try {
+      return { detail: runner(['log', 'detail', ...commonArgs(bid, window), '--ev-type', 'js_error', '--dh-key', row.dh_key, '--no-share']), detail_error: null };
+    } catch (error) {
+      lastError = String(error.message ?? error).slice(0, 200);
+    }
+  }
+  return { detail: null, detail_error: lastError ?? (rows.length ? '样本无 dh_key' : '无事件样本') };
+}
+
 async function scanBid(bid, window, top, runner) {
   const project = PROJECTS[bid];
   const list = runner(['js-error', 'list', ...commonArgs(bid, window), '--filter', UNRESOLVED_FILTER, '--order-by', 'count_descend', '--page-size', String(top)]);
@@ -43,9 +59,9 @@ async function scanBid(bid, window, top, runner) {
   for (const issue of issues) {
     const query = runner(['log', 'query', ...commonArgs(bid, window), '--ev-type', 'js_error', '--filter', JSON.stringify([{ filter_name: 'issue_id', op: 'in', values: [issue.issue_id] }]), '--columns', 'pid,release,os,source_type,session_id,user_agent,dh_key', '--page-size', String(SAMPLE_SIZE), '--order-by', 'timestamp', '--order', 'desc', '--no-share']);
     const rows = flattenRows(query);
-    const dhKey = rows[0]?.dh_key;
-    const detail = dhKey ? runner(['log', 'detail', ...commonArgs(bid, window), '--ev-type', 'js_error', '--dh-key', dhKey, '--no-share']) : null;
+    const { detail, detail_error } = fetchDetail(rows, bid, window, runner);
     candidates.push({
+      detail_error,
       issue_id: issue.issue_id,
       family_key: familyKey(issue.message),
       member_issue_ids: [issue.issue_id],

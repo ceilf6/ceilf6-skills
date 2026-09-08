@@ -55,3 +55,33 @@ test('scan 用注入 runner 产出候选并做族合并，某 BID 失败只记 s
   assert.ok(calls.some((c) => c.startsWith('js-error list --bid vc_ai')));
   assert.ok(calls.some((c) => c.includes('--page-size 300')));
 });
+
+test('scan 最新事件 detail 报「正在处理」时退到下一条 dh_key，全失败只记 detail_error', async () => {
+  const detailKeys = [];
+  const runner = (args) => {
+    if (args[0] === 'js-error') {
+      const top = Number(args[args.indexOf('--page-size') + 1]);
+      const list = fx('list-vc_ai.json');
+      return { ...list, data: { ...list.data, result: list.data.result.slice(0, top) } };
+    }
+    if (args[0] === 'log' && args[1] === 'query') return fx('log-query-938f8ba3.json');
+    if (args[0] === 'log' && args[1] === 'detail') {
+      const key = args[args.indexOf('--dh-key') + 1];
+      detailKeys.push(key);
+      if (key === 'k1') throw new Error('Slardar的log服务可能正在处理这条log');
+      if (key === 'k2') return fx('log-detail-938f8ba3.json');
+      throw new Error('boom');
+    }
+    throw new Error(`unexpected ${args.join(' ')}`);
+  };
+  const r = await scan({ bids: ['vc_ai'], hours: 24, top: 1, now: 1788853929000, runner });
+  assert.deepEqual(r.skipped_bids, []);
+  assert.equal(r.candidates[0].latest_event.line, 196);
+  assert.equal(r.candidates[0].detail_error, null);
+  assert.deepEqual(detailKeys, ['k1', 'k2']);
+
+  const allFail = (args) => (args[0] === 'log' && args[1] === 'detail' ? (() => { throw new Error('处理中'); })() : runner(args));
+  const r2 = await scan({ bids: ['vc_ai'], hours: 24, top: 1, now: 1788853929000, runner: allFail });
+  assert.equal(r2.candidates[0].latest_event.mapped_path, null);
+  assert.match(r2.candidates[0].detail_error, /处理中/);
+});
