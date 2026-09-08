@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, realpathSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { PROJECTS, UNRESOLVED_FILTER, makeRunner, normalizeSourcePath, resolveBin, resolveRepo } from './lib/cli.mjs';
 import { familyKey } from './lib/family.mjs';
 import { flattenRows, summarize } from './lib/stats.mjs';
@@ -103,12 +104,21 @@ export async function scan({ bids, hours, top, repo, now = Date.now(), runner })
   return { scanned_at: new Date(now).toISOString(), window, skipped_bids: skipped, candidates: mergeFamilies(all) };
 }
 
+function isMain() {
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+  } catch {
+    return false;
+  }
+}
+
 function arg(name, fallback) {
   const i = process.argv.indexOf(name);
   return i >= 0 ? process.argv[i + 1] : fallback;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// 技能目录经 symlink 安装，argv[1] 是链接路径而 import.meta.url 是真实路径，须按 realpath 比较。
+if (isMain()) {
   const out = arg('--out');
   const result = await scan({
     bids: arg('--bid', 'vc_ai,vc_web,vc_pages').split(',').map((s) => s.trim()).filter(Boolean),

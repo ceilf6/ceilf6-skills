@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // 队列与处置账的唯一读写点。三份文件分开存：queue.json 是待派发 A 档，
 // dispatched.json / skipped.json 是终态账，扫描合并时只读不改。
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const FILES = { queue: 'queue.json', dispatched: 'dispatched.json', skipped: 'skipped.json' };
 // 同一族 24h 内两次扫描都不再出现才移出：一次缺席可能只是 Slardar 采样或时间窗边界。
@@ -82,12 +83,21 @@ export function skip(state, issueId, reason, now) {
   state.skipped[issueId] = { reason, at: now };
 }
 
+function isMain() {
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+  } catch {
+    return false;
+  }
+}
+
 function arg(name) {
   const i = process.argv.indexOf(name);
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// 技能目录经 symlink 安装，argv[1] 是链接路径而 import.meta.url 是真实路径，须按 realpath 比较。
+if (isMain()) {
   const cmd = process.argv[2];
   const dir = arg('--dir');
   if (!dir) {
