@@ -30,7 +30,7 @@ slardar-triage/
     dispatch.sh        # 幂等派发：Meego → worktree → 任务书落盘 → traex 起 omh → 核验 → 回写 state
     launch-traex.sh    # 脱管起 omh（自 omh-eval 搬入，固定 --no-plan --no-meego --workflow pc-web-bugfix）
     resume-traex.sh    # 停摆恢复
-    progress.js        # 读最近 Task 的 omh-events.jsonl 汇总阶段进展
+    progress.js        # 读最近 Task 目录 meta/session/stages 汇总阶段进展
     state.js           # queue.json / dispatched / skipped 的读写单点
   references/
     grading.md         # A–D 判据与证据要求
@@ -99,7 +99,7 @@ slardar-triage/
 2. 队列剩余 A 档：issue 摘要、入队日期、本次刷新后 users / count。
 3. 新增 B 档：摘要、根因未定位的原因与候选调用链。
 4. stale 与跳过：自然消失与用户标记不修的条目。
-5. 上一单进展：`progress.js` 读最近 Task 的 `logs/omh-events.jsonl`，给阶段名、attempt、状态；到终态附 MR 链接（从 handoff 阶段 summary 提取）。
+5. 上一单进展：`progress.js` 读最近 Task 目录的 `meta.json`、`sessions/<sid>/session.json` 与各 `stages/*/system/result.json`，给阶段名、attempt、verdict；到终态附 MR 链接（从 handoff 阶段 `code-deliveries.jsonl` 取）。
 
 ## 9. 进度查询与恢复
 
