@@ -17,9 +17,10 @@ fixture() {
   DESC="$T/desc.txt"; echo "desc" > "$DESC"
   RUNS="$T/runs"
   export TASK_WAIT_SECONDS=5
+  export THREADS_SH="$HERE/stubs/threads.sh"; export CLAUDE_CODE_SESSION_ID=sess-test
 }
 run_dispatch() {
-  bash "$D" --state "$STATE" --issue-id i1 --slug avatar-2026-09-08 --task-book "$BOOK" --meego-desc "$DESC" --meego-name "n" --os iOS --release 7.76.0.234 --repo "$REPO" --runs-root "$RUNS"
+  bash "$D" --state "$STATE" --issue-id i1 --slug avatar-2026-09-08 --task-book "$BOOK" --meego-desc "$DESC" --meego-name "n" --os iOS --release 7.76.0.234 --repo "$REPO" --runs-root "$RUNS" "$@"
 }
 
 echo "case 1: 全流程成功"
@@ -32,6 +33,10 @@ grep -q 'field_2f21a0","field_value":"\[{\\"option_id\\":\\"c0dd860ab\\"}\]"' "$
 grep -q "Meego issue:https://meego.larkoffice.com/larksuite/issue/detail/7374348254" "$RUNS/tasks/avatar-2026-09-08.md" && ok "任务书 Meego URL 已替换为 larksuite 形态" || bad "任务书未替换"
 grep -q "traecli exec" "$STUB_STATE/calls" && ok "经 traecli 起 omh" || bad "未起 traecli"
 node -e "const d=require('$STATE/dispatched.json'); process.exit(d.i1 && d.i1.task_id==='task_stub' && d.i1.steps.verify==='done' ? 0 : 1)" && ok "state 落账" || bad "state 未落账"
+echo "$out" | grep -q '"board":{"ok":true' && ok "board 登记成功" || bad "board 未登记: $out"
+grep -q "threads.sh register --ctx-dir $RUNS/avatar-2026-09-08/.harness-ceilf6/avatar-2026-09-08 --title n PWD=$(pwd -P)" "$STUB_STATE/calls" && ok "register 在调用者 cwd 下执行且参数正确" || bad "register 调用不符: $(grep threads "$STUB_STATE/calls")"
+node -e "const m=require('$RUNS/avatar-2026-09-08/.harness-ceilf6/avatar-2026-09-08/meta.json'); process.exit(m.branch==='omh-base/avatar-2026-09-08' && m.status==='active' && /Meego .*Task task_stub/.test(m.note) && JSON.stringify(m.milestones)==='{}' ? 0 : 1)" && ok "meta.json 形状正确" || bad "meta.json 形状不符"
+node -e "const d=require('$STATE/dispatched.json'); process.exit(d.i1.steps.board==='done' && d.i1.board.ok===true ? 0 : 1)" && ok "steps.board 落账" || bad "steps.board 未落账"
 
 echo "case 2: 幂等——再跑一次不重复建 Meego"
 n_before=$(grep -c "workitem create" "$STUB_STATE/calls")
@@ -60,6 +65,21 @@ echo '{"i1":{"steps":{"meego":"done"},"meego_url":"https://meego.larkoffice.com/
 out=$(run_dispatch); rc=$?
 [ $rc -eq 0 ] && ok "续跑成功" || bad "续跑退出 $rc: $out"
 grep -q "workitem create" "$STUB_STATE/calls" && bad "续跑重复建 Meego" || ok "续跑未建 Meego"
+
+echo "case 6: threads.sh 不存在时派发仍成功，board.ok=false"
+fixture
+export THREADS_SH="$T/nope/threads.sh"
+out=$(run_dispatch); rc=$?
+[ $rc -eq 0 ] && ok "退出 0" || bad "退出 $rc: $out"
+echo "$out" | grep -q '"board":{"ok":false' && ok "board.ok=false" || bad "board 未标失败: $out"
+node -e "const d=require('$STATE/dispatched.json'); process.exit(d.i1.steps.board===undefined && d.i1.board.ok===false ? 0 : 1)" && ok "steps.board 未写、board 记错误" || bad "失败落账不符"
+
+echo "case 7: --no-board 跳过登记"
+fixture
+out=$(run_dispatch --no-board); rc=$?
+[ $rc -eq 0 ] && ok "退出 0" || bad "退出 $rc: $out"
+grep -q "threads.sh register" "$STUB_STATE/calls" && bad "仍调用了 register" || ok "未调用 register"
+echo "$out" | grep -q '"board":{"ok":false,"skipped":true' && ok "board 标 skipped" || bad "board 未标 skipped: $out"
 
 echo "pass=$PASS fail=$FAIL"
 [ $FAIL -eq 0 ]

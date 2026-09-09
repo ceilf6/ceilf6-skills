@@ -6,14 +6,16 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 MEEGO_CMD=${MEEGO_CMD:-bytedcli}; OMH_CLI=${OMH_CLI:-omh-cli}; TRAECLI=${TRAECLI:-traecli}; ORCH=${ORCH:-orchestrator}; PNPM=${PNPM:-pnpm}
 export OMH_CLI TRAECLI
+THREADS_SH=${THREADS_SH:-$HOME/.claude/skills/harness-ceilf6/scripts/threads.sh}
 TASK_WAIT_SECONDS=${TASK_WAIT_SECONDS:-1800}
 PK=5e96d7bff4e7c525510f9156
 OWNER=7657492291354954694
 WORKFLOW=pc-web-bugfix
 
-state=""; issue=""; slug=""; book=""; desc=""; name=""; os=""; release=""; repo=""; runs=""
+state=""; issue=""; slug=""; book=""; desc=""; name=""; os=""; release=""; repo=""; runs=""; no_board=0
 while [ $# -gt 0 ]; do
   case "$1" in
+    --no-board) no_board=1; shift;;
     --state) state=$2; shift 2;; --issue-id) issue=$2; shift 2;; --slug) slug=$2; shift 2;;
     --task-book) book=$2; shift 2;; --meego-desc) desc=$2; shift 2;; --meego-name) name=$2; shift 2;;
     --os) os=$2; shift 2;; --release) release=$2; shift 2;; --repo) repo=$2; shift 2;; --runs-root) runs=$2; shift 2;;
@@ -36,7 +38,7 @@ fail() { set_ ".error" "$(jq -Rn --arg e "$2" '$e')"; echo "{\"ok\":false,\"issu
 
 # --- 步骤 0：幂等与并发检查 ---
 if step_done verify; then
-  echo "{\"ok\":true,\"issue_id\":\"$issue\",\"step\":\"verify\",\"meego_url\":\"$(get .meego_url)\",\"task_id\":\"$(get .task_id)\",\"workspace\":\"$(get .workspace)\",\"reused\":true}"; exit 0
+  echo "{\"ok\":true,\"issue_id\":\"$issue\",\"step\":\"verify\",\"meego_url\":\"$(get .meego_url)\",\"task_id\":\"$(get .task_id)\",\"workspace\":\"$(get .workspace)\",\"reused\":true,\"board\":$(get .board | grep . || echo '{"ok":false,"skipped":true}')}"; exit 0
 fi
 while IFS=$'\t' read -r tid ws; do
   [ -n "$tid" ] && [ -n "$ws" ] || continue
@@ -117,4 +119,27 @@ if ! step_done verify; then
   set_ ".task_id" "\"$tid\""; set_ ".dispatched_at" "\"$(date -u +%FT%TZ)\""; set_ ".steps.verify" '"done"'; set_ ".error" 'null'
 fi
 
-echo "{\"ok\":true,\"issue_id\":\"$issue\",\"step\":\"verify\",\"meego_url\":\"$meego_url\",\"task_id\":\"$(get .task_id)\",\"workspace\":\"$ws\",\"task_book\":\"$final_book\",\"host_log\":\"$(get .host_log)\"}"
+# --- 步骤 6：登记 harness 看板（登记的是本进程所在的 claude 线程，cwd 不得变动） ---
+board_json='{"ok":false,"skipped":true}'
+if [ "$no_board" -eq 1 ]; then
+  :
+elif step_done board; then
+  board_json=$(get .board)
+else
+  ctx="$ws/.harness-ceilf6/$slug"
+  mkdir -p "$ctx"
+  jq -n --arg b "omh-base/$slug" --arg n "Meego $meego_url · Task $(get .task_id)" \
+    '{branch:$b, status:"active", note:$n, milestones:{}}' > "$ctx/meta.json"
+  warn=""
+  [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] || warn="无 session_id，唤回将退化为新会话续入"
+  if [ -f "$THREADS_SH" ] && err=$(bash "$THREADS_SH" register --ctx-dir "$ctx" --title "$name" 2>&1 >/dev/null); then
+    board_json=$(jq -cn --arg c "$ctx" --arg w "$warn" '{ok:true, ctx_dir:$c} + (if $w == "" then {} else {warning:$w} end)')
+    set_ ".steps.board" '"done"'
+  else
+    [ -f "$THREADS_SH" ] || err="threads.sh 不存在：$THREADS_SH"
+    board_json=$(jq -cn --arg c "$ctx" --arg e "$(printf '%s' "$err" | head -c 300)" '{ok:false, ctx_dir:$c, error:$e}')
+  fi
+  set_ ".board" "$board_json"
+fi
+
+echo "{\"ok\":true,\"issue_id\":\"$issue\",\"step\":\"verify\",\"meego_url\":\"$meego_url\",\"task_id\":\"$(get .task_id)\",\"workspace\":\"$ws\",\"task_book\":\"$final_book\",\"host_log\":\"$(get .host_log)\",\"board\":$board_json}"
