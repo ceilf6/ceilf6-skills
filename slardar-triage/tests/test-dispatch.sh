@@ -35,7 +35,8 @@ grep -q "traecli exec" "$STUB_STATE/calls" && ok "经 traecli 起 omh" || bad "�
 node -e "const d=require('$STATE/dispatched.json'); process.exit(d.i1 && d.i1.task_id==='task_stub' && d.i1.steps.verify==='done' ? 0 : 1)" && ok "state 落账" || bad "state 未落账"
 echo "$out" | grep -q '"board":{"ok":true' && ok "board 登记成功" || bad "board 未登记: $out"
 grep -q "threads.sh register --ctx-dir $RUNS/avatar-2026-09-08/.harness-ceilf6/avatar-2026-09-08 --title n PWD=$(pwd -P)" "$STUB_STATE/calls" && ok "register 在调用者 cwd 下执行且参数正确" || bad "register 调用不符: $(grep threads "$STUB_STATE/calls")"
-node -e "const m=require('$RUNS/avatar-2026-09-08/.harness-ceilf6/avatar-2026-09-08/meta.json'); process.exit(m.branch==='omh-base/avatar-2026-09-08' && m.status==='active' && /Meego .*Task task_stub/.test(m.note) && JSON.stringify(m.milestones)==='{}' ? 0 : 1)" && ok "meta.json 形状正确" || bad "meta.json 形状不符"
+EXP_BRANCH=$(git symbolic-ref --short -q HEAD 2>/dev/null || echo omh-base/avatar-2026-09-08)
+node -e "const m=require('$RUNS/avatar-2026-09-08/.harness-ceilf6/avatar-2026-09-08/meta.json'); process.exit(m.branch==='$EXP_BRANCH' && m.status==='active' && /Meego .*Task task_stub/.test(m.note) && JSON.stringify(m.milestones)==='{}' ? 0 : 1)" && ok "meta.json 形状正确" || bad "meta.json 形状不符"
 node -e "const d=require('$STATE/dispatched.json'); process.exit(d.i1.steps.board==='done' && d.i1.board.ok===true ? 0 : 1)" && ok "steps.board 落账" || bad "steps.board 未落账"
 
 echo "case 2: 幂等——再跑一次不重复建 Meego"

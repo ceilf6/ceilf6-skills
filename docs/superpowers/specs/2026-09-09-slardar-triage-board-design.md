@@ -26,9 +26,9 @@ slardar-triage 每派出一条 omh 任务，就在 harness-ceilf6 的本地看�
 
 1. ctx 目录 `<workspace>/.harness-ceilf6/<slug>/`，写 `meta.json`：
    ```json
-   {"branch":"omh-base/<slug>","status":"active","note":"Meego <meego_url> · Task <task_id>","milestones":{}}
+   {"branch":"<登记时 cwd 的当前分支>","status":"active","note":"Meego <meego_url> · Task <task_id>","milestones":{}}
    ```
-   不写任何里程碑键，卡片停在「计划门」未完成态。
+   不写任何里程碑键，卡片停在「计划门」未完成态。`branch` 记会话 cwd 的当前分支（取不到时退回 `omh-base/<slug>`）：threads.sh 拼唤回命令时发现 cwd 分支与 meta.branch 不一致会插入 `git checkout <branch>`，而 omh 基线分支只存在于工作区，不在会话 cwd 的仓库里，插进去的 checkout 会执行失败。
 2. 在**当前进程 cwd**（即调用 dispatch.sh 的会话目录，脚本内所有 `cd` 都在子壳中）执行：
    ```bash
    bash "$THREADS_SH" register --ctx-dir "<ctx>" --title "<meego_name>"

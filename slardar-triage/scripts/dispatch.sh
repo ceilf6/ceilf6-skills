@@ -128,7 +128,10 @@ elif step_done board; then
 else
   ctx="$ws/.harness-ceilf6/$slug"
   mkdir -p "$ctx"
-  jq -n --arg b "omh-base/$slug" --arg n "Meego $meego_url · Task $(get .task_id)" \
+  # branch 记登记时 cwd 的当前分支：threads.sh 拼唤回命令时若发现 cwd 分支与 meta.branch
+  # 不一致会插一句 git checkout，而 omh 基线分支只存在于工作区、不在会话 cwd 的仓库里。
+  cur_branch=$(git symbolic-ref --short -q HEAD 2>/dev/null || echo "omh-base/$slug")
+  jq -n --arg b "$cur_branch" --arg n "Meego $meego_url · Task $(get .task_id)" \
     '{branch:$b, status:"active", note:$n, milestones:{}}' > "$ctx/meta.json"
   warn=""
   [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] || warn="无 session_id，唤回将退化为新会话续入"
