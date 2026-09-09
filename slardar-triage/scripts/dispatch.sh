@@ -66,7 +66,7 @@ if ! step_done meego; then
   out=$("$MEEGO_CMD" --json meego workitem create --project-key "$PK" --work-item-type issue --fields "$fields" 2>&1)
   mid=$(echo "$out" | jq -r '.data.result.content[0].text | fromjson | .work_item_id // empty' 2>/dev/null)
   [ -n "$mid" ] || fail meego "Meego 创建失败：$(echo "$out" | head -c 400)"
-  set_ ".meego_id" "\"$mid\""; set_ ".meego_url" "\"https://meego.larkoffice.com/larksuite/issue/detail/$mid\""; set_ ".steps.meego" '"done"'
+  set_ ".meego_id" "\"$mid\""; set_ ".meego_url" "\"https://meego.larkoffice.com/larksuite/issue/detail/$mid\""; set_ ".meego_name" "$(jq -Rn --arg n "$name" '$n')"; set_ ".steps.meego" '"done"'
 fi
 meego_url=$(get .meego_url)
 
@@ -126,23 +126,7 @@ if [ "$no_board" -eq 1 ]; then
 elif step_done board; then
   board_json=$(get .board)
 else
-  ctx="$ws/.harness-ceilf6/$slug"
-  mkdir -p "$ctx"
-  # branch 记登记时 cwd 的当前分支：threads.sh 拼唤回命令时若发现 cwd 分支与 meta.branch
-  # 不一致会插一句 git checkout，而 omh 基线分支只存在于工作区、不在会话 cwd 的仓库里。
-  cur_branch=$(git symbolic-ref --short -q HEAD 2>/dev/null || echo "omh-base/$slug")
-  jq -n --arg b "$cur_branch" --arg n "Meego $meego_url · Task $(get .task_id)" \
-    '{branch:$b, status:"active", note:$n, milestones:{}}' > "$ctx/meta.json"
-  warn=""
-  [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] || warn="无 session_id，唤回将退化为新会话续入"
-  if [ -f "$THREADS_SH" ] && err=$(bash "$THREADS_SH" register --ctx-dir "$ctx" --title "$name" 2>&1 >/dev/null); then
-    board_json=$(jq -cn --arg c "$ctx" --arg w "$warn" '{ok:true, ctx_dir:$c} + (if $w == "" then {} else {warning:$w} end)')
-    set_ ".steps.board" '"done"'
-  else
-    [ -f "$THREADS_SH" ] || err="threads.sh 不存在：$THREADS_SH"
-    board_json=$(jq -cn --arg c "$ctx" --arg e "$(printf '%s' "$err" | head -c 300)" '{ok:false, ctx_dir:$c, error:$e}')
-  fi
-  set_ ".board" "$board_json"
+  board_json=$(THREADS_SH="$THREADS_SH" bash "$HERE/board.sh" --state "$state" --issue-id "$issue" --title "$name")
 fi
 
 echo "{\"ok\":true,\"issue_id\":\"$issue\",\"step\":\"verify\",\"meego_url\":\"$meego_url\",\"task_id\":\"$(get .task_id)\",\"workspace\":\"$ws\",\"task_book\":\"$final_book\",\"host_log\":\"$(get .host_log)\",\"board\":$board_json}"

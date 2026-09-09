@@ -38,6 +38,14 @@ grep -q "threads.sh register --ctx-dir $RUNS/avatar-2026-09-08/.harness-ceilf6/a
 EXP_BRANCH=$(git symbolic-ref --short -q HEAD 2>/dev/null || echo omh-base/avatar-2026-09-08)
 node -e "const m=require('$RUNS/avatar-2026-09-08/.harness-ceilf6/avatar-2026-09-08/meta.json'); process.exit(m.branch==='$EXP_BRANCH' && m.status==='active' && /Meego .*Task task_stub/.test(m.note) && JSON.stringify(m.milestones)==='{}' ? 0 : 1)" && ok "meta.json 形状正确" || bad "meta.json 形状不符"
 node -e "const d=require('$STATE/dispatched.json'); process.exit(d.i1.steps.board==='done' && d.i1.board.ok===true ? 0 : 1)" && ok "steps.board 落账" || bad "steps.board 未落账"
+node -e "const m=require('$RUNS/avatar-2026-09-08/.harness-ceilf6/avatar-2026-09-08/meta.json'); process.exit(m.meego_id==='7374348254' && m.meego_type==='issue' && m.meego_url==='https://meego.larkoffice.com/larksuite/issue/detail/7374348254' ? 0 : 1)" && ok "meta 带 Meego 绑定" || bad "meta 缺 Meego 绑定: $(cat $RUNS/avatar-2026-09-08/.harness-ceilf6/avatar-2026-09-08/meta.json)"
+
+echo "case 1b: board.sh 单独补登记并回填 mr_id，保留既有 status/milestones"
+node -e "const fs=require('fs');const p='$RUNS/avatar-2026-09-08/.harness-ceilf6/avatar-2026-09-08/meta.json';const m=JSON.parse(fs.readFileSync(p));m.status='done';m.milestones={plan_gate:'x'};fs.writeFileSync(p,JSON.stringify(m))"
+out=$(bash "$HERE/../scripts/board.sh" --state "$STATE" --issue-id i1 --mr-id 8405910 --session-id sess-b)
+echo "$out" | grep -q '"ok":true' && ok "board.sh 退出 ok" || bad "board.sh 失败: $out"
+grep -q "threads.sh register --ctx-dir $RUNS/avatar-2026-09-08/.harness-ceilf6/avatar-2026-09-08 --title n --session-id sess-b PWD=$(pwd -P)" "$STUB_STATE/calls" && ok "title 取处置账 meego_name、透传 session-id" || bad "board.sh register 参数不符: $(grep threads "$STUB_STATE/calls" | tail -1)"
+node -e "const m=require('$RUNS/avatar-2026-09-08/.harness-ceilf6/avatar-2026-09-08/meta.json'); process.exit(m.mr_id==='8405910' && m.status==='done' && m.milestones.plan_gate==='x' && m.meego_id==='7374348254' ? 0 : 1)" && ok "mr_id 回填且既有字段保留" || bad "meta 合并不符: $(cat $RUNS/avatar-2026-09-08/.harness-ceilf6/avatar-2026-09-08/meta.json)"
 
 echo "case 2: 幂等——再跑一次不重复建 Meego"
 n_before=$(grep -c "workitem create" "$STUB_STATE/calls")

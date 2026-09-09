@@ -102,5 +102,5 @@ import("<skill>/scripts/state.mjs").then((m) => {
 - omh 永远经 `traecli exec` 起（dispatch.sh 内置），不在本会话直接调 `$oh-my-harness:omh-loop`。
 - 定档不看 users / count；拿不准一律 B。
 - 每步脚本失败都如实写进报告，不跳步、不重试建 Meego。
-- 看板登记的是调用本技能的 claude 线程，不是 traecli 宿主；卡片不推进节点，只用它复制启动命令。
+- 看板登记的是调用本技能的 claude 线程，不是 traecli 宿主；卡片不推进节点，只用它复制启动命令。meta.json 带 meego_id / meego_type=issue / meego_url，看板点「完成」时 meego.sh 据此流转缺陷；`progress.mjs` 发现 MR 后把 mr_id 回填进 meta。补登记或换线程用 `bash <skill>/scripts/board.sh --state <state> --issue-id <id> [--mr-id <id>] [--session-id <sid>]`，同样要在目标会话的 cwd 下跑。
 - 停摆恢复：phase=failed 且死于 code-review → `bash <skill>/scripts/resume-traex.sh <workspace> <task_id> impl`；其他节点省略第三个参数。执行后在报告里写动作与理由。

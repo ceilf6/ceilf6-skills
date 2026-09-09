@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { loadState } from './state.mjs';
+import { loadState, saveState } from './state.mjs';
 
 function readJson(file, fallback) {
   try {
@@ -57,6 +57,17 @@ export function summarizeTask(taskDir) {
   return { phase, session_status: sessionStatus, stages, mr_url: mrUrl };
 }
 
+// omh handoff 出 MR 后把 mr_id 回填到看板 ctx 的 meta.json：卡片标题按 mr_id 显示「MR <号>」，
+// meego.sh 的表单占位也读它。只在缺失时写，不覆盖人工改过的值。
+export function backfillMrId(metaPath, mrUrl) {
+  const id = /\/detail\/(\d+)/.exec(mrUrl ?? '')?.[1];
+  if (!id || !existsSync(metaPath)) return { updated: false, mr_id: id ?? null };
+  const meta = readJson(metaPath, null);
+  if (!meta || meta.mr_id) return { updated: false, mr_id: meta?.mr_id ?? id };
+  writeFileSync(metaPath, `${JSON.stringify({ ...meta, mr_id: id }, null, 2)}\n`);
+  return { updated: true, mr_id: id };
+}
+
 function isMain() {
   try {
     return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
@@ -85,5 +96,10 @@ if (isMain()) {
   const [issueId, d] = picked;
   const summary = summarizeTask(join(d.workspace, '.omh', 'tasks', d.task_id));
   const alive = spawnSync('pgrep', ['-f', 'traecli exec'], { encoding: 'utf8' }).status === 0;
-  process.stdout.write(`${JSON.stringify({ ok: true, issue_id: issueId, task_id: d.task_id, workspace: d.workspace, meego_url: d.meego_url ?? null, host_alive: alive, ...summary })}\n`);
+  const board = d.slug ? backfillMrId(join(d.workspace, '.harness-ceilf6', d.slug, 'meta.json'), summary.mr_url) : { updated: false, mr_id: null };
+  if (board.mr_id && !d.mr_id) {
+    d.mr_id = board.mr_id;
+    saveState(arg('--state'), state);
+  }
+  process.stdout.write(`${JSON.stringify({ ok: true, issue_id: issueId, task_id: d.task_id, workspace: d.workspace, meego_url: d.meego_url ?? null, host_alive: alive, board_mr_backfilled: board.updated, ...summary })}\n`);
 }
