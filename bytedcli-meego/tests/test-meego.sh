@@ -493,6 +493,62 @@ case "$err" in *"状态流转失败"*) ok "流转失败带诊断" ;; *) bad "流
 rm -f "$STUB_STATE/state_transition_fail"
 cleanup
 
+echo "== advance issue 推到底：两跳、补表单（含联动字段）、占位展开、经办人重试、空转与转人工 =="
+issue_cfg() { # 给 fixture 配置补 issue.done_transition / state_forms
+  jq '.repos["lark/byteview-web"].issue = {done_state:"RESOLVED", done_transition:["IN PROGRESS","RESOLVED"],
+        state_forms:{"IN PROGRESS":[{field_key:"field_ea8af0",field_value:"ddaxrelys"}],
+                     "RESOLVED":[{field_key:"field_67beed",field_value:"option_2"},{field_key:"field_ac79fe",field_value:"4"},
+                                 {field_key:"field_135812",field_value:"见 MR {{mr_url}}"},{field_key:"field_66c195",field_value:"296o754r3"},
+                                 {field_key:"field_33a56a",field_value:"0rip22etz"}]}}' \
+    "$BYTEDCLI_MEEGO_CONFIG" > "$BYTEDCLI_MEEGO_CONFIG.tmp" && mv "$BYTEDCLI_MEEGO_CONFIG.tmp" "$BYTEDCLI_MEEGO_CONFIG"
+}
+issue_states() { # OPEN →201→ IN PROGRESS →202→ RESOLVED，各带确认表单
+  jq -n '{state_key:"OPEN", state_name:"OPEN", transition:[{id:201, state_key:"IN PROGRESS", state_name:"IN PROGRESS",
+          confirm_form:[{key:"field_ea8af0", name:"是否Harness模式修复"}]}]}' > "$STUB_STATE/states.json"
+  jq -n '{state_key:"IN PROGRESS", state_name:"IN PROGRESS", transition:[{id:202, state_key:"RESOLVED", state_name:"RESOLVED",
+          confirm_form:[{key:"field_67beed", name:"RD解决结果"},{key:"field_ac79fe", name:"解决bug实际耗时（小时）"}]}]}' > "$STUB_STATE/after_transition_201.json"
+}
+make_fixture; issue_cfg; issue_states
+jq '.meego_id="7374348254" | .meego_type="issue" | .mr_id="8405910"' "$ctx/meta.json" > "$ctx/tmp" && mv "$ctx/tmp" "$ctx/meta.json"
+jq -n '{work_item_attribute:{role_members:[{key:"operator",members:[{key:"someone-else"}]}]}, work_item_fields:[]}' > "$STUB_STATE/workitem.json"
+echo '{"field_33a56a":"field_66c195"}' > "$STUB_STATE/hidden_fields.json"
+touch "$STUB_STATE/state_transition_permission_once"
+: > "$STUB_STATE/calls.log"
+rc=0; out=$(MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" 2>&1) || rc=$?
+[ "$rc" = 0 ] && ok "两跳推到底 exit 0" || bad "两跳 exit $rc: $out"
+printf '%s' "$out" | grep -q "已流转到 IN PROGRESS" && printf '%s' "$out" | grep -q "已流转到 RESOLVED" && ok "两跳都报已流转" || bad "输出: $out"
+[ "$(jq -r .state_key "$STUB_STATE/states.json")" = RESOLVED ] && ok "终态 RESOLVED" || bad "终态: $(cat "$STUB_STATE/states.json")"
+l201=$(grep -n -- "--transition-id 201" "$STUB_STATE/calls.log" | head -1 | cut -d: -f1); l202=$(grep -n -- "--transition-id 202" "$STUB_STATE/calls.log" | head -1 | cut -d: -f1)
+[ -n "$l201" ] && [ -n "$l202" ] && [ "$l201" -lt "$l202" ] && ok "先 201 后 202" || bad "顺序: 201=$l201 202=$l202"
+grep -q 'workitem update.*"field_key":"field_ea8af0","field_value":"ddaxrelys"' "$STUB_STATE/calls.log" && ok "第一跳补 Harness 模式表单" || bad "缺 field_ea8af0 update"
+grep -q '见 MR https://bits.bytedance.net/bytebus/devops/code/detail/8405910' "$STUB_STATE/calls.log" && ok "{{mr_url}} 已展开为 meta.mr_id" || bad "占位未展开: $(grep field_135812 "$STUB_STATE/calls.log" | head -1)"
+n_upd=$(grep -c 'workitem update.*--fields' "$STUB_STATE/calls.log")
+[ "$n_upd" -ge 3 ] && ok "联动字段第二轮补写（update 共 ${n_upd} 次）" || bad "update 次数 $n_upd，联动字段未二轮补写"
+jq -e '[.work_item_fields[] | select(.key=="field_33a56a" and .value=="0rip22etz")] | length == 1' "$STUB_STATE/workitem.json" >/dev/null && ok "联动字段最终落值" || bad "field_33a56a 未落: $(cat "$STUB_STATE/workitem.json")"
+grep -q -- '--role-operate.*"op":"remove","user_keys":\["someone-else"\].*"op":"add","user_keys":\["'"$ME"'"\]' "$STUB_STATE/calls.log" && ok "No Permission 后换经办人为本人" || bad "role-operate: $(grep role-operate "$STUB_STATE/calls.log" | head -1)"
+[ "$(grep -c -- '--transition-id 201' "$STUB_STATE/calls.log")" = 2 ] && ok "201 被拒一次后重试一次" || bad "201 调用次数 $(grep -c -- '--transition-id 201' "$STUB_STATE/calls.log")"
+
+echo "-- 已在 IN PROGRESS：只推 202；表单已有值不重写"
+make_fixture; issue_cfg
+jq '.meego_id="7374348254" | .meego_type="issue" | .mr_id="8405910"' "$ctx/meta.json" > "$ctx/tmp" && mv "$ctx/tmp" "$ctx/meta.json"
+jq -n '{state_key:"IN PROGRESS", state_name:"IN PROGRESS", transition:[{id:202, state_key:"RESOLVED", state_name:"RESOLVED", confirm_form:[{key:"field_67beed", name:"RD解决结果"}]}]}' > "$STUB_STATE/states.json"
+jq -n '{work_item_attribute:{role_members:[{key:"operator",members:[{key:"'"$ME"'"}]}]}, work_item_fields:[{key:"field_67beed",value:"option_4"},{key:"field_ac79fe",value:"9"},{key:"field_135812",value:"人工填的"},{key:"field_66c195",value:"fvj5raj4d"}]}' > "$STUB_STATE/workitem.json"
+: > "$STUB_STATE/calls.log"
+rc=0; out=$(MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" 2>&1) || rc=$?
+[ "$rc" = 0 ] && ok "从 IN PROGRESS 起推 exit 0" || bad "exit $rc: $out"
+grep -q -- '--transition-id 201' "$STUB_STATE/calls.log" && bad "不该再走 201" || ok "跳过已过的 201"
+grep -q '"field_key":"field_67beed"' "$STUB_STATE/calls.log" && bad "已有值被重写" || ok "已有值不重写（只补空值）"
+jq -e '[.work_item_fields[] | select(.key=="field_67beed")] | .[0].value == "option_4"' "$STUB_STATE/workitem.json" >/dev/null && ok "人工填的值保留" || bad "人工值被覆盖"
+
+echo "-- 确认表单含配置未覆盖的字段：转人工并列出字段名"
+make_fixture; issue_cfg
+jq '.meego_id="7374348254" | .meego_type="issue"' "$ctx/meta.json" > "$ctx/tmp" && mv "$ctx/tmp" "$ctx/meta.json"
+jq -n '{state_key:"OPEN", state_name:"OPEN", transition:[{id:201, state_key:"IN PROGRESS", state_name:"IN PROGRESS", confirm_form:[{key:"field_ea8af0", name:"是否Harness模式修复"},{key:"field_zzz", name:"QA确认结果"}]}]}' > "$STUB_STATE/states.json"
+rc=0; err=$(bash "$MG" advance --ctx-dir "$ctx" 2>&1 >/dev/null) || rc=$?
+[ "$rc" = 1 ] && printf '%s' "$err" | grep -q "QA确认结果" && ok "未配置字段转人工并点名" || bad "exit $rc: $err"
+printf '%s' "$err" | grep -q "是否Harness模式修复" && bad "已配置字段被误列" || ok "已配置字段不列入转人工"
+grep -q 'state transition --' "$STUB_STATE/calls.log" 2>/dev/null && bad "转人工仍流转" || ok "转人工零流转"
+
 echo "== done：组合输出恒 exit 0、无 meego skipped =="
 make_fixture
 jq '.meego_id="7310638751" | .meego_type="story"' "$ctx/meta.json" > "$ctx/tmp" && mv "$ctx/tmp" "$ctx/meta.json"

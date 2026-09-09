@@ -64,6 +64,20 @@ case "$*" in
       echo '{"status":"success"}'; exit 0 ;;
     esac
     if [ -f "${STUB_STATE}/update_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    # --fields 写进 workitem.json 的 work_item_fields，调用方回读才能看见；hidden_fields.json 里列出的键
+    # 只在其前置字段已有值时才落（模拟服务端按显隐条件丢弃联动字段）
+    case "$*" in *"--fields "*)
+      if [ -f "${STUB_STATE}/workitem.json" ]; then
+        _f=$(printf '%s\n' "$*" | sed -E "s/.*--fields '?(\[.*\])'?.*/\1/")
+        _h='{}'; [ -f "${STUB_STATE}/hidden_fields.json" ] && _h=$(cat "${STUB_STATE}/hidden_fields.json")
+        jq --argjson f "$_f" --argjson h "$_h" '
+          . as $w
+          | ($w.work_item_fields // []) as $cur
+          | ($f | map(select((.field_key as $k | $h[$k]) == null or (($h[.field_key]) as $dep | ($cur[] | select(.key == $dep) | .value) // "" | . != "")))) as $ok
+          | .work_item_fields = ($cur | map(select(.key as $k | ($ok | map(.field_key) | index($k)) == null)) + ($ok | map({key:.field_key, value:.field_value})))' \
+          "${STUB_STATE}/workitem.json" > "${STUB_STATE}/workitem.tmp" && mv "${STUB_STATE}/workitem.tmp" "${STUB_STATE}/workitem.json"
+      fi ;;
+    esac
     echo '{"status":"success"}' ;;
   *"meego workitem get"*)
     if [ -f "${STUB_STATE}/workitem.json" ]; then envelope "${STUB_STATE}/workitem.json"
@@ -84,8 +98,22 @@ case "$*" in
   *"meego state list"*)
     if [ -f "${STUB_STATE}/state_list_fail" ]; then echo '{"status":"error"}'; exit 5; fi
     envelope "${STUB_STATE}/states.json" ;;
+  *"meego state transition required get"*)
+    echo '{"status":"success","data":{"result":{"content":[{"type":"text","text":"{}"}]}}}' ;;
   *"meego state transition"*)
     if [ -f "${STUB_STATE}/state_transition_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    # 只拒一次 No Permission：模拟经办人不是本人，调用方换经办人后重试应成功
+    if [ -f "${STUB_STATE}/state_transition_permission_once" ]; then
+      rm -f "${STUB_STATE}/state_transition_permission_once"
+      echo '{"status":"error","error":{"message":"No Permission"}}'; exit 5; fi
+    # 流转成功后推进 states.json：有 after_transition_<id>.json 就换成它，否则把当前状态置为转移目标、清空转移
+    _tid=$(printf '%s\n' "$*" | sed -E 's/.*--transition-id ([^ ]+).*/\1/')
+    if [ -f "${STUB_STATE}/after_transition_${_tid}.json" ]; then
+      mv "${STUB_STATE}/after_transition_${_tid}.json" "${STUB_STATE}/states.json"
+    elif [ -f "${STUB_STATE}/states.json" ] && [ ! -f "${STUB_STATE}/state_transition_noop" ]; then
+      jq --arg t "$_tid" '(first(.transition[]? | select((.id|tostring) == $t))) as $tr | if $tr == null then . else {state_key:$tr.state_key, state_name:$tr.state_name, transition:[]} end' \
+        "${STUB_STATE}/states.json" > "${STUB_STATE}/states.tmp" && mv "${STUB_STATE}/states.tmp" "${STUB_STATE}/states.json"
+    fi
     echo '{"status":"success"}' ;;
   *"meego workitem create"*)
     # 建单走底层 workitem create（--fields）；--dry-run 同真机：只回显参数、不建单

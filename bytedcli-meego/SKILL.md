@@ -47,7 +47,25 @@ Meego 全生命周期管理的机械层单点。运行期动作（关联 / 创�
 - `story.node_forms`：节点 confirm 前要补的必填表单，`{节点名: [{field_key, field_value}]}`；只补空值，用户在页面改过的以页面为准；`{{mr_url}}` 展开为 meta.mr_id（或 `advance --mr-id`）对应的 Bits MR 链接。498109「技术评审」的三项与取值见「转人工后的处理参考」表。
 - `story.dev_roles`：create 时把 dev_owner_key 挂到这些角色的 `role_owners`；advance 每次开跑前也校验一遍，缺了就补（只加本人、只加不删）——早于本配置建的存量条目靠这一步自愈。`tech_owner`（技术负责人）决定「技术评审」「需求合入」两个节点的 owner，也决定谁能编辑这两个节点上属技术负责人组的表单字段。「需求开发」这类由节点负责人（而非角色）把关的节点，其 owner 由 `schedule` 回填，空着时 advance 也会补本人。
 - `story.create_fields`：模板必填自定义字段，create 时原样附加。498109 必填「业务线 business」与「关联 Story field_4225f8」（`3000712092` 是 VC AI 主 story）；缺了服务端报 `{field} 必填`。
-- `issue.done_state: RESOLVED` 仍是待核值（首单真缺陷 done 时核对；错了只会「无合法转移」转人工）。
+- `issue.done_state: RESOLVED`；`issue.done_transition: ["IN PROGRESS", "RESOLVED"]` 是从起点到终态要经过的状态序列（不含起点，末项即 done_state）；`issue.state_forms`：`{状态键: [{field_key, field_value}]}`，进入该状态前要补的确认表单，只补空值、`{{mr_url}}` 展开同 node_forms。larksuite 缺陷两跳的取值（2026-09-09 真机核对字段与选项）：
+
+  ```json
+  "issue": {
+    "done_state": "RESOLVED",
+    "done_transition": ["IN PROGRESS", "RESOLVED"],
+    "state_forms": {
+      "IN PROGRESS": [ { "field_key": "field_ea8af0", "field_value": "ddaxrelys" } ],
+      "RESOLVED": [
+        { "field_key": "field_67beed", "field_value": "option_2" },
+        { "field_key": "field_ac79fe", "field_value": "4" },
+        { "field_key": "field_b6fd5d", "field_value": "fynyytj75" },
+        { "field_key": "field_135812", "field_value": "见 MR {{mr_url}}" },
+        { "field_key": "field_66c195", "field_value": "296o754r3" },
+        { "field_key": "field_33a56a", "field_value": "0rip22etz" },
+        { "field_key": "field_4f64b1", "field_value": "见 MR {{mr_url}}" } ] } }
+  ```
+
+  `field_ea8af0`「是否Harness模式修复」（`ddaxrelys` 是 / `p2yat5vpb` 否）是 OPEN → IN PROGRESS 的确认表单；RESOLVED 的七项含义见「转人工后的处理参考」表，耗时 4 小时、引入原因「研发设计考虑不全」+ 分类「逻辑模块没考虑/覆盖到」是用户 2026-09-09 定的默认值。
 
 仓库不在 `repos` 里 → 运行期子命令一律输出 `{"skipped":true}` 且 exit 0（个人仓豁免；`map` 是建配置的入口，不受此限）。
 一切调用显式带 project_key：simple_name 检索有同名歧义（larksuite 撞 larksuite$）。
@@ -60,7 +78,7 @@ Meego 全生命周期管理的机械层单点。运行期动作（关联 / 创�
 | `create` | 走底层 `workitem create --fields` 建需求（恒 story）：template / name / description + `role_owners`（按 dev_roles）+ `create_fields`。ctx 模式落 meta；`--repo` 模式只建单、输出 id/url（harness 之外给存量 MR 补建，随后 `bits mr update --meego <url>` 绑 MR） | ctx 模式 meta 已有 meego_id 防重 die；field_value 一律字符串；`--dry-run` 只回显归一化载荷，不建单、不写 meta |
 | `comment` | 进度评论（`--message-file` 或 `--preset qa`，qa 文案带 meta.mr_id） | 【bot】前缀机械层强制 |
 | `schedule` | 回填 schedule_node 节点排期/估分/负责人 | 仅 story；issue 输出 skipped；`--points` 只收纯数字 |
-| `advance` | done 流转。story：先按 dev_roles 补齐角色，再按 done_transition 顺序从当前节点**推到底**——已完成空转、映射外/不存在的节点不碰、confirm 前按 node_forms 补空的必填项、confirm 后回读校验；issue：按 done_state 状态流转 | owner 守卫：owner 为空或含本人才推，别人的节点撞上即停下如实报（后续串行节点不再空试）；撞 `ErrOwnerRequired` 时给空 owner 的节点补本人再试一次；未到达重取一次再试；回读非 finished 隔一拍再读一次才判死；任一步失败退出 1，幂等可重跑；`--repo` 模式可带 `--mr-id` 供 `{{mr_url}}` |
+| `advance` | done 流转。story：先按 dev_roles 补齐角色，再按 done_transition 顺序从当前节点**推到底**——已完成空转、映射外/不存在的节点不碰、confirm 前按 node_forms 补空的必填项、confirm 后回读校验；issue：按 done_transition 从当前状态逐跳推到 done_state——每跳先按 state_forms 补空的确认表单（联动字段分轮补写，最多三轮），确认表单里配置没覆盖的字段转人工并点名，流转后回读状态核验，撞 No Permission 时用 `--role-operate` 把经办人换成本人再试一次 | owner 守卫：owner 为空或含本人才推，别人的节点撞上即停下如实报（后续串行节点不再空试）；撞 `ErrOwnerRequired` 时给空 owner 的节点补本人再试一次；未到达重取一次再试；回读非 finished 隔一拍再读一次才判死；任一步失败退出 1，幂等可重跑；`--repo` 模式可带 `--mr-id` 供 `{{mr_url}}` |
 | `done` | advance + 收束评论组合（看板钩子入口） | 恒 exit 0，输出 `{advance:…, comment:…}` 或 `{"skipped":true}`，失败详情在 JSON |
 | `map get/set` | 映射配置读写单点 | set 收 JSON、原子替换 |
 
@@ -90,7 +108,7 @@ Meego 全生命周期管理的机械层单点。运行期动作（关联 / 创�
 - **节点负责人必填（2026-08-19 真机）**：设了「负责人必填」的节点 owner 空着 confirm 会被拒，报 `ErrOwnerRequired，{node_name}负责人必填`。这与角色授权是两笔账：角色管谁能编辑表单字段，节点负责人管谁为这一站签字。498109 上「需求开发」属此类，而它的 owner 只有 `schedule` 会写，没跑过排期的条目（含 meego 接入前建的存量条目）到 done 时必撞。advance 撞上即用 `node update --node-owners` 补本人后重试一次；他人 owner 的节点在此之前已被 owner 守卫拦下，不存在替别人签字。
 - **相关错误码（退出码可信，均 exit 1）**：`ErrAPIOperateNotArrivedNode`（目标节点未到达，等价旧文案 `Node Is Not Arrived` / `code=20016`）、`ErrAPIReCompleteNode`（节点已完成，再 confirm 报错——**confirm 不幂等**，幂等性靠调用方先判 `status=finished` 跳过）、`ErrEditFieldNoPermission`（角色空缺或非本人角色）、`ErrFieldRequired`（必填未填，文案点名字段）。
 - **节点流的到达规则**：节点只有前序都 confirm 了才「到达」，未到达 confirm 回 `code=20016 Node Is Not Arrived`。advance 按 done_transition 顺序推，所以正常情况下每个节点轮到时都已到达；仍撞 20016 只有两种可能——上一节点刚 confirm、服务端还没推进（advance 重取节点流再试一次即可），或映射漏了某个前序节点 / 前序是别人的节点（如实报「停在 X」转人工）。498109 上「技术评审」（owner = tech_owner）带三项必填表单，由 node_forms 补；安全技术评审（owner liujiahao.winnie）与需求开发并行、不在映射里、永远不碰——它汇入终点前的哪一站决定 advance 最远能推到哪，被它挡住时报「停在安全技术评审」等安全 BP。他人 owner 的节点一律不代 confirm，那等于替别人声称评审完成。
-- issue 转移带必填确认表单 → 一律转人工（不猜表单值，配置里也不设表单项）；当前状态无到 done_state 的合法转移同样转人工。
+- issue 确认表单只填 `issue.state_forms` 配置过的字段，配置没覆盖的必填字段转人工并点名；当前状态无到下一跳的合法转移同样转人工。`state transition required get --mode unfinished` 对本空间缺陷实测恒回 `{}`，不能拿它发现必填项，只能靠 state list 的 confirm_form 与配置。
 - 检索能力弱：`workitem get` 不支持按标题查（报 invalid param）；`story --title` 相似检索有索引延迟且范围有限（刚建的条目查不到）。获取靠链接/ID；create 应答须完整捕获新 id，丢了用 `meego todo list` 找回（新建条目会进本人待办）。
 - **排期字段形状（2026-08-11 真机核对完成，脚本已按此实现）**：`node_schedule.estimate_start_date` / `estimate_end_date` 为**按时区 00:00:00 的毫秒级时间戳（number）**，传 "YYYY-MM-DD" 字符串会被 thrift 拒收；`points` 单位为天；未传估分时服务端 `is_auto` 默认按工期自动补（实测 10 天工期自动补 10 分）。
 - **create 载荷纪律（脚本已按此实现）**：快捷 `bytedcli meego create` 传不了模板必填自定义字段，绑定空间的仓库必报 `{field} 必填`，所以 create 走 `bytedcli --json meego workitem create --project-key <pk> --work-item-type story --fields '<json>'`。fields 为 `[{field_key, field_value}]`，**field_value 一律字符串**——裸数字会被序列化成 float64 遭 thrift 拒收；对象 / 数组（multi-select、role_owners）按 `tojson` 字符串化；模板以 `{"field_key":"template","field_value":"<id>"}` 传入。真机建单前先 `create --dry-run` 看归一化载荷。
@@ -116,7 +134,7 @@ advance 停下的原因：被别人的节点挡住、某个必填表单项 node_
 | `field_d40cc0` | 是否支持私有化 | select | `option_2` 支持 / `option_1` 不支持；判据是有无依赖不能私有化的服务（AI-Lab、RTC、视频云等），「不支持」要求 FG 可控并进 KA 私有化工单，仓内工具链改动选支持 |
 | `field_ca9f6b` | 是否涉及新增或变更内容信息数据实体 | radio | `123j52bhd` 否 / `s39ujltnb` 是；带业务线显隐条件，写不进（update 回 success 但值为空）也不阻塞 confirm |
 
-### issue：转移带表单 / 无合法转移
+### issue：advance 停下（配置未覆盖的表单 / 无合法转移）
 
 1. `workitem get` 确认当前状态；状态只能按 `OPEN → IN PROGRESS → RESOLVED` 逐步走，不能跳。
 2. **经办人权限**：本人不是经办人时 `state transition` 报 No Permission。换经办人**必须用 `--role-operate`**（先 remove 旧人再 add 本人），改 `current_status_operator` 字段不生效：

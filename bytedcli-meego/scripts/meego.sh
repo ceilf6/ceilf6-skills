@@ -230,6 +230,11 @@ case "$sub" in
     [ -n "$wtype" ] || die "缺工作项类型（meta.meego_type 或 --type）"
     OWNER=$(printf '%s' "$rc_cfg" | jq -r '.dev_owner_key // empty')
     [ -n "$OWNER" ] || die "配置缺 dev_owner_key（repo ${repo}）：先 map set 落首次映射"
+    # 表单占位 {{mr_url}}：ctx 模式取 meta.mr_id，--repo 模式取 --mr-id；都没有时含占位的表单项不填，
+    # 让服务端的「{field} 必填」如实报出来（story 节点表单与 issue 状态表单共用）
+    mrid="$mr_id_opt"
+    if [ -z "$mrid" ] && [ -n "$META" ]; then mrid=$(jq -r '.mr_id // empty' "$META"); fi
+    mr_url=""; [ -z "$mrid" ] || mr_url="https://bits.bytedance.net/bytebus/devops/code/detail/${mrid}"
     if [ "$wtype" = story ]; then
       # 「推到底」语义：done_transition 是按节点流顺序列出的、本端要经过的全部节点（含起点），
       # 从当前停留位置逐个 confirm 到最后一个；已完成的空转、映射里没有的跳过。
@@ -237,11 +242,6 @@ case "$sub" in
       # 后续节点串行依赖它，不再空试；owner 为空的节点（如无 QA 的需求测试）视为可推。
       names=$(printf '%s' "$rc_cfg" | jq -r '.story.done_transition // [] | .[]')
       [ -n "$names" ] || die "配置缺 story.done_transition（repo ${repo}）：先 map set 落首次映射"
-      # 表单占位 {{mr_url}}：ctx 模式取 meta.mr_id，--repo 模式取 --mr-id；都没有时含占位的表单项不填，
-      # 让服务端的「{field} 必填」如实报出来
-      mrid="$mr_id_opt"
-      if [ -z "$mrid" ] && [ -n "$META" ]; then mrid=$(jq -r '.mr_id // empty' "$META"); fi
-      mr_url=""; [ -z "$mrid" ] || mr_url="https://bits.bytedance.net/bytebus/devops/code/detail/${mrid}"
       # nodes 由 fetch_nodes 刷新，故不能在子 shell 里取（命令替换拿不回刷新结果）
       node_status() { printf '%s' "$nodes" | jq -r --arg n "$1" 'first(.list[]? | select(.basic.name == $n) | .basic.status) // empty'; }
       fetch_nodes() {
@@ -351,23 +351,80 @@ EOF
     else
       DS=$(printf '%s' "$rc_cfg" | jq -r '.issue.done_state // empty')
       [ -n "$DS" ] || die "配置缺 issue.done_state（repo ${repo}）：先 map set 落首次映射"
-      out=$(bytedcli --json meego state list --project-key "$PK" --work-item-id "$id" \
-        --work-item-type 缺陷 --user-key "$OWNER" 2>"$ERRF") \
-        || die "state list 失败（条目 ${id}）：$(err_tail)"
-      states=$(printf '%s' "$out" | mcp_text)
-      [ -n "$states" ] || die "state list 应答形状不符（条目 ${id}）：$(snippet "$out")"
-      cur=$(printf '%s' "$states" | jq -r '.state_key // empty')
+      # done_transition 是从起点到终态要经过的状态序列（不含起点，末项即 done_state）；未配置时只认一跳。
+      # 状态键可含空格（IN PROGRESS），一律按行处理，不能 for 拆词。
+      path=$(printf '%s' "$rc_cfg" | jq -r --arg d "$DS" '(.issue.done_transition // [$d]) | .[]')
+      forms_all=$(printf '%s' "$rc_cfg" | jq -c '.issue.state_forms // {}')
+      fetch_states() {
+        out=$(bytedcli --json meego state list --project-key "$PK" --work-item-id "$id" \
+          --work-item-type 缺陷 --user-key "$OWNER" 2>"$ERRF" </dev/null) \
+          || die "state list 失败（条目 ${id}）：$(err_tail)"
+        states=$(printf '%s' "$out" | mcp_text)
+        [ -n "$states" ] || die "state list 应答形状不符（条目 ${id}）：$(snippet "$out")"
+        cur=$(printf '%s' "$states" | jq -r '.state_key // empty')
+      }
+      # 只补空值：先读当前值，配置里有而条目为空的才写。分阶段联动的字段（如「研发设计考虑不全分类」
+      # 只在引入原因选定后才可见）第一轮写不进——服务端按显隐静默丢弃——故最多三轮，直到没有可补的为止。
+      fill_state_forms() {
+        local target="$1" forms keys round=0 gout curvals missing
+        forms=$(printf '%s' "$forms_all" | jq -c --arg s "$target" --arg mr "$mr_url" \
+          '(.[$s] // []) | map(.field_value |= (if type == "string" then gsub("\\{\\{mr_url\\}\\}"; $mr) else tostring end))')
+        [ "$(printf '%s' "$forms" | jq 'length')" = 0 ] && return 0
+        keys=$(printf '%s' "$forms" | jq -c 'map(.field_key)')
+        while [ "$round" -lt 3 ]; do
+          round=$((round+1))
+          gout=$(bytedcli --json meego workitem get --project-key "$PK" --work-item-id "$id" --fields "$keys" 2>"$ERRF" </dev/null) \
+            || die "workitem get 失败（条目 ${id}）：$(err_tail)"
+          curvals=$(printf '%s' "$gout" | mcp_text | jq -c '[.work_item_fields[]? | select((.value != null) and (.value != "") and (.value != []) and (.value != {})) | .key]')
+          [ -n "$curvals" ] || curvals='[]'
+          missing=$(printf '%s' "$forms" | jq -c --argjson have "$curvals" '[.[] | select((.field_key | IN($have[])) | not)]')
+          [ "$(printf '%s' "$missing" | jq 'length')" = 0 ] && return 0
+          bytedcli --json meego workitem update --project-key "$PK" --work-item-id "$id" --fields "$missing" >/dev/null 2>"$ERRF" </dev/null \
+            || die "补表单失败（条目 ${id} → ${target}）：$(err_tail)"
+        done
+      }
+      # transition 报 No Permission 的根因是经办人不是本人：换经办人必须用 --role-operate（先 remove 再 add）
+      take_operator() {
+        local gout others ops
+        gout=$(bytedcli --json meego workitem get --project-key "$PK" --work-item-id "$id" 2>"$ERRF" </dev/null) || return 1
+        others=$(printf '%s' "$gout" | mcp_text | jq -c --arg me "$OWNER" '[.work_item_attribute.role_members[]? | select(.key == "operator") | .members[]? | .key | select(. != $me)]')
+        [ -n "$others" ] || others='[]'
+        ops=$(jq -cn --arg me "$OWNER" --argjson o "$others" '($o | map({role_key:"operator", op:"remove", user_keys:[.]})) + [{role_key:"operator", op:"add", user_keys:[$me]}]')
+        bytedcli --json meego workitem update --project-key "$PK" --work-item-id "$id" --role-operate "$ops" >/dev/null 2>"$ERRF" </dev/null
+      }
+      fetch_states
       if [ "$cur" = "$DS" ]; then echo "meego: 条目 ${id} 已在 ${DS} 状态，空转"; exit 0; fi
-      tid=$(printf '%s' "$states" | jq -r --arg s "$DS" 'first(.transition[]? | select(.state_key == $s) | .id) // empty')
-      [ -n "$tid" ] || die "当前状态 ${cur} 无到 ${DS} 的合法转移，转人工在 meego 上处理"
-      # 必填确认表单一律转人工：CLI 传表单的形状未知，猜错会污染团队侧数据。
-      # 判定按数组长度（缺 name 的字段 join 后为空串会漏拦），字段名仅用于文案。
-      form_n=$(printf '%s' "$states" | jq -r --arg s "$DS" 'first(.transition[]? | select(.state_key == $s) | (.confirm_form // []) | length) // 0')
-      form=$(printf '%s' "$states" | jq -r --arg s "$DS" '[first(.transition[]? | select(.state_key == $s)) | .confirm_form[]? | (.name // "（未命名字段）")] | join("、")')
-      [ "$form_n" = 0 ] || die "转移 ${cur} → ${DS} 带必填确认表单（${form}），不代填，转人工"
-      tout=$(bytedcli --json meego state transition --project-key "$PK" --work-item-id "$id" \
-        --transition-id "$tid" 2>&1) || die "状态流转失败（条目 ${id}）：$(snippet "$tout")"
-      echo "meego: 条目 ${id} 已流转到 ${DS}"
+      # 当前状态若已在序列中，从它之后接着推；不在（如 OPEN）就从序列首项推起
+      skip=0; printf '%s\n' "$path" | grep -qFx "$cur" && skip=1
+      while IFS= read -r target; do
+        [ -n "$target" ] || continue
+        if [ "$skip" = 1 ]; then [ "$target" = "$cur" ] && skip=0; continue; fi
+        tid=$(printf '%s' "$states" | jq -r --arg s "$target" 'first(.transition[]? | select(.state_key == $s) | .id) // empty')
+        [ -n "$tid" ] || die "当前状态 ${cur} 无到 ${target} 的合法转移，转人工在 meego 上处理"
+        # 确认表单里配置没覆盖的字段不猜值：列出字段名转人工，配好 issue.state_forms 后可重跑
+        cfg_keys=$(printf '%s' "$forms_all" | jq -c --arg s "$target" '(.[$s] // []) | map(.field_key)')
+        unknown=$(printf '%s' "$states" | jq -r --arg s "$target" --argjson f "$cfg_keys" \
+          '[first(.transition[]? | select(.state_key == $s)) | .confirm_form[]? | select((.key // "") | IN($f[]) | not) | (.name // "（未命名字段）")] | join("、")')
+        [ -z "$unknown" ] || die "转移 ${cur} → ${target} 带必填确认表单（${unknown}），配置未覆盖，不代填，转人工"
+        fill_state_forms "$target"
+        if ! tout=$(bytedcli --json meego state transition --project-key "$PK" --work-item-id "$id" --transition-id "$tid" 2>&1 </dev/null); then
+          case "$tout" in
+            *ermission*)
+              echo "meego: 流转 → ${target} 无权限，改经办人为本人后重试" >&2
+              take_operator || die "换经办人失败（条目 ${id}）：$(err_tail)"
+              tout=$(bytedcli --json meego state transition --project-key "$PK" --work-item-id "$id" --transition-id "$tid" 2>&1 </dev/null) \
+                || die "状态流转失败（条目 ${id} → ${target}）：$(snippet "$tout")" ;;
+            *) die "状态流转失败（条目 ${id} → ${target}）：$(snippet "$tout")" ;;
+          esac
+        fi
+        # 应答成功不等于状态真变了：回读校验，首读可能撞传播延迟，隔一拍再读一次才判死
+        fetch_states
+        if [ "$cur" != "$target" ]; then sleep "${MEEGO_RETRY_SLEEP:-2}"; fetch_states; fi
+        [ "$cur" = "$target" ] || die "流转 → ${target} 应答成功但回读仍为 ${cur:-未知}，未生效，转人工"
+        echo "meego: 条目 ${id} 已流转到 ${target}"
+      done <<EOF
+$path
+EOF
     fi
     ;;
   done)
