@@ -9,6 +9,7 @@ A｜vc_ai｜common.getAvatarBase64_<n> timeout after 60s（族含 938f8ba3…）
   Task：task_20260908T085103Z_8f582c38（runtime traecli，workflow pc-web-bugfix）
   工作区：~/Desktop/workspace/omh-runs/avatar-timeout-2026-09-08
   预计约 3 小时；叫停：orchestrator task-cancel --task-id task_20260908T085103Z_8f582c38
+  看板：已登记（ht web 可复制启动命令）
 
 【队列剩余 A 档】
 （无）
