@@ -46,7 +46,7 @@ Resolve relative paths from this skill directory. Do not silently substitute ano
 
 Before collecting, verify:
 
-- `trae` or `trae-cli` is installed and logged in.
+- The execution CLI (`claude`, run with the Opus model by the wrapper script) is installed and logged in (`claude auth status --json` shows `loggedIn: true`).
 - `python3`, `lark-cli`, and `bytedcli` are callable.
 - `lark-cli auth status --json --verify` succeeds.
 - `bytedcli auth status`, `bytedcli auth userinfo`, `bytedcli bits auth status`, and `bytedcli meego status` succeed.
@@ -236,4 +236,4 @@ The human summary must say explicitly whether any write occurred, whether the do
 
 ## Output Contract
 
-The workflow is complete only after the structured result in Step 13 is returned. A successful Trae process alone is not proof of publication; success requires parent-child verification, document fetch validation, and notification result recording.
+The workflow is complete only after the structured result in Step 13 is returned. A successful agent process alone is not proof of publication; success requires parent-child verification, document fetch validation, and notification result recording.

@@ -1,6 +1,6 @@
 # Serial Review Panel
 
-Run these passes serially in one Trae session. Each pass starts from the revised draft and uses only its assigned perspective.
+Run these passes serially in one agent session. Each pass starts from the revised draft and uses only its assigned perspective.
 
 ## Finding Format
 
