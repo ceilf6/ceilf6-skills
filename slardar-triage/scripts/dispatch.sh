@@ -12,10 +12,11 @@ PK=5e96d7bff4e7c525510f9156
 OWNER=7657492291354954694
 WORKFLOW=pc-web-bugfix
 
-state=""; issue=""; slug=""; book=""; desc=""; name=""; os=""; release=""; repo=""; runs=""; no_board=0
+state=""; issue=""; slug=""; book=""; desc=""; name=""; os=""; release=""; repo=""; runs=""; no_board=0; slardar_url=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-board) no_board=1; shift;;
+    --slardar-url) slardar_url=$2; shift 2;;
     --state) state=$2; shift 2;; --issue-id) issue=$2; shift 2;; --slug) slug=$2; shift 2;;
     --task-book) book=$2; shift 2;; --meego-desc) desc=$2; shift 2;; --meego-name) name=$2; shift 2;;
     --os) os=$2; shift 2;; --release) release=$2; shift 2;; --repo) repo=$2; shift 2;; --runs-root) runs=$2; shift 2;;
@@ -48,6 +49,7 @@ while IFS=$'\t' read -r tid ws; do
   case "$phase" in completed|failed|cancelled|"") ;; *) fail precheck "已有未到终态的 Task ${tid}（phase=${phase}，工作区 ${ws}），本次不派发" 3;; esac
 done < <(jq -r 'to_entries[] | select(.value.task_id and .value.workspace) | [.value.task_id, .value.workspace] | @tsv' "$DJ")
 set_ ".slug" "\"$slug\""
+[ -z "$slardar_url" ] || set_ ".slardar_url" "$(jq -Rn --arg u "$slardar_url" '$u')"
 
 # --- 步骤 1：Meego ---
 if ! step_done meego; then

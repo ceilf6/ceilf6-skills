@@ -45,6 +45,21 @@ export function makeRunner(bin) {
   };
 }
 
+// 平台分享链接只在 CLI 的文本输出里（「平台链接: <url>」一行），--raw 拿不到，故单独走一次不带 --raw 的调用。
+export function makeTextRunner(bin) {
+  return (args) => {
+    const r = spawnSync(bin, args, { encoding: 'utf8', env: process.env, maxBuffer: 50 * 1024 * 1024 });
+    if (r.error) throw new Error(`${bin} 启动失败：${r.error.message}`);
+    if (r.status !== 0) throw new Error(`${bin} 退出码 ${r.status}：${(r.stderr || r.stdout).trim().slice(0, 500)}`);
+    return r.stdout;
+  };
+}
+
+export function parseShareLink(text) {
+  const m = /平台链接[:：]\s*(https?:\/\/\S+)/.exec(String(text ?? ''));
+  return m ? m[1] : null;
+}
+
 export function normalizeSourcePath(filename, projectDirectory) {
   if (typeof filename !== 'string' || !filename || filename === '[native code]' || /^(https?:|blob:)/.test(filename)) return null;
   let source = filename.replace(/^webpack:\/\//, '').replace(/^\/+/g, '');

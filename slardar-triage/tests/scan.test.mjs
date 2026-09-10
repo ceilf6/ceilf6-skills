@@ -43,8 +43,15 @@ test('scan 用注入 runner 产出候选并做族合并，某 BID 失败只记 s
     if (args[0] === 'log' && args[1] === 'detail') return fx('log-detail-938f8ba3.json');
     throw new Error(`unexpected ${args.join(' ')}`);
   };
-  const r = await scan({ bids: ['vc_ai', 'vc_web'], hours: 24, top: 3, now: 1788853929000, runner });
+  const textRunner = (args) => {
+    calls.push(`TEXT ${args.join(' ')}`);
+    const id = JSON.parse(args[args.indexOf('--filter') + 1])[0].values[0];
+    return `正在查询...\n平台链接: https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&filter_id=f-${id.slice(0, 8)}\n`;
+  };
+  const r = await scan({ bids: ['vc_ai', 'vc_web'], hours: 24, top: 3, now: 1788853929000, runner, textRunner });
   assert.deepEqual(r.skipped_bids.map((s) => s.bid), ['vc_web']);
+  assert.equal(r.candidates.find((c) => c.issue_id === '938f8ba377ac6484ba8918b19f247350').slardar_url, 'https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&filter_id=f-938f8ba3');
+  assert.ok(calls.some((c) => c.startsWith('TEXT log query') && c.includes(`--start-time ${1788853929 - 7 * 86400}`) && !c.includes('--raw') && !c.includes('--no-share')));
   assert.equal(r.window.start, 1788853929 - 24 * 3600);
   const byId = Object.fromEntries(r.candidates.map((c) => [c.issue_id, c]));
   assert.equal(byId['938f8ba377ac6484ba8918b19f247350'].latest_event.mapped_path, 'vc-ai/src/utils/native.ts');

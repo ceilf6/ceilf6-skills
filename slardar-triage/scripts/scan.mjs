@@ -2,7 +2,7 @@
 import { mkdirSync, writeFileSync, realpathSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { PROJECTS, UNRESOLVED_FILTER, makeRunner, normalizeSourcePath, resolveBin, resolveRepo } from './lib/cli.mjs';
+import { PROJECTS, UNRESOLVED_FILTER, makeRunner, makeTextRunner, normalizeSourcePath, parseShareLink, resolveBin, resolveRepo } from './lib/cli.mjs';
 import { familyKey } from './lib/family.mjs';
 import { flattenRows, summarize } from './lib/stats.mjs';
 
@@ -51,7 +51,20 @@ function fetchDetail(rows, bid, window, runner) {
   return { detail: null, detail_error: lastError ?? (rows.length ? '样本无 dh_key' : '无事件样本') };
 }
 
-async function scanBid(bid, window, top, runner) {
+// 分享链接给 CR 评审看上下文，评审可能在派单几天后才看，窗口取 7 天而不是扫描窗口。
+const SHARE_WINDOW_SECONDS = 7 * 24 * 3600;
+
+function shareLink(bid, window, issueId, textRunner) {
+  if (!textRunner) return null;
+  try {
+    const text = textRunner(['log', 'query', '--bid', bid, '--env', 'online', '--site-type', 'web', '--start-time', String(window.end - SHARE_WINDOW_SECONDS), '--end-time', String(window.end), '--ev-type', 'js_error', '--filter', JSON.stringify([{ filter_name: 'issue_id', op: 'in', values: [issueId] }]), '--page-size', '1']);
+    return parseShareLink(text);
+  } catch {
+    return null;
+  }
+}
+
+async function scanBid(bid, window, top, runner, textRunner) {
   const project = PROJECTS[bid];
   const list = runner(['js-error', 'list', ...commonArgs(bid, window), '--filter', UNRESOLVED_FILTER, '--order-by', 'count_descend', '--page-size', String(top)]);
   const issues = list?.data?.result ?? [];
@@ -77,6 +90,7 @@ async function scanBid(bid, window, top, runner) {
       family_users: issue.user,
       first_seen: issue.min_crash_time,
       status: issue.issue_status,
+      slardar_url: shareLink(bid, window, issue.issue_id, textRunner),
       ...summarize(rows),
       latest_event: latestFrame(detail, project.directory),
     });
@@ -100,10 +114,12 @@ function mergeFamilies(candidates) {
   return [...byKey.values()];
 }
 
-export async function scan({ bids, hours, top, repo, now = Date.now(), runner }) {
+export async function scan({ bids, hours, top, repo, now = Date.now(), runner, textRunner }) {
   const end = Math.floor(now / 1000);
   const window = { start: end - hours * 3600, end };
-  const run = runner ?? makeRunner(resolveBin(resolveRepo(repo)));
+  const bin = resolveBin(resolveRepo(repo));
+  const run = runner ?? makeRunner(bin);
+  const runText = textRunner ?? (runner ? null : makeTextRunner(bin));
   const skipped = [];
   let all = [];
   for (const bid of bids) {
@@ -112,7 +128,7 @@ export async function scan({ bids, hours, top, repo, now = Date.now(), runner })
       continue;
     }
     try {
-      all = all.concat(await scanBid(bid, window, top, run));
+      all = all.concat(await scanBid(bid, window, top, run, runText));
     } catch (error) {
       skipped.push({ bid, reason: String(error.message ?? error).slice(0, 300) });
     }

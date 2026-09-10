@@ -5,6 +5,7 @@
 ## 1. 线上事实(Slardar,bid={{bid}},env=online,{{window_start}}–{{window_end}})
 
 - Issue `{{issue_id}}`(同族:{{member_issue_ids}}),错误信息 `{{message}}`,上报文件 `{{filename}}`,状态 {{status}}。
+- Slardar 告警链接(评审看上下文用,MR 描述须原样带上):{{slardar_url}}
 - 24h {{family_count}} 次 / {{family_users}} 用户;首次出现 {{first_seen}}。
 - {{sample_size}} 条事件抽样:页面 {{pid_dist}};系统 {{os_dist}};release {{release_dist}};source_type {{source_type_dist}};宿主版本 {{host_version_dist}};distinct session {{distinct_sessions}}。
 - 结论:{{一段话:触发面与根因方向}}

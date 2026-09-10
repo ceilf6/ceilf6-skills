@@ -20,7 +20,7 @@ fixture() {
   export THREADS_SH="$HERE/stubs/threads.sh"; export CLAUDE_CODE_SESSION_ID=sess-test
 }
 run_dispatch() {
-  bash "$D" --state "$STATE" --issue-id i1 --slug avatar-2026-09-08 --task-book "$BOOK" --meego-desc "$DESC" --meego-name "n" --os iOS --release 7.76.0.234 --repo "$REPO" --runs-root "$RUNS" "$@"
+  bash "$D" --state "$STATE" --issue-id i1 --slug avatar-2026-09-08 --task-book "$BOOK" --meego-desc "$DESC" --meego-name "n" --os iOS --release 7.76.0.234 --repo "$REPO" --runs-root "$RUNS" --slardar-url "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&filter_id=f1" "$@"
 }
 
 echo "case 1: 全流程成功"
@@ -39,6 +39,7 @@ EXP_BRANCH=$(git symbolic-ref --short -q HEAD 2>/dev/null || echo omh-base/avata
 node -e "const m=require('$RUNS/avatar-2026-09-08/.harness-ceilf6/avatar-2026-09-08/meta.json'); process.exit(m.branch==='$EXP_BRANCH' && m.status==='active' && /Meego .*Task task_stub/.test(m.note) && JSON.stringify(m.milestones)==='{}' ? 0 : 1)" && ok "meta.json 形状正确" || bad "meta.json 形状不符"
 node -e "const d=require('$STATE/dispatched.json'); process.exit(d.i1.steps.board==='done' && d.i1.board.ok===true ? 0 : 1)" && ok "steps.board 落账" || bad "steps.board 未落账"
 node -e "const m=require('$RUNS/avatar-2026-09-08/.harness-ceilf6/avatar-2026-09-08/meta.json'); process.exit(m.meego_id==='7374348254' && m.meego_type==='issue' && m.meego_url==='https://meego.larkoffice.com/larksuite/issue/detail/7374348254' ? 0 : 1)" && ok "meta 带 Meego 绑定" || bad "meta 缺 Meego 绑定: $(cat $RUNS/avatar-2026-09-08/.harness-ceilf6/avatar-2026-09-08/meta.json)"
+node -e "const m=require('$RUNS/avatar-2026-09-08/.harness-ceilf6/avatar-2026-09-08/meta.json'); process.exit(m.slardar_url==='https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&filter_id=f1' && m.note.startsWith('Slardar https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&filter_id=f1 · Meego ') ? 0 : 1)" && ok "meta 与备注带 Slardar 链接" || bad "Slardar 链接未记: $(cat $RUNS/avatar-2026-09-08/.harness-ceilf6/avatar-2026-09-08/meta.json)"
 
 echo "case 1b: board.sh 单独补登记并回填 mr_id，保留既有 status/milestones"
 node -e "const fs=require('fs');const p='$RUNS/avatar-2026-09-08/.harness-ceilf6/avatar-2026-09-08/meta.json';const m=JSON.parse(fs.readFileSync(p));m.status='done';m.milestones={plan_gate:'x'};fs.writeFileSync(p,JSON.stringify(m))"
