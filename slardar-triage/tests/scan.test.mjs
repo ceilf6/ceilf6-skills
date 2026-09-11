@@ -54,6 +54,10 @@ test('scan 用注入 runner 产出候选并做族合并，某 BID 失败只记 s
   assert.ok(calls.some((c) => c.startsWith('TEXT log query') && c.includes(`--start-time ${1788853929 - 7 * 86400}`) && !c.includes('--raw') && !c.includes('--no-share')));
   assert.equal(r.window.start, 1788853929 - 24 * 3600);
   const byId = Object.fromEntries(r.candidates.map((c) => [c.issue_id, c]));
+  assert.equal(
+    byId['938f8ba377ac6484ba8918b19f247350'].issue_url,
+    `https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=${1788853929 - 24 * 3600}&end_time=1788853929&site_type=web&region=cn&issue_id=938f8ba377ac6484ba8918b19f247350&layout=normal&release=7.76.0.234`,
+  );
   assert.equal(byId['938f8ba377ac6484ba8918b19f247350'].latest_event.mapped_path, 'vc-ai/src/utils/native.ts');
   assert.equal(byId['938f8ba377ac6484ba8918b19f247350'].latest_event.line, 196);
   assert.equal(byId['938f8ba377ac6484ba8918b19f247350'].project_dir, 'vc-ai');
@@ -91,4 +95,8 @@ test('scan 最新事件 detail 报「正在处理」时退到下一条 dh_key，
   const r2 = await scan({ bids: ['vc_ai'], hours: 24, top: 1, now: 1788853929000, runner: allFail });
   assert.equal(r2.candidates[0].latest_event.mapped_path, null);
   assert.match(r2.candidates[0].detail_error, /处理中/);
+  assert.equal(
+    r2.candidates[0].issue_url,
+    `https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=${1788853929 - 24 * 3600}&end_time=1788853929&site_type=web&region=cn&issue_id=aaaed08b947f7c1730c780ec481b0cee&layout=normal`,
+  );
 });

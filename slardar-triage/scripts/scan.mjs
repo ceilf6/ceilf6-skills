@@ -64,6 +64,16 @@ function shareLink(bid, window, issueId, textRunner) {
   }
 }
 
+// Issue 详情页是用户与 native 同学看上下文的入口；release 参数让页面直接定位到最新事件所在版本。
+function issueDetailUrl(bid, window, issueId, release) {
+  const params = new URLSearchParams({
+    env: 'online', bid, lang: 'zh', start_time: String(window.start), end_time: String(window.end),
+    site_type: 'web', region: 'cn', issue_id: issueId, layout: 'normal',
+  });
+  if (release) params.set('release', release);
+  return `https://slardar.bytedance.net/node/web/js/detail?${params.toString()}`;
+}
+
 async function scanBid(bid, window, top, runner, textRunner) {
   const project = PROJECTS[bid];
   const list = runner(['js-error', 'list', ...commonArgs(bid, window), '--filter', UNRESOLVED_FILTER, '--order-by', 'count_descend', '--page-size', String(top)]);
@@ -73,8 +83,10 @@ async function scanBid(bid, window, top, runner, textRunner) {
     const query = runner(['log', 'query', ...commonArgs(bid, window), '--ev-type', 'js_error', '--filter', JSON.stringify([{ filter_name: 'issue_id', op: 'in', values: [issue.issue_id] }]), '--columns', 'pid,release,os,source_type,session_id,user_agent,dh_key', '--page-size', String(SAMPLE_SIZE), '--order-by', 'timestamp', '--order', 'desc', '--no-share']);
     const rows = flattenRows(query);
     const { detail, detail_error } = fetchDetail(rows, bid, window, runner);
+    const latest = latestFrame(detail, project.directory);
     candidates.push({
       detail_error,
+      issue_url: issueDetailUrl(bid, window, issue.issue_id, latest.release),
       issue_id: issue.issue_id,
       family_key: familyKey(issue.message),
       member_issue_ids: [issue.issue_id],
@@ -92,7 +104,7 @@ async function scanBid(bid, window, top, runner, textRunner) {
       status: issue.issue_status,
       slardar_url: shareLink(bid, window, issue.issue_id, textRunner),
       ...summarize(rows),
-      latest_event: latestFrame(detail, project.directory),
+      latest_event: latest,
     });
   }
   return candidates;
