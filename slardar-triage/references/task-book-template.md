@@ -2,6 +2,12 @@
 
 # 修复 {{标题:一句话}}
 
+## 0. 人工确认信息({{date}})
+
+{{用户在「派这条」指令里给的补充,原样收录:native 侧同学的结论、leader 对 web 侧是否动手的口径、范围边界}}
+
+以上是本任务的范围边界,与第 4 节修法冲突时以本节为准。
+
 ## 1. 线上事实(Slardar,bid={{bid}},env=online,{{window_start}}–{{window_end}})
 
 - Issue `{{issue_id}}`(同族:{{member_issue_ids}}),错误信息 `{{message}}`,上报文件 `{{filename}}`,状态 {{status}}。
