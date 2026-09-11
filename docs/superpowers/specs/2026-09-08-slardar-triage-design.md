@@ -1,7 +1,7 @@
 # slardar-triage 技能设计
 
 日期：2026-09-08
-状态：待用户评审
+状态：第 4、6、7、8、9 节的自动派发已被 2026-09-11-slardar-triage-report-first-design.md 取代
 
 ## 1. 目标
 
