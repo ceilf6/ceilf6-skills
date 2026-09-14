@@ -135,6 +135,10 @@ repo-guard 通过 git submodule 引用本仓库，运行时始终拉取最新版
 
 它把新仓库的 agent 协作基建拆成社区治理、权威文档、SDD/TDD、Issue/PR 分诊、Git hooks、本地/CI 质量门、GitNexus 影响契约、release/security 自动化和 repo-guard/Codex/Copilot 评审循环几层，指导 agent 先搭最小可运行闭环，再逐层收紧质量门。
 
+# harness 系列（harness-context / harness-ceilf6 / harness-ceilf6-lite）
+
+个人需求交付 harness。`harness-context` 按 git 分支管需求上下文仓（本地为真源、飞书 wiki 为沉淀）；`harness-ceilf6` 从计划门起走 TDD 开发、对抗式机审 CR 循环、squash / 变基 / push、建 MR、Meego、自测矩阵与沉淀，并带本地看板 `ht web`；`harness-ceilf6-lite` 是它的收尾子集，代码已由 vibe / omh 写好时跳过开发与机审，只建 Meego、MR、看板线程、wiki 与沉淀。三者经 `install-harness.sh` 以 symlink 装进 `~/.claude/skills`。
+
 ---
 
 # progress-reporter
