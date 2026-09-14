@@ -30,7 +30,7 @@
 （无）
 
 【本次未扫】
-vc_web、vc_pages：Slardar 账号缺 kani 角色（role_bid_vc_web / role_bid_vc_pages），申请链接见扫描输出
+（无）
 
 【下一步】
 确认后回复「派这条 938f8ba3，补充：<native 结论 / leader 口径>」；不修回复「这条不修 938f8ba3，原因：…」

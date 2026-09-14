@@ -165,7 +165,7 @@ function arg(name, fallback) {
 if (isMain()) {
   const out = arg('--out');
   const result = await scan({
-    bids: arg('--bid', 'vc_ai,vc_web,vc_pages').split(',').map((s) => s.trim()).filter(Boolean),
+    bids: arg('--bid', 'vc_ai').split(',').map((s) => s.trim()).filter(Boolean),
     hours: Number(arg('--hours', '24')),
     top: Number(arg('--top', '10')),
     repo: arg('--repo'),

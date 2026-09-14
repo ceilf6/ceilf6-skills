@@ -1,6 +1,6 @@
 ---
 name: slardar-triage
-description: 扫描 Slardar 近 24h 线上 JS 错误（vc_ai/vc_web/vc_pages），按 web 侧改动可能性排序并逐条详细呈现（Issue 链接、分布、代码点位、根因假设、要向 native 确认的问题），决策交给用户；只有用户说「派这条 <issue>，补充：<敲定的细节>」才建 Meego、经 traecli 起 omh、登记看板。当用户说「扫一下线上告警」「看看 Slardar」「挑一个告警看看」「派这条」「这条不修」「看看进度」时使用。
+description: 扫描 Slardar 近 24h 线上 JS 错误（只看 vc_ai，即 vc-ai 方向），按 web 侧改动可能性排序并逐条详细呈现（Issue 链接、分布、代码点位、根因假设、要向 native 确认的问题），决策交给用户；只有用户说「派这条 <issue>，补充：<敲定的细节>」才建 Meego、经 traecli 起 omh、登记看板。当用户说「扫一下线上告警」「看看 Slardar」「挑一个告警看看」「派这条」「这条不修」「看看进度」时使用。
 ---
 
 # slardar-triage
@@ -18,7 +18,7 @@ description: 扫描 Slardar 近 24h 线上 JS 错误（vc_ai/vc_web/vc_pages）�
 | 「这条不修 <摘要或 issue_id>，原因：<文本>」 | `node <skill>/scripts/state.mjs reject --dir <state> --issue-id <id> --reason "<原话>"`，回话题确认 |
 | 「看看进度」 | `node <skill>/scripts/progress.mjs --state <state>`，按报告第 2 块格式回话题 |
 
-参数：`--bid`（默认 `vc_ai,vc_web,vc_pages`）、`--hours`（24）、`--top`（10）。
+参数：`--bid`（默认 `vc_ai`；本技能只看 vc-ai 方向，不加 vc_web / vc_pages）、`--hours`（24）、`--top`（10）。
 
 ## 主流程
 
@@ -36,7 +36,7 @@ git -C <repo> fetch origin master
 ```bash
 node <skill>/scripts/scan.mjs --bid <bids> --hours <hours> --top <top> --repo <repo> --out <state>/scans/scan-$(date -u +%Y%m%dT%H%M%SZ).json
 ```
-`skipped_bids` 非空写进报告第 4 块；候选 `detail_error` 非空说明 Sourcemap 没取到，档位按中处理并把原因写进详细信息的「不确定点」。
+`skipped_bids` 非空说明 vc_ai 本身没扫成，原因写进报告第 4 块并停在这一步；候选 `detail_error` 非空说明 Sourcemap 没取到，档位按中处理并把原因写进详细信息的「不确定点」。
 
 ### 3. 合并候选池
 
@@ -66,7 +66,7 @@ node <skill>/scripts/state.mjs judge --dir <state> --issue-id <id> --likelihood 
 
 ### 5. 报告
 
-`botmux send` 一条消息，按 `<skill>/references/example-report.md` 的五块：候选清单；已派单进展（`progress.mjs`）；已拒绝 / 自动移出；本次未扫的 BID；下一步一行。
+`botmux send` 一条消息，按 `<skill>/references/example-report.md` 的五块：候选清单；已派单进展（`progress.mjs`）；已拒绝 / 自动移出；本次未扫（仅 vc_ai 扫描失败时有内容）；下一步一行。
 
 ## 派单（只在用户显式指令后）
 
