@@ -136,7 +136,7 @@ make_ctx
 state=$(mktemp -d)
 STUB_STATE="$state" STUB_MODE=pass CODEX_BIN="$STUB" bash "$CR" --dir "$ctx" >/dev/null
 grep -qx -- '-m' "$state/args" && ok "传递 -m 参数" || bad "传递 -m 参数"
-grep -qx -- 'gpt-5.6-sol' "$state/args" && ok "默认模型 gpt-5.6-sol" || bad "默认模型 gpt-5.6-sol"
+grep -qx -- 'gpt-6-astra' "$state/args" && ok "默认模型 gpt-6-astra" || bad "默认模型 gpt-6-astra"
 cleanup_repo
 
 make_ctx

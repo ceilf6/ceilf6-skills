@@ -12,9 +12,11 @@ threads.sh 保证。写一律用 --ctx-dir 直指：序号与关键词定位只�
 运行态与停止不经 threads.sh：转调 bot 控制端口，bot 不在时看板照常渲染静态进度。
 """
 import argparse
+import errno
 import json
 import os
 import subprocess
+import sys
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -292,8 +294,24 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=7657)
     args = ap.parse_args()
-    srv = HTTPServer(("127.0.0.1", args.port), Handler)
-    print(f"harness 看板: http://127.0.0.1:{args.port}  (Ctrl-C 退出)")
+    url = f"http://127.0.0.1:{args.port}"
+    try:
+        srv = HTTPServer(("127.0.0.1", args.port), Handler)
+    except OSError as e:
+        if e.errno != errno.EADDRINUSE:
+            raise
+        # 常见于另一个终端里的 ht web 仍在跑：探一下是不是看板，是就直接给地址。
+        # 探首页而非 /api/threads：后者要跑 threads.sh，秒级耗时会误判成非看板。
+        try:
+            with urllib.request.urlopen(url, timeout=2) as resp:
+                is_board = "harness 线程看板" in resp.read(65536).decode("utf-8", "replace")
+        except Exception:
+            is_board = False
+        if is_board:
+            print(f"harness 看板已在运行: {url}")
+            sys.exit(0)
+        sys.exit(f"端口 {args.port} 已被其他程序占用，换一个：ht web --port <端口>")
+    print(f"harness 看板: {url}  (Ctrl-C 退出)")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
