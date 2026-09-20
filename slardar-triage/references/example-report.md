@@ -1,36 +1,54 @@
-# 样例报告（2026-09-08 vc_ai 批次，按呈现优先格式）
+# 样例（呈现 → 收敛对话 → 技术方案）
 
-【候选清单】
+## 呈现
 
-高｜vc_ai｜common.getAvatarBase64_<n> timeout after 60s（族含 938f8ba3…）
-  Issue：https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1788767529&end_time=1788853929&site_type=web&region=cn&issue_id=938f8ba377ac6484ba8918b19f247350&layout=normal&release=7.76.0.234
-  状态 unassigned；首次出现 2026-08-04
-  24h 45452 次 / 21740 用户 / 抽样 269 session
-  分布：页面 minutes-ai-layout-mobile 256、doubao-ai-layout-mobile 23、ai-layout-mobile 11、end-summary-mobile 10；系统 iOS 300/300；release 7.76.0.234 277、1.0.0.360 23；宿主版本 unknown 300；source_type unhandledrejection 299、manual 1
-  最新帧：vc-ai/src/utils/native.ts:196（页面 minutes-ai-layout-mobile，release 7.76.0.234 → ee/lark/vc_ai builds/beta/7.76.0 c1a21610）
-  master 点位：vc-ai/src/services/transport-layer/mobile/chatter.ts:45 —— getAvatarUrl 直接 await 桥调用，无 catch、无缓存；services/chatter.ts:34 FetchQueue 头像链无 catch，拒绝逃逸为 unhandledrejection
-  根因假设：
-    web 侧可独立解释：拒绝未捕获、无缓存导致同一 session 165+ 次请求、60s 超时过长
-    依赖 native：iOS 宿主对 common.getAvatarBase64 完全不回调，原因未知
-  要向 native 确认：
-    1. iOS 端 common.getAvatarBase64 在什么条件下不回调（avatarKey 无效？用户不可见？bridge 未注册？）
-    2. 不回调的宿主版本范围，是否集中在某个 Lark 版本
-    3. native 侧是否有修复计划；若有，web 侧是否只需兜底
-  若在 web 侧动手：mobile/chatter.ts 与 doubao-chatter.ts 加缓存与兜底、mobile-bridge.ts 给该请求设短超时、services/chatter.ts 与 minutes-end-summary-mobile.tsx 补 catch；不动 native 协议
-  不确定点：master 上超时文案已改为 `[native-api] … timed out after 60000ms`，7.77 起 Slardar 会以新文案聚合
+【Slardar · vc_ai 近 24h】
+现象：PC 端会中 AI 视图（ai-layout）拉取会议 AI 总结时等了 10 秒没有结果，错误以 unhandledrejection 上报
+报错：[native-api] command=94003 timed out after 10000ms
+Issue：https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1789637699&end_time=1789724099&site_type=web&region=cn&layout=normal&issue_id=f49170ba664fefd93aede453eb5dc3ba&release=7.77.0.21
 
-低｜vc_ai｜业务错误 code 220301 invalid user（族含 aaaed08b…、b1071995…）｜服务端错误码；页面 100% doubao-ai-layout-mobile｜Issue：https://slardar.bytedance.net/node/web/js/detail?…issue_id=aaaed08b947f7c1730c780ec481b0cee…
-低｜vc_ai｜APINotProvided（族含 9491f36c…、24097171…）｜宿主未注入 API；帧在 React 渲染入口 / [native code]｜Issue：…
-排除｜vc_ai｜[warn] FishBoneError: fishBone out of screen｜warn 级上报｜Issue：…
+先定复现条件。这条既出现在会中 AI 视图（ai-layout），也出现在妙记 PC（minutes-ai-layout-pc）。你想先按哪个场景看？
 
-【已派单进展】
-（无）
+## 收敛对话（每轮一个事实 + 一个问题）
 
-【已拒绝 / 自动移出】
-（无）
+用户：先看会中。
 
-【本次未扫】
-（无）
+agent：这条的最新帧在 `vc-ai/src/services/ai-layout.ts:271`，master 上这一段是：
 
-【下一步】
-确认后回复「派这条 938f8ba3，补充：<native 结论 / leader 口径>」；不修回复「这条不修 938f8ba3，原因：…」
+    async getFishBoneData() {
+      this.loading = true;
+      try {
+        const res = await getMeetingAISummary(...);
+        ...
+      } finally {
+        this.loading = false;
+      }
+    }
+
+报错原文里的超时是 10000ms。复现条件就定成「会中打开 AI 视图、宿主 command 94003 在 10s 内不回包」，还是你见过别的触发路径？
+
+用户：就这个。调用方怎么调的？
+
+agent：`git grep -n getFishBoneData origin/master -- vc-ai`：
+
+    vc-ai/src/stores/ai-layout.ts:88:    when(() => this.ready, () => this.getFishBoneData());
+    vc-ai/src/stores/ai-layout.ts:142:   getFishBoneDataDebounced = debounce(() => this.getFishBoneData(), 300);
+
+缺陷点位定在 getFishBoneData 本身，还是定在调用方？定下来之后我们看根因归属。
+
+（……按清单继续：根因归属、改动范围、验收方式）
+
+## 技术方案回显
+
+【技术方案】f49170ba
+复现条件：PC 会中打开 AI 视图，宿主 command 94003 在 10s 内不回包
+缺陷点位：vc-ai/src/services/ai-layout.ts:266-280 getFishBoneData
+根因：超时 reject 没有被接住，逃逸为 unhandledrejection（native / 服务端确认情况：94003 不回包的原因未向 native 确认，本单只处理 web 侧未捕获）
+改动范围：vc-ai/src/services/ai-layout.ts 加 catch 并走既有错误上报；不动 native 协议、不改超时时长
+验收：mock getMeetingAISummary 返回 rejected Promise，改动前测试进程收到 unhandledRejection，改动后不再收到且 loading 复位
+
+确认后回复「派这条」；要改哪一项直接说。
+
+## 没有可呈现的候选
+
+没有新的可修告警，在途 3 条。
