@@ -131,18 +131,27 @@ jq '.status = "cr"' "$CTX_DIR/meta.json" > "$tmp" && mv "$tmp" "$CTX_DIR/meta.js
 
 # ---- 调评审员；失败或校验不过重试一次 ----
 VERDICT="$ROUND_DIR/verdict.json"
+SESSION_LOG="$ROUND_DIR/session.log"
+# 评审员偶尔不执行任何命令就凭指令臆造 verdict（引用不存在的文件、行号越界）。判定必须建立在实跑命令上，
+# 故记录会话输出并核对其中有无工具调用痕迹；没有即视同本次尝试失败，交由重试逻辑再跑一次。
 run_codex() {
   (cd "$REPO_ROOT" && "$CODEX_BIN" exec \
     --output-schema "$SCHEMA" \
     -o "$VERDICT" \
     -m "$CR_MODEL" \
     --dangerously-bypass-approvals-and-sandbox \
-    - < "$INSTR")
+    - < "$INSTR" 2>&1 | tee "$SESSION_LOG")
+}
+
+used_tools() {
+  [ -f "$SESSION_LOG" ] || return 1
+  grep -qE '^(exec|hook: PreToolUse)$' "$SESSION_LOG"
 }
 START=$(date +%s)
 attempt=1
-until run_codex && bash "$VALIDATE" "$VERDICT"; do
-  [ "$attempt" -ge 2 ] && die "第 $N 轮：评审员两次尝试均失败或 verdict 校验不过，停止（产物见 ${ROUND_DIR}）"   # ${} 必须：bash 3.2 对 $var 紧跟多字节字符会解析出错误变量名
+until run_codex && used_tools && bash "$VALIDATE" "$VERDICT"; do
+  used_tools || echo "cr-round: 评审员未执行任何命令，判定无效" >&2
+  [ "$attempt" -ge 2 ] && die "第 $N 轮：评审员两次尝试均失败、未执行命令或 verdict 校验不过，停止（产物见 ${ROUND_DIR}）"   # ${} 必须：bash 3.2 对 $var 紧跟多字节字符会解析出错误变量名
   attempt=$((attempt + 1))
   echo "cr-round: 第 1 次尝试失败，重试中……" >&2
 done

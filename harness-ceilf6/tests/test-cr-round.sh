@@ -153,5 +153,19 @@ STUB_STATE="$state" STUB_MODE=pass CODEX_BIN="$STUB" bash "$CR" --dir "$ctx" >/d
 grep -q 'git diff origin/master\.\.\.HEAD' "$ctx/cr/round-1/instructions.md" && ok "范围用 origin/master" || bad "范围未用 origin/master"
 cleanup_repo
 
+# ---- 评审员未执行任何命令时判定无效 ----
+echo "== 未执行命令的判定无效 =="
+make_ctx
+state=$(mktemp -d)
+err=$(mktemp)
+if STUB_STATE="$state" STUB_MODE=pass STUB_NO_TOOLS=1 CODEX_BIN="$STUB" bash "$CR" --dir "$ctx" >/dev/null 2>"$err"; then
+  bad "零命令判定被拒绝"
+else
+  grep -q "未执行任何命令" "$err" && ok "零命令判定被拒绝" || bad "零命令判定被拒绝"
+fi
+[ -f "$ctx/cr/round-1/review.md" ] && bad "零命令时不产 review.md" || ok "零命令时不产 review.md"
+rm -f "$err"
+cleanup_repo
+
 echo; echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" = 0 ]

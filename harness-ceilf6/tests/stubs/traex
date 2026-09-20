@@ -10,6 +10,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 cat > /dev/null   # 消费 stdin（instructions.md）
+# 真评审员会在会话输出里留下工具调用痕迹，cr-round.sh 据此判断本轮是否实跑；STUB_NO_TOOLS=1 模拟不跑命令的评审员。
+[ "${STUB_NO_TOOLS:-0}" = 1 ] || echo exec
 [ -n "$out" ] || { echo "stub: 未收到 -o" >&2; exit 9; }
 
 count_file="${STUB_STATE:?stub 需要 STUB_STATE 环境变量}/calls"
