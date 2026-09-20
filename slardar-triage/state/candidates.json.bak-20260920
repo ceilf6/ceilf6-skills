@@ -1,0 +1,243 @@
+{
+  "938f8ba377ac6484ba8918b19f247350": {
+    "issue_id": "938f8ba377ac6484ba8918b19f247350",
+    "family_key": "common.getAvatarBase64 timeout after 60s",
+    "bid": "vc_ai",
+    "message": "common.getAvatarBase64_<n> timeout after 60s",
+    "member_issue_ids": [
+      "938f8ba377ac6484ba8918b19f247350"
+    ],
+    "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1789033566&end_time=1789119966&site_type=web&region=cn&issue_id=938f8ba377ac6484ba8918b19f247350&layout=normal&release=7.76.0.234",
+    "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1788515166&end_time=1789119966&filter_id=f4939c17bc3eacc99e5f8c2d402f5eb4",
+    "users": 30875,
+    "count": 73606,
+    "first_seen": null,
+    "likelihood": "高",
+    "summary": "移动端头像拉取无 catch 无缓存,60s 超时未捕获",
+    "first_seen_at": "2026-09-08T08:51:03Z",
+    "refreshed_at": "2026-09-11T09:46:06.608Z",
+    "stale_count": 0,
+    "status": "dispatched",
+    "decision": {
+      "task_id": "task_20260908T085103Z_8f582c38",
+      "supplement": "(迁移前派单,无人工确认信息)",
+      "at": "2026-09-08T08:51:03Z"
+    }
+  },
+  "b1071995655bbebf583ae422aa64c7ae": {
+    "issue_id": "b1071995655bbebf583ae422aa64c7ae",
+    "family_key": "[InvokeServierPBFast error]: logId=<id>, invalid user",
+    "bid": "vc_ai",
+    "message": "[InvokeServierPBFast error]: logId=<id>, invalid user",
+    "member_issue_ids": [
+      "b1071995655bbebf583ae422aa64c7ae"
+    ],
+    "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1789033566&end_time=1789119966&site_type=web&region=cn&issue_id=b1071995655bbebf583ae422aa64c7ae&layout=normal&release=7.76.0.234",
+    "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1788515166&end_time=1789119966&filter_id=3ca0cf1cd817f02a4e1f53eefe31def0",
+    "users": 13415,
+    "count": 49794,
+    "first_seen": null,
+    "likelihood": "高",
+    "summary": "AI 布局鱼骨图拉取失败未捕获",
+    "first_seen_at": "2026-09-08T08:51:03Z",
+    "refreshed_at": "2026-09-11T09:46:06.608Z",
+    "stale_count": 0,
+    "status": "dispatched",
+    "decision": {
+      "task_id": "task_20260909T033115Z_2e93a1b9",
+      "supplement": "(迁移前派单,无人工确认信息)",
+      "at": "2026-09-09T03:31:19Z"
+    }
+  },
+  "aaaed08b947f7c1730c780ec481b0cee": {
+    "issue_id": "aaaed08b947f7c1730c780ec481b0cee",
+    "family_key": "业务错误，ErrorInfo: code: 220301,larkErrorCode: 220301,debugMessage: invalid user,displayMessage: invalid user,userErrTitle: ,requestID: <id>,ttLogId: <id>",
+    "bid": "vc_ai",
+    "message": "业务错误，ErrorInfo: code: 220301,larkErrorCode: 220301,debugMessage: invalid user,displayMessage: invalid user,userErrTitle: ,requestID: ,ttLogId: Optional(\"20260911174557DC0AE4E0327510EDBFCA\")",
+    "member_issue_ids": [
+      "aaaed08b947f7c1730c780ec481b0cee"
+    ],
+    "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1789637699&end_time=1789724099&site_type=web&region=cn&issue_id=aaaed08b947f7c1730c780ec481b0cee&layout=normal&release=1.0.0.360",
+    "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1789119299&end_time=1789724099&filter_id=2ae68b162ad14577eba526441991f900",
+    "users": 14666,
+    "count": 144254,
+    "first_seen": 1789033566083,
+    "likelihood": "低",
+    "summary": "服务端错误码 220301 invalid user；页面 100% doubao-ai-layout-mobile",
+    "first_seen_at": "2026-09-11T09:46:06.608Z",
+    "refreshed_at": "2026-09-18T09:34:59.384Z",
+    "stale_count": 0,
+    "status": "pending",
+    "decision": null
+  },
+  "9491f36c4f6de64beb6e43092758d87d": {
+    "issue_id": "9491f36c4f6de64beb6e43092758d87d",
+    "family_key": "APINotProvided",
+    "bid": "vc_ai",
+    "message": "APINotProvided",
+    "member_issue_ids": [
+      "9491f36c4f6de64beb6e43092758d87d",
+      "240971710520850c0091a8716fce41f2"
+    ],
+    "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1789637699&end_time=1789724099&site_type=web&region=cn&issue_id=9491f36c4f6de64beb6e43092758d87d&layout=normal&release=1.0.0.360",
+    "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1789119299&end_time=1789724099&filter_id=5fecb58c725d53f4a22a64599e0160bf",
+    "users": 82110,
+    "count": 152214,
+    "first_seen": 1789033566011,
+    "likelihood": "低",
+    "summary": "宿主未注入 API；页面 100% doubao-ai-layout-mobile",
+    "first_seen_at": "2026-09-11T09:46:06.608Z",
+    "refreshed_at": "2026-09-18T09:34:59.384Z",
+    "stale_count": 0,
+    "status": "pending",
+    "decision": null
+  },
+  "b2e3841f80ed849311b3abbb90aa4f4c": {
+    "issue_id": "b2e3841f80ed849311b3abbb90aa4f4c",
+    "family_key": "[warn] FishBoneError: fishBone out of screen",
+    "bid": "vc_ai",
+    "message": "[warn] FishBoneError: fishBone out of screen",
+    "member_issue_ids": [
+      "b2e3841f80ed849311b3abbb90aa4f4c"
+    ],
+    "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1789637699&end_time=1789724099&site_type=web&region=cn&issue_id=b2e3841f80ed849311b3abbb90aa4f4c&layout=normal&release=7.77.0.21",
+    "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1789119299&end_time=1789724099&filter_id=64e363fdf6d6cbd37a44f41f20ea8e2c",
+    "users": 28743,
+    "count": 30266,
+    "first_seen": 1789033567277,
+    "likelihood": "排除",
+    "summary": "[warn] 级上报",
+    "first_seen_at": "2026-09-11T09:46:06.608Z",
+    "refreshed_at": "2026-09-18T09:34:59.384Z",
+    "stale_count": 0,
+    "status": "pending",
+    "decision": null
+  },
+  "69917af7281bc5e8864ade2aa862cd91": {
+    "issue_id": "69917af7281bc5e8864ade2aa862cd91",
+    "family_key": "invokeAsyncWithServerPBFast timeout after 10000ms",
+    "bid": "vc_ai",
+    "message": "invokeAsyncWithServerPBFast timeout after 10000ms",
+    "member_issue_ids": [
+      "69917af7281bc5e8864ade2aa862cd91"
+    ],
+    "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1789033566&end_time=1789119966&site_type=web&region=cn&issue_id=69917af7281bc5e8864ade2aa862cd91&layout=normal&release=7.76.0.234",
+    "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1788515166&end_time=1789119966&filter_id=b7c688556f5713abeb01106ebd359855",
+    "users": 14530,
+    "count": 21605,
+    "first_seen": 1789033566754,
+    "likelihood": "中",
+    "summary": "本次未进 top10、无抽样详情；PB 通道 10s 超时，待下次扫描补证据",
+    "first_seen_at": "2026-09-11T09:46:06.608Z",
+    "refreshed_at": "2026-09-11T09:46:06.608Z",
+    "stale_count": 1,
+    "status": "pending",
+    "decision": null
+  },
+  "4e2a4c98284f2d5c6bf5e3cd7d3d172d": {
+    "issue_id": "4e2a4c98284f2d5c6bf5e3cd7d3d172d",
+    "family_key": "[warn] CommonError: [InvokeServierPBFast error]: logId=<id>, invalid user",
+    "bid": "vc_ai",
+    "message": "[warn] CommonError: [InvokeServierPBFast error]: logId=202609111745551E0870B178CB7CF0A239, invalid user",
+    "member_issue_ids": [
+      "4e2a4c98284f2d5c6bf5e3cd7d3d172d"
+    ],
+    "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1789033566&end_time=1789119966&site_type=web&region=cn&issue_id=4e2a4c98284f2d5c6bf5e3cd7d3d172d&layout=normal&release=7.76.0.234",
+    "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1788515166&end_time=1789119966&filter_id=f933efadb20633b0cf4d0281faac1922",
+    "users": 19041,
+    "count": 19659,
+    "first_seen": 1789033566660,
+    "likelihood": "排除",
+    "summary": "[warn] 级上报",
+    "first_seen_at": "2026-09-11T09:46:06.608Z",
+    "refreshed_at": "2026-09-11T09:46:06.608Z",
+    "stale_count": 1,
+    "status": "pending",
+    "decision": null
+  },
+  "67257ea434d49854d38d698fd1fe63fe": {
+    "issue_id": "67257ea434d49854d38d698fd1fe63fe",
+    "family_key": "invalid user",
+    "bid": "vc_ai",
+    "message": "invalid user",
+    "member_issue_ids": [
+      "67257ea434d49854d38d698fd1fe63fe"
+    ],
+    "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1789637699&end_time=1789724099&site_type=web&region=cn&issue_id=67257ea434d49854d38d698fd1fe63fe&layout=normal&release=7.77.0.21",
+    "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1789119299&end_time=1789724099&filter_id=d1adf8ee7c9a2eecb44580db54f5442c",
+    "users": 4400,
+    "count": 14763,
+    "first_seen": 1789033576229,
+    "likelihood": "低",
+    "summary": "message 为 invalid user，服务端鉴权结果",
+    "first_seen_at": "2026-09-11T09:46:06.608Z",
+    "refreshed_at": "2026-09-18T09:34:59.384Z",
+    "stale_count": 0,
+    "status": "pending",
+    "decision": null
+  },
+  "a5300cba49f27168bf68fedb86457cde": {
+    "issue_id": "a5300cba49f27168bf68fedb86457cde",
+    "family_key": "[native-api] common.getAvatarBase64 timed out after 60000ms",
+    "bid": "vc_ai",
+    "message": "[native-api] common.getAvatarBase64 timed out after 60000ms",
+    "member_issue_ids": [
+      "a5300cba49f27168bf68fedb86457cde",
+      "740344cb27e680e91f285cf8924e1aaf"
+    ],
+    "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1789637699&end_time=1789724099&site_type=web&region=cn&issue_id=a5300cba49f27168bf68fedb86457cde&layout=normal&release=7.77.0.21",
+    "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1789119299&end_time=1789724099&filter_id=e7555697ccd84d129afd925d6a935602",
+    "users": 31451,
+    "count": 58156,
+    "first_seen": 1789637699475,
+    "likelihood": "中",
+    "summary": "95% 在妙记移动端，master 已由 43607cff5 改走 web 地址但未进 7.77.0.21；残余 VC 移动端 chatter.ts:44 仍无 catch，属已派单 938f8ba3（分支未合入）",
+    "first_seen_at": "2026-09-18T09:34:59.384Z",
+    "refreshed_at": "2026-09-18T09:34:59.384Z",
+    "stale_count": 0,
+    "status": "pending",
+    "decision": null
+  },
+  "8fa2bf7fe1bb48335eb9d75827c7ebd4": {
+    "issue_id": "8fa2bf7fe1bb48335eb9d75827c7ebd4",
+    "family_key": "[warn] CommonError: [InvokeServierPBFast error]: logId=<id>, invalid user",
+    "bid": "vc_ai",
+    "message": "[warn] CommonError: [InvokeServierPBFast error]: logId=2026091817344003B96CBF4FF0D90020B2, invalid user",
+    "member_issue_ids": [
+      "8fa2bf7fe1bb48335eb9d75827c7ebd4"
+    ],
+    "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1789637699&end_time=1789724099&site_type=web&region=cn&issue_id=8fa2bf7fe1bb48335eb9d75827c7ebd4&layout=normal&release=7.77.0.21",
+    "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1789119299&end_time=1789724099&filter_id=177c31805455e02bd715693c0ceb7c4d",
+    "users": 17495,
+    "count": 18006,
+    "first_seen": 1789637699495,
+    "likelihood": "排除",
+    "summary": "[warn] 级上报",
+    "first_seen_at": "2026-09-18T09:34:59.384Z",
+    "refreshed_at": "2026-09-18T09:34:59.384Z",
+    "stale_count": 0,
+    "status": "pending",
+    "decision": null
+  },
+  "f49170ba664fefd93aede453eb5dc3ba": {
+    "issue_id": "f49170ba664fefd93aede453eb5dc3ba",
+    "family_key": "[native-api] command=94003 timed out after 10000ms",
+    "bid": "vc_ai",
+    "message": "[native-api] command=94003 timed out after 10000ms",
+    "member_issue_ids": [
+      "f49170ba664fefd93aede453eb5dc3ba"
+    ],
+    "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1789637699&end_time=1789724099&site_type=web&region=cn&issue_id=f49170ba664fefd93aede453eb5dc3ba&layout=normal&release=7.77.0.21",
+    "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1789119299&end_time=1789724099&filter_id=595b5378ba6ebef8faa6a4d89380a6ed",
+    "users": 12002,
+    "count": 16370,
+    "first_seen": 1789637701079,
+    "likelihood": "中",
+    "summary": "端日志 batch 4820101 定性：弱网击穿 web 侧 10s 超时（send 阶段 10.17s，服务端 inner 71ms），服务端与网关正常；web 侧缺陷只剩 getFishBoneData 无 catch 导致 unhandledrejection 全量上报，可选加重试",
+    "first_seen_at": "2026-09-18T09:34:59.384Z",
+    "refreshed_at": "2026-09-18T09:34:59.384Z",
+    "stale_count": 0,
+    "status": "pending",
+    "decision": null
+  }
+}
