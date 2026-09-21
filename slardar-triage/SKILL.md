@@ -1,13 +1,13 @@
 ---
 name: slardar-triage
-description: 扫描 Slardar 近 24h 线上 JS 错误（只看 vc_ai，即 vc-ai 方向），挑出一条最可能在 vc-ai 内通过代码修复、且尚未派过单的告警，只呈现现象、报错与 Issue 链接，随后一次一问引导用户收敛技术方案；用户说「派这条」才建 Meego、经 traecli 起 omh、登记看板。派出去的单不跟踪去向，只永久算已处理。量级与分布不展示但每次扫描记台账。当用户说「扫一下线上告警」「看看 Slardar」「挑一个告警看看」「换一条」「派这条」「这条不修」时使用。
+description: 扫描 Slardar 近 24h 线上 JS 错误（只看 vc_ai，即 vc-ai 方向），挑出一条最可能在 vc-ai 内通过代码修复、且尚未派过单的告警，只呈现现象、报错与 Issue 链接，随后一次一问引导用户收敛技术方案；用户说「派这条」才建 Meego、转交 byteview-web-harness 任务链修复、登记看板。派出去的单不跟踪去向，只永久算已处理。量级与分布不展示但每次扫描记台账。当用户说「扫一下线上告警」「看看 Slardar」「挑一个告警看看」「换一条」「派这条」「这条不修」时使用。
 ---
 
 # slardar-triage
 
-技能目录 `<skill>` = 本文件所在目录；状态目录 `<state>` = `<skill>/state`；byteview-web 仓 `<repo>` = 当前 cwd 的 `../byteview-web`（`--repo` 可改）。所有脚本 stdout 只有一行 JSON。
+技能目录 `<skill>` = 本文件所在目录；状态目录 `<state>` = `<skill>/state`；byteview-web 仓 `<repo>` = 当前 cwd 的 `../byteview-web`（`--repo` 可改）。所有脚本 stdout 只有一行 JSON。派单在 byteview-web-harness 仓内进行，`<harness>` = 当前 cwd。
 
-**默认唤醒不建 Meego、不起 omh、不登记看板、无任何外发动作**，只写 `<state>/`。agent 读代码得出的判断只用来选取和安排提问顺序；技术方案由用户在对话里逐项拍板。
+**默认唤醒不建 Meego、不建 harness 任务、不登记看板、无任何外发动作**，只写 `<state>/`。agent 读代码得出的判断只用来选取和安排提问顺序；技术方案由用户在对话里逐项拍板。
 
 **本技能只管「适合修且还没派过单」的告警。** 派出去的单不再跟踪去向：不查 omh 阶段、不查 MR 是否合入、不看修复是否见效。`status=dispatched` 与 `status=rejected` 一律永久算已处理，只用于把同一缺陷的候选排除出短名单。
 
@@ -32,7 +32,7 @@ ls <repo>/node_modules/.bin/slardar-web-cli
 <repo>/node_modules/.bin/slardar-web-cli --raw js-error list --bid vc_ai --env online --site-type web --start-time $(( $(date +%s) - 600 )) --end-time $(date +%s) --page-size 1
 git -C <repo> fetch origin master
 ```
-失败对应的补法：JWT → 让用户在本机执行 `npx -y agentbuddy get-jwt`；fetch 失败 → 报网络/权限。默认路径不需要 Meego / traecli，它们只在派单前校验。
+失败对应的补法：JWT → 让用户在本机执行 `npx -y agentbuddy get-jwt`；fetch 失败 → 报网络/权限。默认路径不需要 Meego，它只在派单前校验。
 
 ### 2. 扫描
 
@@ -108,22 +108,29 @@ Issue：<issue_url>
 
 派的 Meego 条目是**技术需求（story，模板 498109）**，不是缺陷：这批是自查出来的稳定性治理，有技术方案、排期、MR 与验收，对应的就是技术需求的节点流；缺陷的 `RESOLVED` 确认表单要求缺陷引入版本 / 引入日期 / 关联需求这类 per-case 值，机械层给不出默认值，每条都得人工点完才能收束。建单不自持字段配方，走 `bytedcli-meego` 的机械层（`MEEGO_SH` / `MEEGO_REPO` 可覆盖）。
 
+派单 = 本技能做 Slardar 特有的准备，随后把任务交给 byteview-web-harness 的任务链。引导式收敛承担澄清与方案，【技术方案】回显加「派这条」即用户批准，所以从 `task-schedule` 一步接入；本技能不开 worktree、不起 omh。
+
 1. 本会话没有回显过【技术方案】：不派，回话题说明要先走收敛对话。「补充」= 回显的技术方案原文（含用户之后的修改）。
 2. 核对：`node <skill>/scripts/state.mjs pending --dir <state>` 里存在该 issue 且 status=pending；否则回话题说明（已派 / 已拒 / 不在池中）。
-3. 派单前校验：`bash ~/.claude/skills/bytedcli-meego/scripts/meego.sh map get --repo lark/byteview-web`（应答须含 `template_id` / `dev_owner_key`，回 `{"skipped":true}` 说明仓库没进配置）、`command -v traecli omh-cli orchestrator`，缺则停。
+3. 派单前校验，缺则停：`test -f skills/task-schedule/scripts/task-schedule.js`（不成立说明 cwd 不是 byteview-web-harness 仓，回话题说明派单须在该仓内进行）；`bash ~/.claude/skills/bytedcli-meego/scripts/meego.sh map get --repo lark/byteview-web`（应答须含 `template_id` / `dev_owner_key`，回 `{"skipped":true}` 说明仓库没进配置）；`command -v omh-cli orchestrator`。
 4. 写任务书：按 `<skill>/references/task-book-template.md`，第 0 节原样收录技术方案；第 1 节的量级与分布取自 `<scan.json>`；第 2 节线上代码用主流程第 4 步查到的 commit；第 3、4 节按方案的缺陷点位、根因、改动范围写；第 5 节首条 AC 写方案的验收方式（复现步骤、改动前实际表现、期望表现）。`{{meego_url}}` 保留占位。
 5. 写 Meego 描述文件：现象 / 根因 / 修法 / Slardar 链接（`issue_url`，用 `[]` 包裹），末尾「【人工确认】<技术方案原文>」。标题带「线上告警修复」前缀，这批单日后靠它在需求里捞得出来。
-6. 派发（在本会话 cwd 下执行，不要先 `cd` 进工作区）：
+6. 准备：
 ```bash
-bash <skill>/scripts/dispatch.sh --state <state> --issue-id <id> --slug <kebab-摘要>-$(date +%F) --task-book <任务书路径> --meego-desc <描述文件> --meego-name "<Meego 标题>" --repo <repo> --slardar-url "<issue_url>"
+bash <skill>/scripts/prepare-dispatch.sh --state <state> --issue-id <id> --slug <kebab-摘要>-$(date +%F) --task-book <任务书路径> --meego-desc <描述文件> --meego-name "<Meego 标题>" --slardar-url "<issue_url>"
 ```
-退出 3：已有未到终态的 omh Task，错误信息里带它的 phase 与工作区，原样转述；退出 4：runtime 不符已 cancel，不重试；退出 1：写停在哪一步，下次「派这条」会续派。输出的 `board` 字段是看板登记结果，失败写原因。
-7. 成功后（`--fix-paths` 取方案「改动范围」里的仓内路径，逗号分隔，不含测试文件）：
+输出 `meego_url` 与渲染后的 `task_book`。退出 3：已有未到终态的 omh Task，错误信息里带它的 phase 与工作区，原样转述；退出 1：写停在哪一步，下次「派这条」会续做。
+7. 锚定：按 `<harness>/skills/harness-context/SKILL.md` 把 Slardar issue 链接、Meego 链接与【技术方案】原文存入 context store。`--task-name` 用第 6 步的 slug，与第 8 步一致——`task-schedule create` 按同名 staging 把上下文落进正式任务目录，名字对不上会被静默跳过。
+8. 建任务：按 `<harness>/skills/task-schedule/SKILL.md`「创建任务」执行——`--task-name` 用第 6 步的 slug，`--branch-prefix feat`，`--repos byteview-web`，`--approved-plan-file` 用第 6 步输出的 `task_book`，`--goal-summary` 用呈现时的「现象」一句话；thread 参数按该 skill 的规则取。
+9. 执行：按 `<harness>/skills/task-execute/SKILL.md` 执行。渲染 omh-loop handoff 时 `<stage_goal>` 写明：workflow 用 `pc-web-bugfix`；任务书即已批准方案，无需再 plan；Meego 已提供（见任务书首行）。
+10. omh-loop 建单返回 `task_id` 后立即落账并登记个人看板——在 spawn monitor 之前，不等终态：处置账里的这条记录是拦住并发第二单的依据。`--task-id` 用 omh-loop 建单返回的 `task_id`（不是 monitor 用的 session id，可在 `<worktree>/.omh/tasks/` 下确认）；`--workspace` 是 byteview-web worktree 的绝对路径，即 `<harness>/` 接上 `task-schedule create` 输出的 `repos[].path`；`--fix-paths` 取方案「改动范围」里的仓内路径，逗号分隔，不含测试文件：
 ```bash
-node <skill>/scripts/state.mjs dispatched --dir <state> --issue-id <id> --task-id <task_id> --supplement "<技术方案原文>" --fix-paths <a,b>
+node <skill>/scripts/state.mjs dispatched --dir <state> --issue-id <id> --task-id <task_id> --task-slug <taskSlug> --workspace <worktree 绝对路径> --supplement "<技术方案原文>" --fix-paths <a,b>
+bash <skill>/scripts/board.sh --state <state> --issue-id <id>
 ```
-8. 经 lark-sediment skill 沉淀：现象、派单时量级（`history` 最后一行 `rows` 的次数 / 用户 / 分布主项）、技术方案、Meego 链接、Task ID。这是本技能唯一的外发动作，只发生在派单当次。
-9. 回话题：Issue 一句话、Meego 链接、Task ID、工作区、看板登记结果、预计约 3 小时、叫停命令 `orchestrator task-cancel --task-id <id>`。派完就不再跟这条单，后续进度由用户自己在 Meego / 看板上看。
+`board.sh` 输出的是个人看板登记结果，失败写原因，不影响任务推进。
+11. 经 lark-sediment skill 沉淀：现象、派单时量级（`history` 最后一行 `rows` 的次数 / 用户 / 分布主项）、技术方案、Meego 链接、taskSlug、Task ID。这是本技能唯一的外发动作，只发生在派单当次。
+12. 回话题：Issue 一句话、Meego 链接、taskSlug、Task ID、worktree、个人看板登记结果。叫停：在 worktree 内 `orchestrator task-cancel --task-id <id>`，再按 task-schedule 把任务置为 `cancelled_pending_confirmation`。派单后本技能不再跟这条单；omh 的陪跑、confirm / unblock 与阻塞上报，是 task-execute 对当前会话的约束。
 
 ## 纪律
 
@@ -131,6 +138,6 @@ node <skill>/scripts/state.mjs dispatched --dir <state> --issue-id <id> --task-i
 - 选取不看 users / count，它们只决定短名单里的验证顺序；拿不准归中。
 - 呈现与收敛对话里，结论由用户说出或在用户要求「说说你的判断」后给出。
 - 写答辩或复盘材料要某条告警的量级时间线：`node <skill>/scripts/state.mjs history --dir <state> --issue-id <id>`，基线取派单时那一行。没派过单的候选没有「派单前」参照，`recovery.ratio` 为 null；`latest_present` 为 false 时 `ratio` 按那次扫描的最小次数算，是上界而不是实测值。技能不判定修复是否见效，这个数只是给人看的原始材料。
-- omh 永远经 `traecli exec` 起（dispatch.sh 内置）。
-- 看板登记的是调用本技能的 claude 线程；meta 带 meego_id / meego_type=story / meego_url / slardar_url，看板点「完成」时 `meego.sh done` 据 meego_type 推需求节点。补登记：`bash <skill>/scripts/board.sh --state <state> --issue-id <id> [--mr-id] [--session-id] [--slardar-url]`，`--mr-id` 由调用者手给，技能自己不去查。
+- 派单只经 byteview-web-harness 任务链；本技能不开 worktree、不起 omh。
+- 个人看板登记的是调用本技能的 claude 线程；meta 带 meego_id / meego_type=story / meego_url / slardar_url，看板点「完成」时 `meego.sh done` 据 meego_type 推需求节点。看板 ctx 在 `<state>/board/<slug>`，不随 harness 回收 worktree 而消失；harness 看板由 `workspaces/tasks/<taskSlug>/task.json` 自动呈现，无需登记。补登记：`bash <skill>/scripts/board.sh --state <state> --issue-id <id> [--mr-id] [--session-id] [--slardar-url]`，`--mr-id` 由调用者手给，技能自己不去查。
 - 向其他 bot 要结论时，消息里要显式要求对方 `--mention` 回本 bot，否则回答只到人那里，自己收不到；查 open_id 用 `botmux bots list`，细节见 `<skill>/references/log-forensics.md`。

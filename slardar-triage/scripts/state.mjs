@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 候选池、处置账与台账的唯一读写点。candidates.json 是 agent 从中选取、由用户决策的池子；
-// dispatched.json 是 dispatch.sh / board.sh 共用的派单处置账，两者按 issue_id 对齐；
+// dispatched.json 是 prepare-dispatch.sh / board.sh 共用的派单处置账，两份文件按 issue_id 对齐；
 // ledger.jsonl 是每次扫描每族一行的量级台账。
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
@@ -113,11 +113,17 @@ export function reject(state, issueId, reason, now) {
   state.candidates[issueId] = { ...c, status: 'rejected', decision: { reason, at: now } };
 }
 
-export function markDispatched(state, issueId, { task_id, supplement, fix_paths, at }) {
+export function markDispatched(state, issueId, { task_id, task_slug, workspace, supplement, fix_paths, at }) {
   const c = state.candidates[issueId];
   if (!c) throw new Error(`候选池里没有 ${issueId}`);
   state.candidates[issueId] = { ...c, status: 'dispatched', decision: { task_id, supplement: supplement ?? '', fix_paths: fix_paths ?? [], at } };
-  state.dispatched[issueId] = { ...(state.dispatched[issueId] ?? {}), task_id };
+  state.dispatched[issueId] = {
+    ...(state.dispatched[issueId] ?? {}),
+    task_id,
+    ...(task_slug ? { task_slug } : {}),
+    ...(workspace ? { workspace } : {}),
+    dispatched_at: at,
+  };
 }
 
 // covered_by 只是归属链接，候选仍是 pending；剔除由 pick 按归属的单是否已派单现算。
@@ -348,7 +354,7 @@ function listArg(name) {
 
 const NEEDS_ISSUE_ID = new Set(['judge', 'reject', 'dispatched', 'cover', 'history']);
 
-const USAGE = '用法: state.mjs merge|pick|pending|judge|reject|dispatched|cover|history --dir <state> [--scan <scan.json>] [--skip <id,id>] [--issue-id <id>] [--by <id>] [--likelihood <档>] [--summary <text>] [--reason <text>] [--task-id <id>] [--supplement <text>] [--fix-paths <a,b>]\n';
+const USAGE = '用法: state.mjs merge|pick|pending|judge|reject|dispatched|cover|history --dir <state> [--scan <scan.json>] [--skip <id,id>] [--issue-id <id>] [--by <id>] [--likelihood <档>] [--summary <text>] [--reason <text>] [--task-id <id>] [--task-slug <slug>] [--workspace <abs>] [--supplement <text>] [--fix-paths <a,b>]\n';
 
 function usageExit() {
   process.stderr.write(USAGE);
@@ -379,7 +385,9 @@ if (isMain()) {
       saveState(dir, state);
       process.stdout.write(`${JSON.stringify({ ok: true, rejected: arg('--issue-id') })}\n`);
     } else if (cmd === 'dispatched') {
-      markDispatched(state, arg('--issue-id'), { task_id: arg('--task-id'), supplement: arg('--supplement') ?? '', fix_paths: listArg('--fix-paths'), at: now });
+      // 在途检查与 board.sh 都按 task_id + workspace 定位 omh Task，缺一条这单就查不到。
+      for (const k of ['--task-id', '--workspace']) if (!arg(k)) throw new Error(`缺 ${k}`);
+      markDispatched(state, arg('--issue-id'), { task_id: arg('--task-id'), task_slug: arg('--task-slug'), workspace: arg('--workspace'), supplement: arg('--supplement') ?? '', fix_paths: listArg('--fix-paths'), at: now });
       saveState(dir, state);
       process.stdout.write(`${JSON.stringify({ ok: true, dispatched: arg('--issue-id') })}\n`);
     } else if (cmd === 'pick') {

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# 把一条已派发的单登记到 harness 看板：写 ctx meta.json（含 Meego 绑定，看板点「完成」时
+# 把一条已派发的单登记到 harness-ceilf6 个人看板：写 ctx meta.json（含 Meego 绑定，看板点「完成」时
 # meego.sh done 据此推需求节点），再在当前进程 cwd 下调 threads.sh register。
-# 登记的是调用本脚本的 claude 线程（cwd + CLAUDE_CODE_SESSION_ID），不是 traecli 宿主。
+# 登记的是调用本脚本的 claude 线程（cwd + CLAUDE_CODE_SESSION_ID），即陪跑 harness 任务的主会话。
 # 用法: board.sh --state <dir> --issue-id <id> [--title <短题>] [--mr-id <id>] [--session-id <sid>]
 # stdout 一行 JSON {ok, ctx_dir, error?, warning?}；退出码恒 0（登记失败不该拖垮调用方）。
 set -uo pipefail
@@ -29,11 +29,13 @@ meego_id=$(get .meego_id); meego_url=$(get .meego_url)
 if [ -n "$slardar_url" ]; then set_ ".slardar_url" "$(jq -Rn --arg u "$slardar_url" '$u')"; else slardar_url=$(get .slardar_url); fi
 { [ -n "$slug" ] && [ -n "$ws" ]; } || { echo '{"ok":false,"error":"处置账缺 slug 或 workspace"}'; exit 0; }
 
-ctx="$ws/.harness-ceilf6/$slug"
+# ctx 放在 state 目录下：workspace 是 harness 托管的 worktree，任务回收时会被整体删除，
+# 而看板条目（含 Meego 绑定）要活到缺陷流转完成。threads.sh 只存指针，须是绝对路径。
+ctx="$(cd "$state" && pwd -P)/board/$slug"
 mkdir -p "$ctx"
 # branch 记登记时 cwd 的当前分支：threads.sh 拼唤回命令时若发现 cwd 分支与 meta.branch
-# 不一致会插一句 git checkout，而 omh 基线分支只存在于工作区、不在会话 cwd 的仓库里。
-cur_branch=$(git symbolic-ref --short -q HEAD 2>/dev/null || echo "omh-base/$slug")
+# 不一致会插一句 git checkout，而任务分支只存在于 worktree、不在会话 cwd 的仓库里。
+cur_branch=$(git symbolic-ref --short -q HEAD 2>/dev/null || echo "feat-$slug")
 existing='{}'; [ -f "$ctx/meta.json" ] && existing=$(cat "$ctx/meta.json")
 # 备注是 CR 时看上下文的入口：Slardar 告警链接放最前，其后是 Meego 与 Task。备注每次登记都按现状重写。
 note="Meego ${meego_url} · Task ${task_id}"

@@ -110,6 +110,35 @@ test('reject 与 markDispatched 记录决策并改状态，之后不再出现在
   assert.equal(state.dispatched.i1.task_id, 'task_x');
 });
 
+test('markDispatched 把 harness 产物记进处置账，保留已有字段', () => {
+  const { state } = mergeScan(empty(), [scanned()], 't0');
+  state.dispatched.i1 = { meego_url: 'https://meego/1', steps: { meego: 'done' } };
+  markDispatched(state, 'i1', { task_id: 'task_x', task_slug: 'avatar-2026-09-21', workspace: '/h/workspaces/tasks/avatar-2026-09-21/byteview-web', at: 't2' });
+  assert.deepEqual(state.dispatched.i1, {
+    meego_url: 'https://meego/1',
+    steps: { meego: 'done' },
+    task_id: 'task_x',
+    task_slug: 'avatar-2026-09-21',
+    workspace: '/h/workspaces/tasks/avatar-2026-09-21/byteview-web',
+    dispatched_at: 't2',
+  });
+});
+
+test('CLI dispatched 缺 --task-id 或 --workspace 报错且不落盘', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'st-'));
+  const scanFile = join(dir, 'scan.json');
+  writeFileSync(scanFile, JSON.stringify({ scanned_at: T0, candidates: [snap({ issue_id: 'i1', family_key: 'k1' })] }));
+  cli('merge', '--dir', dir, '--scan', scanFile);
+  const r = cliStatus('dispatched', '--dir', dir, '--issue-id', 'i1', '--task-id', 't');
+  assert.equal(r.status, 1);
+  assert.match(JSON.parse(r.stdout).error, /--workspace/);
+  assert.equal(loadState(dir).candidates.i1.status, 'pending');
+  const r2 = cliStatus('dispatched', '--dir', dir, '--issue-id', 'i1', '--workspace', '/h/ws/i1/byteview-web');
+  assert.equal(r2.status, 1);
+  assert.match(JSON.parse(r2.stdout).error, /--task-id/);
+  assert.equal(loadState(dir).candidates.i1.status, 'pending');
+});
+
 test('ledgerRows 每个扫描候选一行，带分布主项与池内状态；同族未入池的新 issue 记同族候选的状态', () => {
   const { state } = mergeScan(empty(), [snap()], T0);
   markDispatched(state, 'i1', { task_id: 't', supplement: 'x', at: T0 });
@@ -329,7 +358,9 @@ test('CLI pick / dispatched --fix-paths / cover 落盘并输出一行 JSON', () 
   const scan = { scanned_at: T0, candidates: [snap({ issue_id: 'old', family_key: 'k1' }), snap({ issue_id: 'new', family_key: 'k2', latest_event: frame() })] };
   writeFileSync(scanFile, JSON.stringify(scan));
   cli('merge', '--dir', dir, '--scan', scanFile);
-  assert.deepEqual(cli('dispatched', '--dir', dir, '--issue-id', 'old', '--task-id', 't', '--supplement', 's', '--fix-paths', 'vc-ai/src/x.ts, vc-ai/src/y.ts'), { ok: true, dispatched: 'old' });
+  assert.deepEqual(cli('dispatched', '--dir', dir, '--issue-id', 'old', '--task-id', 't', '--task-slug', 'old-2026-09-21', '--workspace', '/h/ws/old/byteview-web', '--supplement', 's', '--fix-paths', 'vc-ai/src/x.ts, vc-ai/src/y.ts'), { ok: true, dispatched: 'old' });
+  assert.equal(loadState(dir).dispatched.old.task_slug, 'old-2026-09-21');
+  assert.equal(loadState(dir).dispatched.old.workspace, '/h/ws/old/byteview-web');
   assert.deepEqual(loadState(dir).candidates.old.decision.fix_paths, ['vc-ai/src/x.ts', 'vc-ai/src/y.ts']);
   assert.deepEqual(cli('pick', '--dir', dir, '--scan', scanFile).shortlist.map((c) => c.issue_id), ['new']);
   assert.deepEqual(cli('pick', '--dir', dir, '--scan', scanFile, '--skip', 'new').shortlist, []);
@@ -418,7 +449,7 @@ test('history 记录派单与拒绝事件；CLI history 输出一行 JSON', () =
   writeFileSync(scanFile, JSON.stringify({ scanned_at: T0, candidates: [snap(), snap({ issue_id: 'i2', family_key: 'f2' })] }));
   cli('merge', '--dir', dir, '--scan', scanFile);
   cli('reject', '--dir', dir, '--issue-id', 'i2', '--reason', '宿主问题');
-  cli('dispatched', '--dir', dir, '--issue-id', 'i1', '--task-id', 't');
+  cli('dispatched', '--dir', dir, '--issue-id', 'i1', '--task-id', 't', '--workspace', '/h/ws/i1/byteview-web');
   const h = cli('history', '--dir', dir, '--issue-id', 'i1');
   assert.equal(h.ok, true);
   assert.deepEqual(h.events.map((e) => e.type), ['first_seen', 'dispatched']);
