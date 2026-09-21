@@ -3,7 +3,7 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 CR="$HERE/../scripts/cr-round.sh"
 VAL="$HERE/../scripts/validate-verdict.sh"
-STUB="$HERE/stubs/traex"
+STUB="$HERE/stubs/codex"
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); echo "  ok: $1"; }
 bad() { FAIL=$((FAIL+1)); echo "  FAIL: $1"; }
@@ -143,6 +143,18 @@ make_ctx
 state=$(mktemp -d)
 STUB_STATE="$state" STUB_MODE=pass CODEX_BIN="$STUB" CR_MODEL=other-model bash "$CR" --dir "$ctx" >/dev/null
 grep -qx -- 'other-model' "$state/args" && ok "CR_MODEL 可覆盖" || bad "CR_MODEL 可覆盖"
+cleanup_repo
+
+make_ctx
+state=$(mktemp -d)
+STUB_STATE="$state" STUB_MODE=pass CODEX_BIN="$STUB" bash "$CR" --dir "$ctx" >/dev/null
+grep -qx -- 'model_reasoning_effort=high' "$state/args" && ok "默认推理强度 high" || bad "默认推理强度 high"
+cleanup_repo
+
+make_ctx
+state=$(mktemp -d)
+STUB_STATE="$state" STUB_MODE=pass CODEX_BIN="$STUB" CR_EFFORT=medium bash "$CR" --dir "$ctx" >/dev/null
+grep -qx -- 'model_reasoning_effort=medium' "$state/args" && ok "CR_EFFORT 可覆盖" || bad "CR_EFFORT 可覆盖"
 cleanup_repo
 
 echo "== 评审范围随 base 解析走远程跟踪 ref =="

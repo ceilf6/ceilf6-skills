@@ -11,7 +11,7 @@ SCHEMA="$SKILL_DIR/references/verdict.schema.json"
 TEMPLATE="$SKILL_DIR/references/cr-instructions.md"
 VALIDATE="$SKILL_DIR/scripts/validate-verdict.sh"
 CODEX_BIN="${CODEX_BIN:-codex}"
-CR_MODEL="${CR_MODEL:-gpt-6}"
+CR_MODEL="${CR_MODEL:-gpt-6-astra}"
 CR_EFFORT="${CR_EFFORT:-high}"
 
 need jq; need git; need "$CODEX_BIN"
