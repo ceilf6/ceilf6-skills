@@ -7,6 +7,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 MEEGO_CMD=${MEEGO_CMD:-bytedcli}; OMH_CLI=${OMH_CLI:-omh-cli}; TRAECLI=${TRAECLI:-traecli}; ORCH=${ORCH:-orchestrator}; PNPM=${PNPM:-pnpm}
 export OMH_CLI TRAECLI
 THREADS_SH=${THREADS_SH:-$HOME/.claude/skills/harness-ceilf6/scripts/threads.sh}
+WORKFLOW_WAIT_SECONDS=${WORKFLOW_WAIT_SECONDS:-600}
 TASK_WAIT_SECONDS=${TASK_WAIT_SECONDS:-1800}
 PK=5e96d7bff4e7c525510f9156
 OWNER=7657492291354954694
@@ -99,7 +100,9 @@ fi
 
 # --- 步骤 4：起 omh ---
 if ! step_done launch; then
-  log=$(bash "$HERE/launch-traex.sh" "$ws" "$final_book" "$WORKFLOW")
+  if ! log=$(bash "$HERE/launch-traex.sh" "$ws" "$final_book" "$WORKFLOW"); then
+    fail launch "omh-cli setup 失败，未起 exec，宿主日志：$log"
+  fi
   set_ ".host_log" "\"$log\""; set_ ".launched_at" "\"$(date -u +%FT%TZ)\""; set_ ".steps.launch" '"done"'
 fi
 
@@ -112,9 +115,16 @@ if ! step_done verify; then
     sleep 5
   done
   [ -n "$tid" ] || fail verify "等待 ${TASK_WAIT_SECONDS}s 未见任务目录，宿主日志：$(get .host_log)"
-  tg=$(cd "$ws" && "$ORCH" task-get --task-id "$tid" 2>/dev/null)
-  rt=$(echo "$tg" | jq -r '.task.host.runtime // empty'); wf=$(echo "$tg" | jq -r '.task.extras.platform_workflow_key // empty')
-  if [ "$rt" != traecli ] || [ "$wf" != "$WORKFLOW" ]; then
+  # platform_workflow_key 由 select_workflow 这一步写入,晚于任务目录出现,必须等它出现再比对,
+  # 否则会在窗口期读到空值把正常任务误 cancel。
+  rt=""; wf=""
+  for _ in $(seq 1 $((WORKFLOW_WAIT_SECONDS / 5 + 1))); do
+    tg=$(cd "$ws" && "$ORCH" task-get --task-id "$tid" 2>/dev/null)
+    rt=$(echo "$tg" | jq -r '.task.host.runtime // empty'); wf=$(echo "$tg" | jq -r '.task.extras.platform_workflow_key // empty')
+    [ -n "$wf" ] && break
+    sleep 5
+  done
+  if [ "$rt" != traecli ] || { [ -n "$wf" ] && [ "$wf" != "$WORKFLOW" ]; }; then
     (cd "$ws" && "$ORCH" task-cancel --task-id "$tid" >/dev/null 2>&1)
     fail verify "runtime=$rt workflow=$wf 不符，已 cancel $tid" 4
   fi
