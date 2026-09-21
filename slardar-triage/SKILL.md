@@ -63,6 +63,8 @@ node <skill>/scripts/state.mjs pick --dir <state> --scan <scan.json> [--skip <id
 ```
 按 `<skill>/references/likelihood.md` 对 `shortlist` 从头逐条读代码验证，**第一条判「高」就停**。读代码：`git -C <repo> show origin/master:<mapped_path> | sed -n '<line-30>,<line+30>p'`，位置已变时 `git -C <repo> log --oneline -5 origin/master -- <mapped_path>`、`git -C <repo> grep -n '<函数名>' origin/master -- <project_dir>`。线上 release 对应 commit：`bytedcli --json scm repo version list <scm_repo> --type online --version <release> --page-size 10` 取 `data.versions[].base_commit_hash`（vc_ai 同时试 `ee/lark/vc_ai` 与 `ee/lark/vc_ai_doubao`，type 再试 test）。
 
+读 web 代码判不出责任方（超时、无响应、数据与预期不符）时，按 `<skill>/references/log-forensics.md` 往下查：Slardar 事件级 context → 网关与业务 PSM 日志 → Logifier 端侧日志。那份文档同时写了和其他 bot 要结论时的纪律。
+
 每条验证的结局落档：
 ```bash
 node <skill>/scripts/state.mjs judge --dir <state> --issue-id <id> --likelihood <高|中|排除> --summary "<点位与一句话缺陷描述，或归档原因>"
@@ -137,4 +139,5 @@ node <skill>/scripts/state.mjs dispatched --dir <state> --issue-id <id> --task-i
 - 写答辩或复盘材料要某条告警的量级时间线：`node <skill>/scripts/state.mjs history --dir <state> --issue-id <id>`。没派过单的候选没有「修复前」参照，`recovery.ratio` 为 null；`latest_present` 为 false 时 `ratio` 按那次扫描的最小次数算，是上界而不是实测值。
 - omh 永远经 `traecli exec` 起（dispatch.sh 内置）。
 - 看板登记的是调用本技能的 claude 线程；meta 带 meego_id / meego_type=issue / meego_url / slardar_url，`progress.mjs` 发现 MR 后回填 mr_id。补登记：`bash <skill>/scripts/board.sh --state <state> --issue-id <id> [--mr-id] [--session-id] [--slardar-url]`。
+- 向其他 bot 要结论时，消息里要显式要求对方 `--mention` 回本 bot，否则回答只到人那里，自己收不到；查 open_id 用 `botmux bots list`，细节见 `<skill>/references/log-forensics.md`。
 - 停摆恢复：phase=failed 且死于 code-review → `bash <skill>/scripts/resume-traex.sh <workspace> <task_id> impl`；其他节点省略第三个参数；执行后在回复里写动作与理由。
