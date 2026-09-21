@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-ceilf6 CR 循环机械层：拼指令 → 调评审员（默认 traex） → 校验 → 渲染 → 回显。
+# harness-ceilf6 CR 循环机械层：拼指令 → 调评审员（默认 codex） → 校验 → 渲染 → 回显。
 # 判断类工作（怎么修、是否采纳、何时停）归调用方会话。
 set -euo pipefail
 
@@ -10,8 +10,9 @@ SKILL_DIR=$(cd "$(dirname "$0")/.." && pwd)
 SCHEMA="$SKILL_DIR/references/verdict.schema.json"
 TEMPLATE="$SKILL_DIR/references/cr-instructions.md"
 VALIDATE="$SKILL_DIR/scripts/validate-verdict.sh"
-CODEX_BIN="${CODEX_BIN:-traex}"
-CR_MODEL="${CR_MODEL:-gpt-6-astra}"
+CODEX_BIN="${CODEX_BIN:-codex}"
+CR_MODEL="${CR_MODEL:-gpt-6}"
+CR_EFFORT="${CR_EFFORT:-high}"
 
 need jq; need git; need "$CODEX_BIN"
 BASE_LIB="$SKILL_DIR/scripts/base-ref.sh"
@@ -88,7 +89,7 @@ INSTR="$ROUND_DIR/instructions.md"
   echo
   echo "## 评审范围"
   echo
-  # traex 为 codex fork，同约束：codex 0.124+ 的 exec review --base 与自定义指令互斥（openai/codex#22145），故用 plain exec、范围钉死在指令内
+  # codex 0.124+ 的 exec review --base 与自定义指令互斥（openai/codex#22145），故用 plain exec、范围钉死在指令内
   echo "本轮评审对象是当前分支相对 base 分支的全部已提交变更。先运行 \`git diff ${BASE_REF}...HEAD\`（必要时配合 \`git log ${BASE_REF}..HEAD --oneline\`）获取 diff 再开始评审；工作区未提交内容不在评审范围内。"
   echo
   echo "## 验收基准（plan.md 全文）"
@@ -139,6 +140,7 @@ run_codex() {
     --output-schema "$SCHEMA" \
     -o "$VERDICT" \
     -m "$CR_MODEL" \
+    -c model_reasoning_effort="$CR_EFFORT" \
     --dangerously-bypass-approvals-and-sandbox \
     - < "$INSTR" 2>&1 | tee "$SESSION_LOG")
 }
