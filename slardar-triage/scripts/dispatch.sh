@@ -4,29 +4,30 @@
 # stdout 只输出一行 JSON；退出码：0 成功，3 有未到终态的单，4 runtime 不符，1 其他。
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-MEEGO_CMD=${MEEGO_CMD:-bytedcli}; OMH_CLI=${OMH_CLI:-omh-cli}; TRAECLI=${TRAECLI:-traecli}; ORCH=${ORCH:-orchestrator}; PNPM=${PNPM:-pnpm}
+OMH_CLI=${OMH_CLI:-omh-cli}; TRAECLI=${TRAECLI:-traecli}; ORCH=${ORCH:-orchestrator}; PNPM=${PNPM:-pnpm}
 export OMH_CLI TRAECLI
 THREADS_SH=${THREADS_SH:-$HOME/.claude/skills/harness-ceilf6/scripts/threads.sh}
+# 建单走 bytedcli-meego 的机械层单点（恒 story / 模板 498109），本脚本不自持 Meego 字段配方。
+MEEGO_SH=${MEEGO_SH:-$HOME/.claude/skills/bytedcli-meego/scripts/meego.sh}
+MEEGO_REPO=${MEEGO_REPO:-lark/byteview-web}
 WORKFLOW_WAIT_SECONDS=${WORKFLOW_WAIT_SECONDS:-600}
 TASK_WAIT_SECONDS=${TASK_WAIT_SECONDS:-1800}
-PK=5e96d7bff4e7c525510f9156
-OWNER=7657492291354954694
 WORKFLOW=pc-web-bugfix
 
-state=""; issue=""; slug=""; book=""; desc=""; name=""; os=""; release=""; repo=""; runs=""; no_board=0; slardar_url=""
+state=""; issue=""; slug=""; book=""; desc=""; name=""; repo=""; runs=""; no_board=0; slardar_url=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-board) no_board=1; shift;;
     --slardar-url) slardar_url=$2; shift 2;;
     --state) state=$2; shift 2;; --issue-id) issue=$2; shift 2;; --slug) slug=$2; shift 2;;
     --task-book) book=$2; shift 2;; --meego-desc) desc=$2; shift 2;; --meego-name) name=$2; shift 2;;
-    --os) os=$2; shift 2;; --release) release=$2; shift 2;; --repo) repo=$2; shift 2;; --runs-root) runs=$2; shift 2;;
+    --repo) repo=$2; shift 2;; --runs-root) runs=$2; shift 2;;
     *) echo "{\"ok\":false,\"error\":\"未知参数 $1\"}"; exit 1;;
   esac
 done
 repo=${repo:-$(cd "$PWD/../byteview-web" 2>/dev/null && pwd -P)}
 runs=${runs:-$HOME/Desktop/workspace/omh-runs}
-for v in state issue slug book desc name os release repo; do
+for v in state issue slug book desc name repo; do
   [ -n "${!v}" ] || { echo "{\"ok\":false,\"error\":\"缺少 --${v}\"}"; exit 1; }
 done
 mkdir -p "$state"
@@ -54,22 +55,14 @@ set_ ".slug" "\"$slug\""
 
 # --- 步骤 1：Meego ---
 if ! step_done meego; then
-  case "$os" in iOS) endopt=option_2;; Android) endopt=option_1;; *) endopt=option_3;; esac
-  major=$(echo "$release" | cut -d. -f1,2)
-  vid=$("$MEEGO_CMD" --json meego workitem config field list --project-key "$PK" --work-item-type issue --field-keys '["field_2f21a0"]' 2>/dev/null \
-    | jq -r --arg m "$major" '.data.result.content[0].text | fromjson | .list[0].option | (map(select(.option_name == $m)) + map(select(.option_name | test("^7\\.[0-9]+$")))) | .[0].option_id // empty')
-  [ -n "$vid" ] || fail meego "缺陷发现版本选项查不到（release ${release}）"
-  fields=$(jq -cn --arg n "$name" --rawfile d "$desc" --arg e "$endopt" --arg v "$vid" --arg o "$OWNER" '[
-    {field_key:"template",field_value:"4"},{field_key:"name",field_value:$n},{field_key:"description",field_value:$d},
-    {field_key:"business",field_value:"694269fe841acec8b67164b2"},{field_key:"priority",field_value:"2"},
-    {field_key:"field_4fd05c",field_value:"option_4"},{field_key:"issue_stage",field_value:"stage_online"},
-    {field_key:"field_610176",field_value:$e},
-    {field_key:"field_2f21a0",field_value:([{option_id:$v}]|tojson)},
-    {field_key:"role_owners",field_value:([{role:"operator",owners:[$o]}]|tojson)}]')
-  out=$("$MEEGO_CMD" --json meego workitem create --project-key "$PK" --work-item-type issue --fields "$fields" 2>&1)
-  mid=$(echo "$out" | jq -r '.data.result.content[0].text | fromjson | .work_item_id // empty' 2>/dev/null)
-  [ -n "$mid" ] || fail meego "Meego 创建失败：$(echo "$out" | head -c 400)"
-  set_ ".meego_id" "\"$mid\""; set_ ".meego_url" "\"https://meego.larkoffice.com/larksuite/issue/detail/$mid\""; set_ ".meego_name" "$(jq -Rn --arg n "$name" '$n')"; set_ ".steps.meego" '"done"'
+  [ -f "$MEEGO_SH" ] || fail meego "bytedcli-meego 机械层不存在：$MEEGO_SH"
+  # meego.sh 成功时 stdout 末行是 {id,url}；失败 die 到 stderr，合并后取末行解析必空 → 落进 fail。
+  out=$(bash "$MEEGO_SH" create --repo "$MEEGO_REPO" --title "$name" --description-file "$desc" 2>&1)
+  last=$(echo "$out" | tail -1)
+  mid=$(echo "$last" | jq -r 'select(.skipped|not) | .id // empty' 2>/dev/null)
+  murl=$(echo "$last" | jq -r 'select(.skipped|not) | .url // empty' 2>/dev/null)
+  { [ -n "$mid" ] && [ -n "$murl" ]; } || fail meego "Meego 创建失败：$(echo "$out" | tail -3 | head -c 400)"
+  set_ ".meego_id" "\"$mid\""; set_ ".meego_url" "\"$murl\""; set_ ".meego_name" "$(jq -Rn --arg n "$name" '$n')"; set_ ".steps.meego" '"done"'
 fi
 meego_url=$(get .meego_url)
 
@@ -93,8 +86,8 @@ if ! step_done task_book; then
   mkdir -p "$runs/tasks"
   sed "s#{{meego_url}}#$meego_url#g" "$book" > "$final_book"
   head -1 "$final_book" | grep -q "目标分支为 master" || fail task_book "任务书首行缺「目标分支为 master」"
-  head -1 "$final_book" | grep -q "Meego issue:$meego_url" || fail task_book "任务书首行 Meego URL 未填入"
-  head -1 "$final_book" | grep -q "MR 类型 bug" || fail task_book "任务书首行缺「MR 类型 bug」"
+  head -1 "$final_book" | grep -q "Meego:$meego_url" || fail task_book "任务书首行 Meego URL 未填入"
+  head -1 "$final_book" | grep -q "MR 类型 feature" || fail task_book "任务书首行缺「MR 类型 feature」"
   set_ ".task_book" "\"$final_book\""; set_ ".steps.task_book" '"done"'
 fi
 
