@@ -106,14 +106,16 @@ Issue：<issue_url>
 
 ## 派单（只在用户显式指令后）
 
+派的 Meego 条目是**技术需求（story，模板 498109）**，不是缺陷：这批是自查出来的稳定性治理，有技术方案、排期、MR 与验收，对应的就是技术需求的节点流；缺陷的 `RESOLVED` 确认表单要求缺陷引入版本 / 引入日期 / 关联需求这类 per-case 值，机械层给不出默认值，每条都得人工点完才能收束。建单不自持字段配方，走 `bytedcli-meego` 的机械层（`MEEGO_SH` / `MEEGO_REPO` 可覆盖）。
+
 1. 本会话没有回显过【技术方案】：不派，回话题说明要先走收敛对话。「补充」= 回显的技术方案原文（含用户之后的修改）。
 2. 核对：`node <skill>/scripts/state.mjs pending --dir <state>` 里存在该 issue 且 status=pending；否则回话题说明（已派 / 已拒 / 不在池中）。
-3. 派单前校验：`bytedcli --json meego user search --project-key 5e96d7bff4e7c525510f9156 --user-keys '["wangjinghong.ceilf6"]'`、`command -v traecli omh-cli orchestrator`，缺则停。
+3. 派单前校验：`bash ~/.claude/skills/bytedcli-meego/scripts/meego.sh map get --repo lark/byteview-web`（应答须含 `template_id` / `dev_owner_key`，回 `{"skipped":true}` 说明仓库没进配置）、`command -v traecli omh-cli orchestrator`，缺则停。
 4. 写任务书：按 `<skill>/references/task-book-template.md`，第 0 节原样收录技术方案；第 1 节的量级与分布取自 `<scan.json>`；第 2 节线上代码用主流程第 4 步查到的 commit；第 3、4 节按方案的缺陷点位、根因、改动范围写；第 5 节首条 AC 写方案的验收方式（复现步骤、改动前实际表现、期望表现）。`{{meego_url}}` 保留占位。
-5. 写 Meego 描述文件：现象 / 根因 / 修法 / Slardar 链接（`issue_url`，用 `[]` 包裹），末尾「【人工确认】<技术方案原文>」。
+5. 写 Meego 描述文件：现象 / 根因 / 修法 / Slardar 链接（`issue_url`，用 `[]` 包裹），末尾「【人工确认】<技术方案原文>」。标题带「线上告警修复」前缀，这批单日后靠它在需求里捞得出来。
 6. 派发（在本会话 cwd 下执行，不要先 `cd` 进工作区）：
 ```bash
-bash <skill>/scripts/dispatch.sh --state <state> --issue-id <id> --slug <kebab-摘要>-$(date +%F) --task-book <任务书路径> --meego-desc <描述文件> --meego-name "<Meego 标题>" --os <os_dist 主项> --release <release_dist 主项> --repo <repo> --slardar-url "<issue_url>"
+bash <skill>/scripts/dispatch.sh --state <state> --issue-id <id> --slug <kebab-摘要>-$(date +%F) --task-book <任务书路径> --meego-desc <描述文件> --meego-name "<Meego 标题>" --repo <repo> --slardar-url "<issue_url>"
 ```
 退出 3：已有未到终态的 omh Task，错误信息里带它的 phase 与工作区，原样转述；退出 4：runtime 不符已 cancel，不重试；退出 1：写停在哪一步，下次「派这条」会续派。输出的 `board` 字段是看板登记结果，失败写原因。
 7. 成功后（`--fix-paths` 取方案「改动范围」里的仓内路径，逗号分隔，不含测试文件）：
@@ -130,5 +132,5 @@ node <skill>/scripts/state.mjs dispatched --dir <state> --issue-id <id> --task-i
 - 呈现与收敛对话里，结论由用户说出或在用户要求「说说你的判断」后给出。
 - 写答辩或复盘材料要某条告警的量级时间线：`node <skill>/scripts/state.mjs history --dir <state> --issue-id <id>`，基线取派单时那一行。没派过单的候选没有「派单前」参照，`recovery.ratio` 为 null；`latest_present` 为 false 时 `ratio` 按那次扫描的最小次数算，是上界而不是实测值。技能不判定修复是否见效，这个数只是给人看的原始材料。
 - omh 永远经 `traecli exec` 起（dispatch.sh 内置）。
-- 看板登记的是调用本技能的 claude 线程；meta 带 meego_id / meego_type=issue / meego_url / slardar_url。补登记：`bash <skill>/scripts/board.sh --state <state> --issue-id <id> [--mr-id] [--session-id] [--slardar-url]`，`--mr-id` 由调用者手给，技能自己不去查。
+- 看板登记的是调用本技能的 claude 线程；meta 带 meego_id / meego_type=story / meego_url / slardar_url，看板点「完成」时 `meego.sh done` 据 meego_type 推需求节点。补登记：`bash <skill>/scripts/board.sh --state <state> --issue-id <id> [--mr-id] [--session-id] [--slardar-url]`，`--mr-id` 由调用者手给，技能自己不去查。
 - 向其他 bot 要结论时，消息里要显式要求对方 `--mention` 回本 bot，否则回答只到人那里，自己收不到；查 open_id 用 `botmux bots list`，细节见 `<skill>/references/log-forensics.md`。
