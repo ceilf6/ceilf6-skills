@@ -1,4 +1,4 @@
-交付说明:目标分支为 master(工作区分支 omh-base/{{slug}} 从 origin/master {{base_commit}} 切出,修复分支从它切出、MR 合回 master)。Meego issue:{{meego_url}}。MR 类型 bug。
+交付说明:目标分支为 master(工作区分支 omh-base/{{slug}} 从 origin/master {{base_commit}} 切出,修复分支从它切出、MR 合回 master)。Meego:{{meego_url}}。MR 类型 feature。
 
 # 修复 {{标题:一句话}}
 
