@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 把一条已派发的单登记到 harness 看板：写 ctx meta.json（含 Meego 绑定，看板点「完成」时
-# meego.sh done 据此流转缺陷状态），再在当前进程 cwd 下调 threads.sh register。
+# meego.sh done 据此推需求节点），再在当前进程 cwd 下调 threads.sh register。
 # 登记的是调用本脚本的 claude 线程（cwd + CLAUDE_CODE_SESSION_ID），不是 traecli 宿主。
 # 用法: board.sh --state <dir> --issue-id <id> [--title <短题>] [--mr-id <id>] [--session-id <sid>]
 # stdout 一行 JSON {ok, ctx_dir, error?, warning?}；退出码恒 0（登记失败不该拖垮调用方）。
@@ -41,7 +41,7 @@ note="Meego ${meego_url} · Task ${task_id}"
 printf '%s' "$existing" | jq --arg b "$cur_branch" --arg n "$note" \
   --arg mi "$meego_id" --arg mu "$meego_url" --arg mr "$mr_id" --arg su "$slardar_url" '
   . + {branch:$b, status:(.status // "active"), note:$n, milestones:(.milestones // {})}
-  + (if $mi == "" then {} else {meego_id:$mi, meego_type:"issue", meego_url:$mu} end)
+  + (if $mi == "" then {} else {meego_id:$mi, meego_type:"story", meego_url:$mu} end)
   + (if $mr == "" then {} else {mr_id:$mr} end)
   + (if $su == "" then {} else {slardar_url:$su} end)' > "$ctx/meta.json.tmp" && mv "$ctx/meta.json.tmp" "$ctx/meta.json"
 
