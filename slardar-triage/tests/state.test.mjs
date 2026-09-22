@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import {
   loadState, saveState, mergeScan, setJudgment, pendingSorted, reject, markDispatched,
   readLedger, ledgerRows, appendLedger, mergeFromScan,
-  pick, cover, setFixPaths, markMerged, markSedimented, flight, history,
+  pick, cover, history,
 } from '../scripts/state.mjs';
 
 const STATE_CLI = fileURLToPath(new URL('../scripts/state.mjs', import.meta.url));
@@ -204,7 +204,7 @@ test('CLI merge / pick 缺 --scan 按用法错误退出 2', () => {
 
 test('CLI 认 issue 的子命令缺 --issue-id、cover 缺 --by 都按用法错误退出 2', () => {
   const dir = mkdtempSync(join(tmpdir(), 'st-'));
-  for (const cmd of ['judge', 'reject', 'dispatched', 'cover', 'fix-paths', 'merged', 'sedimented', 'history']) {
+  for (const cmd of ['judge', 'reject', 'dispatched', 'cover', 'history']) {
     const { status, stderr } = cliStatus(cmd, '--dir', dir);
     assert.equal(status, 2, cmd);
     assert.match(stderr, /用法/);
@@ -290,21 +290,17 @@ test('pick 只看本次扫描到的 pending 候选', () => {
   assert.deepEqual(pick(state, [snap()]).shortlist.map((c) => c.issue_id), ['i1']);
 });
 
-test('在途覆盖：帧命中未合入单的 fix_paths 进 covered 并写 covered_by；该单合入后回到短名单', () => {
+test('已派单覆盖：帧命中已派单的 fix_paths 进 covered 并写 covered_by，不再随合入与否变化', () => {
   const scan = [snap({ issue_id: 'old', family_key: 'k1' }), snap({ issue_id: 'renamed', family_key: 'k2' })];
   const { state } = mergeScan(empty(), scan, T0);
   markDispatched(state, 'old', { task_id: 't', supplement: 'x', fix_paths: ['vc-ai/src/services/ai-layout.ts'], at: T0 });
-  let out = pick(state, scan);
+  const out = pick(state, scan);
   assert.deepEqual(out.shortlist, []);
   assert.deepEqual(out.covered, [{ issue_id: 'renamed', covered_by: 'old' }]);
-  assert.equal(out.in_flight, 1);
+  assert.equal(out.dispatched, 1);
   assert.equal(state.candidates.renamed.covered_by, 'old');
   assert.equal(state.candidates.renamed.status, 'pending');
-  markMerged(state, 'old', T1);
-  out = pick(state, scan);
-  assert.deepEqual(out.shortlist.map((c) => c.issue_id), ['renamed']);
-  assert.deepEqual(out.covered, []);
-  assert.equal(out.in_flight, 0);
+  assert.deepEqual(pick(state, scan).covered, [{ issue_id: 'renamed', covered_by: 'old' }]);
 });
 
 test('cover 手工建立归属：帧在共享 throw 点、fix_paths 匹配不到时同样进 covered', () => {
@@ -327,32 +323,7 @@ test('cover 拒绝自己归属自己，也拒绝已结案的候选', () => {
   assert.throws(() => cover(state, 'done', 'old'), /不是 pending 候选/);
 });
 
-test('setFixPaths / markMerged / markSedimented 只接受已派单候选；flight 分出在途与待收尾', () => {
-  const { state } = mergeScan(empty(), [snap(), snap({ issue_id: 'i2', family_key: 'f2', message: 'm2' })], T0);
-  assert.throws(() => setFixPaths(state, 'i1', ['a']), /不是已派单候选/);
-  assert.throws(() => markMerged(state, 'nope', T1), /不是已派单候选/);
-  markDispatched(state, 'i1', { task_id: 't1', supplement: 'x', at: T0 });
-  markDispatched(state, 'i2', { task_id: 't2', supplement: 'x', at: T0 });
-  state.dispatched.i1.mr_id = '8408387';
-  state.dispatched.i1.meego_url = 'https://meego/1';
-  setFixPaths(state, 'i1', ['vc-ai/src/a.ts']);
-  assert.deepEqual(state.candidates.i1.decision.fix_paths, ['vc-ai/src/a.ts']);
-  assert.deepEqual(flight(state), {
-    in_flight: [
-      { issue_id: 'i1', message: 'm', task_id: 't1', mr_id: '8408387', meego_url: 'https://meego/1' },
-      { issue_id: 'i2', message: 'm2', task_id: 't2', mr_id: null, meego_url: null },
-    ],
-    awaiting_recovery: [],
-  });
-  markMerged(state, 'i1', T1);
-  assert.deepEqual(flight(state).in_flight.map((c) => c.issue_id), ['i2']);
-  assert.deepEqual(flight(state).awaiting_recovery.map((c) => c.issue_id), ['i1']);
-  markSedimented(state, 'i1', T2);
-  assert.equal(state.candidates.i1.decision.sedimented_at, T2);
-  assert.deepEqual(flight(state).awaiting_recovery, []);
-});
-
-test('CLI pick / dispatched --fix-paths / cover / flight 落盘并输出一行 JSON', () => {
+test('CLI pick / dispatched --fix-paths / cover 落盘并输出一行 JSON', () => {
   const dir = mkdtempSync(join(tmpdir(), 'st-'));
   const scanFile = join(dir, 'scan.json');
   const scan = { scanned_at: T0, candidates: [snap({ issue_id: 'old', family_key: 'k1' }), snap({ issue_id: 'new', family_key: 'k2', latest_event: frame() })] };
@@ -366,7 +337,7 @@ test('CLI pick / dispatched --fix-paths / cover / flight 落盘并输出一行 J
   const out = cli('pick', '--dir', dir, '--scan', scanFile);
   assert.equal(out.ok, true);
   assert.deepEqual(out.covered, [{ issue_id: 'new', covered_by: 'old' }]);
-  assert.equal(cli('flight', '--dir', dir).in_flight.length, 1);
+  assert.equal(out.dispatched, 1);
 });
 
 test('history 给出本族与被覆盖族的台账行、处置事件、回落比（改名新族的量加总后再比）', () => {
@@ -379,7 +350,6 @@ test('history 给出本族与被覆盖族的台账行、处置事件、回落比
   const merged = mergeScan(state, [{ ...old, family_count: 1200 }, renamed, other], T1).state;
   pick(merged, [old, renamed, other]);
   ledger.push(...ledgerRows(merged, [{ ...old, family_count: 1200 }, renamed, other], T1));
-  markMerged(merged, 'old', '2026-09-11T12:00:00.000Z');
   ledger.push(...ledgerRows(merged, [{ ...renamed, family_count: 90 }, other], T2));
 
   const h = history(merged, ledger, 'old');
@@ -388,7 +358,6 @@ test('history 给出本族与被覆盖族的台账行、处置事件、回落比
   assert.deepEqual(h.events, [
     { type: 'first_seen', at: T0 },
     { type: 'dispatched', at: '2026-09-10T12:00:00.000Z' },
-    { type: 'merged', at: '2026-09-11T12:00:00.000Z' },
   ]);
   assert.deepEqual(h.recovery, {
     baseline_count: 1000, baseline_at: T0, latest_at: T2, latest_present: true, latest_count: 90, latest_floor: 77, ratio: 0.09,
@@ -443,19 +412,16 @@ test('history 对没派单的候选不给基线，ratio 为 null', () => {
   assert.equal(history(state, ledger, 'i1').recovery.ratio, null);
 });
 
-test('history 记录拒绝与收尾沉淀事件；CLI history 输出一行 JSON', () => {
+test('history 记录派单与拒绝事件；CLI history 输出一行 JSON', () => {
   const dir = mkdtempSync(join(tmpdir(), 'st-'));
   const scanFile = join(dir, 'scan.json');
   writeFileSync(scanFile, JSON.stringify({ scanned_at: T0, candidates: [snap(), snap({ issue_id: 'i2', family_key: 'f2' })] }));
   cli('merge', '--dir', dir, '--scan', scanFile);
   cli('reject', '--dir', dir, '--issue-id', 'i2', '--reason', '宿主问题');
   cli('dispatched', '--dir', dir, '--issue-id', 'i1', '--task-id', 't');
-  // 派单 / 收尾沉淀的时刻由脚本取当下，合入时刻夹在两者之间，事件才是真实的先后。
-  cli('merged', '--dir', dir, '--issue-id', 'i1', '--at', new Date().toISOString());
-  cli('sedimented', '--dir', dir, '--issue-id', 'i1');
   const h = cli('history', '--dir', dir, '--issue-id', 'i1');
   assert.equal(h.ok, true);
-  assert.deepEqual(h.events.map((e) => e.type), ['first_seen', 'dispatched', 'merged', 'sedimented']);
+  assert.deepEqual(h.events.map((e) => e.type), ['first_seen', 'dispatched']);
   assert.equal(h.rows.length, 1);
   assert.deepEqual(cli('history', '--dir', dir, '--issue-id', 'i2').events.map((e) => e.type), ['first_seen', 'rejected']);
 });

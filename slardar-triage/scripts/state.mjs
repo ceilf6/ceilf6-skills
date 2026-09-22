@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 候选池、处置账与台账的唯一读写点。candidates.json 是 agent 从中选取、由用户决策的池子；
-// dispatched.json 是 dispatch.sh / board.sh / progress.mjs 共用的派单处置账，两者按 issue_id 对齐；
+// dispatched.json 是 dispatch.sh / board.sh 共用的派单处置账，两者按 issue_id 对齐；
 // ledger.jsonl 是每次扫描每族一行的量级台账。
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
@@ -120,25 +120,7 @@ export function markDispatched(state, issueId, { task_id, supplement, fix_paths,
   state.dispatched[issueId] = { ...(state.dispatched[issueId] ?? {}), task_id };
 }
 
-function patchDecision(state, issueId, patch) {
-  const c = state.candidates[issueId];
-  if (c?.status !== 'dispatched') throw new Error(`${issueId} 不是已派单候选`);
-  state.candidates[issueId] = { ...c, decision: { ...c.decision, ...patch } };
-}
-
-export function setFixPaths(state, issueId, paths) {
-  patchDecision(state, issueId, { fix_paths: paths });
-}
-
-export function markMerged(state, issueId, at) {
-  patchDecision(state, issueId, { merged_at: at });
-}
-
-export function markSedimented(state, issueId, at) {
-  patchDecision(state, issueId, { sedimented_at: at });
-}
-
-// covered_by 只是归属链接，候选仍是 pending；是否因此被剔除由 pick 按归属的单是否仍未合入现算。
+// covered_by 只是归属链接，候选仍是 pending；剔除由 pick 按归属的单是否已派单现算。
 export function cover(state, issueId, byIssueId) {
   const c = state.candidates[issueId];
   if (!c) throw new Error(`候选池里没有 ${issueId}`);
@@ -146,23 +128,6 @@ export function cover(state, issueId, byIssueId) {
   if (c.status !== 'pending') throw new Error(`${issueId} 不是 pending 候选`);
   if (state.candidates[byIssueId]?.status !== 'dispatched') throw new Error(`${byIssueId} 不是已派单候选`);
   state.candidates[issueId] = { ...c, covered_by: byIssueId };
-}
-
-const isInFlight = (c) => c.status === 'dispatched' && !c.decision?.merged_at;
-
-export function flight(state) {
-  const brief = (c) => ({
-    issue_id: c.issue_id,
-    message: c.message,
-    task_id: c.decision?.task_id ?? null,
-    mr_id: state.dispatched[c.issue_id]?.mr_id ?? null,
-    meego_url: state.dispatched[c.issue_id]?.meego_url ?? null,
-  });
-  const dispatched = Object.values(state.candidates).filter((c) => c.status === 'dispatched');
-  return {
-    in_flight: dispatched.filter(isInFlight).map(brief),
-    awaiting_recovery: dispatched.filter((c) => c.decision?.merged_at && !c.decision?.sedimented_at).map(brief),
-  };
 }
 
 function mechanicalVerdict(snapshot) {
@@ -180,7 +145,8 @@ function mechanicalVerdict(snapshot) {
 // 帧与分布只在扫描快照里，候选池不存，所以预筛要两者一起看。
 export function pick(state, scanned, { skip = [] } = {}) {
   const snapshots = new Map(scanned.map((c) => [c.issue_id, c]));
-  const inFlight = Object.values(state.candidates).filter(isInFlight);
+  // 派出去的单不再跟踪去向，一经派单就永久算已处理：它自己不再进短名单，同缺陷的候选也跟着被剔除。
+  const handled = Object.values(state.candidates).filter((c) => c.status === 'dispatched');
   const shortlist = [];
   const covered = [];
   const filtered = [];
@@ -200,8 +166,8 @@ export function pick(state, scanned, { skip = [] } = {}) {
       continue;
     }
     const path = snapshot.latest_event?.mapped_path;
-    const owner = inFlight.find((d) => d.issue_id === cand.covered_by)
-      ?? inFlight.find((d) => path && (d.decision?.fix_paths ?? []).includes(path));
+    const owner = handled.find((d) => d.issue_id === cand.covered_by)
+      ?? handled.find((d) => path && (d.decision?.fix_paths ?? []).includes(path));
     if (owner) {
       state.candidates[id] = { ...cand, covered_by: owner.issue_id };
       covered.push({ issue_id: id, covered_by: owner.issue_id });
@@ -225,7 +191,7 @@ export function pick(state, scanned, { skip = [] } = {}) {
     });
   }
   shortlist.sort((a, b) => Boolean(a.detail_error) - Boolean(b.detail_error) || (b.users ?? 0) - (a.users ?? 0));
-  return { shortlist, covered, filtered, in_flight: inFlight.length };
+  return { shortlist, covered, filtered, dispatched: handled.length };
 }
 
 function topOf(dist) {
@@ -327,8 +293,6 @@ export function history(state, ledger, issueId) {
 
   const events = [{ type: 'first_seen', at: c.first_seen_at }];
   if (c.decision?.at) events.push({ type: c.status, at: c.decision.at });
-  if (c.decision?.merged_at) events.push({ type: 'merged', at: c.decision.merged_at });
-  if (c.decision?.sedimented_at) events.push({ type: 'sedimented', at: c.decision.sedimented_at });
   // 老单的派单时刻可能早于它进池的时刻（台账与候选池是分别回填的），时间序才是读的人要的顺序。
   events.sort(byAt);
 
@@ -382,9 +346,9 @@ function listArg(name) {
   return (arg(name) ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 }
 
-const NEEDS_ISSUE_ID = new Set(['judge', 'reject', 'dispatched', 'cover', 'fix-paths', 'merged', 'sedimented', 'history']);
+const NEEDS_ISSUE_ID = new Set(['judge', 'reject', 'dispatched', 'cover', 'history']);
 
-const USAGE = '用法: state.mjs merge|pick|pending|judge|reject|dispatched|cover|fix-paths|merged|sedimented|flight|history --dir <state> [--scan <scan.json>] [--skip <id,id>] [--issue-id <id>] [--by <id>] [--likelihood <档>] [--summary <text>] [--reason <text>] [--task-id <id>] [--supplement <text>] [--fix-paths <a,b>] [--paths <a,b>] [--at <iso>]\n';
+const USAGE = '用法: state.mjs merge|pick|pending|judge|reject|dispatched|cover|history --dir <state> [--scan <scan.json>] [--skip <id,id>] [--issue-id <id>] [--by <id>] [--likelihood <档>] [--summary <text>] [--reason <text>] [--task-id <id>] [--supplement <text>] [--fix-paths <a,b>]\n';
 
 function usageExit() {
   process.stderr.write(USAGE);
@@ -427,21 +391,6 @@ if (isMain()) {
       cover(state, arg('--issue-id'), arg('--by'));
       saveState(dir, state);
       process.stdout.write(`${JSON.stringify({ ok: true, issue_id: arg('--issue-id'), covered_by: arg('--by') })}\n`);
-    } else if (cmd === 'fix-paths') {
-      const paths = listArg('--paths');
-      setFixPaths(state, arg('--issue-id'), paths);
-      saveState(dir, state);
-      process.stdout.write(`${JSON.stringify({ ok: true, issue_id: arg('--issue-id'), fix_paths: paths })}\n`);
-    } else if (cmd === 'merged') {
-      markMerged(state, arg('--issue-id'), arg('--at') ?? now);
-      saveState(dir, state);
-      process.stdout.write(`${JSON.stringify({ ok: true, merged: arg('--issue-id') })}\n`);
-    } else if (cmd === 'sedimented') {
-      markSedimented(state, arg('--issue-id'), now);
-      saveState(dir, state);
-      process.stdout.write(`${JSON.stringify({ ok: true, sedimented: arg('--issue-id') })}\n`);
-    } else if (cmd === 'flight') {
-      process.stdout.write(`${JSON.stringify({ ok: true, ...flight(state) })}\n`);
     } else if (cmd === 'history') {
       process.stdout.write(`${JSON.stringify({ ok: true, ...history(state, readLedger(dir), arg('--issue-id')) })}\n`);
     } else {

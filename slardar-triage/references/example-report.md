@@ -51,4 +51,4 @@ agent：`git grep -n getFishBoneData origin/master -- vc-ai`：
 
 ## 没有可呈现的候选
 
-没有新的可修告警，在途 3 条。
+没有新的可修告警。
