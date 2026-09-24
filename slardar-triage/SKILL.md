@@ -21,7 +21,7 @@ description: 扫描 Slardar 近 24h 线上 JS 错误（只看 vc_ai，即 vc-ai 
 | 「派这条」 | 「派单」一节 |
 | 「这条不修 <摘要或 issue_id>，原因：<文本>」 | `node <skill>/scripts/state.mjs reject --dir <state> --issue-id <id> --reason "<原话>"`，回话题确认 |
 
-参数：`--bid`（默认 `vc_ai`；本技能只看 vc-ai 方向，不加 vc_web / vc_pages）、`--hours`（24）、`--top`（10）。
+参数：`--bid`（默认 `vc_ai`；本技能只看 vc-ai 方向，不加 vc_web / vc_pages）、`--hours`（24）、`--top`（首轮 10，扩量阶梯 30 → 100，见第 4 步）。
 
 ## 主流程
 
@@ -55,6 +55,8 @@ node <skill>/scripts/state.mjs pick --dir <state> --scan <scan.json> [--skip <id
 ```
 按 `<skill>/references/likelihood.md` 对 `shortlist` 从头逐条读代码验证，**第一条判「高」就停**。读代码：`git -C <repo> show origin/master:<mapped_path> | sed -n '<line-30>,<line+30>p'`，位置已变时 `git -C <repo> log --oneline -5 origin/master -- <mapped_path>`、`git -C <repo> grep -n '<函数名>' origin/master -- <project_dir>`。线上 release 对应 commit：`bytedcli --json scm repo version list <scm_repo> --type online --version <release> --page-size 10` 取 `data.versions[].base_commit_hash`（vc_ai 同时试 `ee/lark/vc_ai` 与 `ee/lark/vc_ai_doubao`，type 再试 test）。
 
+**短名单为空即扩量重扫。** 可修的告警往往用户数少、次数低，按次数降序排在头部之外；扫描窗口不是瓶颈，页宽才是。`pick` 输出 `shortlist` 为空（不论 `covered` / `filtered` 多少）时，`--top` 按 10 → 30 → 100 的阶梯取下一档，从第 2 步起重跑（新的 scan 文件、merge 记台账、pick），直到短名单非空或 `--top` 已到 100。用户显式给了 `--top` 时以该值为起点、仍按阶梯往上扩。「换一条」`--skip` 后短名单为空同样扩量，不直接回「没有可修告警」。
+
 读 web 代码判不出责任方（超时、无响应、数据与预期不符）时，按 `<skill>/references/log-forensics.md` 往下查：Slardar 事件级 context → 网关与业务 PSM 日志 → Logifier 端侧日志。那份文档同时写了和其他 bot 要结论时的纪律。
 
 每条验证的结局落档：
@@ -78,7 +80,7 @@ Issue：<issue_url>
 ```
 「现象」只写可观察事实，不写代码路径、函数名、根因、改法。这条消息整体——三行加第一个引导问题——不出现次数、用户数和分布数字，也不附已派单、已拒绝、低 / 排除清单。第二轮起，问题需要时可按「引导式收敛」的事实来源贴分布与量级原文。
 
-整份短名单没有「高」时，呈现第一条「中」。短名单为空、或验证下来高与中都没有：只回「没有新的可修告警」。
+整份短名单没有「高」时，呈现第一条「中」。扩量到 100 之后短名单仍为空、或验证下来高与中都没有：只回「没有可修告警」。这句不带「新」字：候选池不看告警首次出现的时间，老告警只要还在上报就会进池，回复里说「新」会被读成「最近没出新告警」。
 
 ## 引导式收敛
 

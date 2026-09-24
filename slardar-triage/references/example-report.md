@@ -51,4 +51,6 @@ agent：`git grep -n getFishBoneData origin/master -- vc-ai`：
 
 ## 没有可呈现的候选
 
-没有新的可修告警。
+只在 `--top` 已扩到 100 仍无可呈现候选时发，措辞固定，不带「新」字：
+
+没有可修告警。
