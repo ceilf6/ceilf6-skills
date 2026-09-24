@@ -1,7 +1,7 @@
 # slardar-triage 派单转交 byteview-web-harness 任务链
 
 日期：2026-09-21
-状态：已口头认可，待实施
+状态：已被 `2026-09-24-slardar-triage-harness-handoff-v2-design.md` 取代（main 于 09-22 删除在途跟踪并改建 story，本文的 §4.5 与在途相关内容不再成立；模型约束在新文里）
 取代：`2026-09-08-slardar-triage` 系列里「派单机械层」中 worktree、起 omh、核验 runtime、停摆恢复四部分，以及纪律「omh 永远经 `traecli exec` 起」。扫描、候选池、预筛、呈现、引导式收敛、Meego 字段映射、任务书模板、处置账与量级台账不变。
 
 ## 1. 背景与目标
