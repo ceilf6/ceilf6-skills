@@ -1,0 +1,106 @@
+{
+  "938f8ba377ac6484ba8918b19f247350": {
+    "steps": {
+      "meego": "done",
+      "worktree": "done",
+      "task_book": "done",
+      "launch": "done",
+      "verify": "done",
+      "board": "done"
+    },
+    "slug": "avatar-timeout-r1",
+    "meego_id": "7374348254",
+    "meego_url": "https://meego.larkoffice.com/larksuite/issue/detail/7374348254",
+    "workspace": "/Users/bytedance/Desktop/workspace/omh-eval/web-avatar-timeout-r1",
+    "task_book": "/Users/bytedance/Desktop/workspace/omh-eval/tasks/web-avatar-timeout-r1.md",
+    "host_log": "/Users/bytedance/Desktop/workspace/omh-eval/web-avatar-timeout-r1-host.log",
+    "task_id": "task_20260908T085103Z_8f582c38",
+    "dispatched_at": "2026-09-08T08:51:03Z",
+    "meego_name": "vc-ai 移动端头像拉取 common.getAvatarBase64 60s 超时未捕获(Slardar 线上告警)",
+    "board": {
+      "ok": true,
+      "ctx_dir": "/Users/bytedance/Desktop/workspace/omh-eval/web-avatar-timeout-r1/.harness-ceilf6/avatar-timeout-r1"
+    },
+    "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1788428092&end_time=1789032892&filter_id=f4939c17bc3eacc99e5f8c2d402f5eb4"
+  },
+  "b1071995655bbebf583ae422aa64c7ae": {
+    "slug": "fishbone-unhandled-rejection-2026-09-09",
+    "meego_id": "7374505336",
+    "meego_url": "https://meego.larkoffice.com/larksuite/issue/detail/7374505336",
+    "steps": {
+      "meego": "done",
+      "worktree": "done",
+      "task_book": "done",
+      "launch": "done",
+      "verify": "done",
+      "board": "done"
+    },
+    "workspace": "/Users/bytedance/Desktop/workspace/omh-runs/fishbone-unhandled-rejection-2026-09-09",
+    "task_book": "/Users/bytedance/Desktop/workspace/omh-runs/tasks/fishbone-unhandled-rejection-2026-09-09.md",
+    "host_log": "/Users/bytedance/Desktop/workspace/omh-runs/fishbone-unhandled-rejection-2026-09-09-host.log",
+    "launched_at": "2026-09-09T03:30:28Z",
+    "task_id": "task_20260909T033115Z_2e93a1b9",
+    "dispatched_at": "2026-09-09T03:31:19Z",
+    "error": null,
+    "meego_name": "[vc-ai] AI 布局鱼骨图拉取失败未捕获，产生 unhandled rejection 全量上报",
+    "board": {
+      "ok": true,
+      "ctx_dir": "/Users/bytedance/Desktop/workspace/omh-runs/fishbone-unhandled-rejection-2026-09-09/.harness-ceilf6/fishbone-unhandled-rejection-2026-09-09"
+    },
+    "mr_id": "8408387",
+    "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1788428092&end_time=1789032892&filter_id=3ca0cf1cd817f02a4e1f53eefe31def0"
+  },
+  "8567d6e7ceaf321225acc7b16056ace9": {
+    "slug": "canstartvideo-unhandled-rejection-2026-09-10",
+    "meego_id": "7375279082",
+    "meego_url": "https://meego.larkoffice.com/larksuite/issue/detail/7375279082",
+    "meego_name": "[vc-web] iOS 端 video track muted 兜底重采集抛 canStartVideo is false 未捕获，产生 unhandled rejection 全量上报",
+    "steps": {
+      "meego": "done",
+      "worktree": "done",
+      "task_book": "done",
+      "launch": "done",
+      "verify": "done",
+      "board": "done"
+    },
+    "workspace": "/Users/bytedance/Desktop/workspace/omh-runs/canstartvideo-unhandled-rejection-2026-09-10",
+    "task_book": "/Users/bytedance/Desktop/workspace/omh-runs/tasks/canstartvideo-unhandled-rejection-2026-09-10.md",
+    "host_log": "/Users/bytedance/Desktop/workspace/omh-runs/canstartvideo-unhandled-rejection-2026-09-10-host.log",
+    "launched_at": "2026-09-10T05:10:22Z",
+    "task_id": "task_20260910T051055Z_c47d7f69",
+    "dispatched_at": "2026-09-10T05:10:57Z",
+    "error": null,
+    "board": {
+      "ok": true,
+      "ctx_dir": "/Users/bytedance/Desktop/workspace/omh-runs/canstartvideo-unhandled-rejection-2026-09-10/.harness-ceilf6/canstartvideo-unhandled-rejection-2026-09-10"
+    },
+    "mr_id": "8412955"
+  },
+  "f49170ba664fefd93aede453eb5dc3ba": {
+    "slug": "fishbone-fetch-timeout-2026-09-21",
+    "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1789378517&end_time=1789983317&filter_id=595b5378ba6ebef8faa6a4d89380a6ed",
+    "meego_id": "7379222509",
+    "meego_url": "https://meego.larkoffice.com/larksuite/issue/detail/7379222509",
+    "meego_name": "[vc-ai] PC AI 视图鱼骨图拉取被 web 侧 10s 超时切断,弱网下丢弃已返回数据",
+    "steps": {
+      "meego": "done",
+      "worktree": "done",
+      "task_book": "done",
+      "launch": "done",
+      "verify": "done",
+      "board": "done"
+    },
+    "workspace": "/Users/bytedance/Desktop/workspace/omh-runs/fishbone-fetch-timeout-2026-09-21",
+    "task_book": "/Users/bytedance/Desktop/workspace/omh-runs/tasks/fishbone-fetch-timeout-2026-09-21.md",
+    "host_log": "/Users/bytedance/Desktop/workspace/omh-runs/fishbone-fetch-timeout-2026-09-21-host.log",
+    "launched_at": "2026-09-21T10:16:34Z",
+    "error": null,
+    "task_id": "task_20260921T101716Z_5d8f0631",
+    "dispatched_at": "2026-09-21T10:32:57Z",
+    "board": {
+      "ok": true,
+      "ctx_dir": "/Users/bytedance/Desktop/workspace/omh-runs/fishbone-fetch-timeout-2026-09-21/.harness-ceilf6/fishbone-fetch-timeout-2026-09-21"
+    },
+    "mr_id": "8451153"
+  }
+}
