@@ -23,7 +23,7 @@ node <skill>/scripts/state.mjs judge --dir <state> --issue-id <id> --fixable yes
 2. 对上面每种手段说明为什么不成立。
 3. 理由写一句话、点名责任层：
    - `master 已修（<commit>），线上 <release> 未带上`：`git -C <repo> log -S'<关键片段>' origin/master --oneline` 查到提交，且线上 `release_dist` 主版本早于该提交进入的 builds 分支版本。
-   - `同缺陷已派单 <issue_id>`：调用链汇到那张单的改动范围（典型是超时类错误落在共享 throw 点），用 `--same-as`。
+   - `同缺陷已派单 <issue_id>`：调用链汇到那张单的改动范围（典型是超时类错误落在共享 throw 点），用 `--same-as`。同文案的 issue 不自动继承已派单或已判定那条的结论，要读过调用链确认相同才归过去。
    - `调用点在宿主内置脚本，vc-ai 无调用点`。
 
 ```bash

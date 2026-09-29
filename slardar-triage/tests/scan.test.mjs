@@ -3,25 +3,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { familyKey } from '../scripts/lib/family.mjs';
 import { summarize, flattenRows } from '../scripts/lib/stats.mjs';
 import { scan } from '../scripts/scan.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = (name) => JSON.parse(readFileSync(join(here, 'fixtures', name), 'utf8'));
-
-test('familyKey 去掉序号、logId、ttLogId、requestID', () => {
-  assert.equal(familyKey('common.getAvatarBase64_165 timeout after 60s'), 'common.getAvatarBase64 timeout after 60s');
-  assert.equal(familyKey('common.getAvatarBase64_43 timeout after 60s'), familyKey('common.getAvatarBase64_165 timeout after 60s'));
-  assert.equal(
-    familyKey('[InvokeServierPBFast error]: logId=20260908155207554D4C362C984C6977D8, invalid user'),
-    '[InvokeServierPBFast error]: logId=<id>, invalid user',
-  );
-  assert.equal(
-    familyKey('业务错误，ErrorInfo: code: 220301,requestID: ,ttLogId: Optional("2026")'),
-    '业务错误，ErrorInfo: code: 220301,requestID: <id>,ttLogId: <id>',
-  );
-});
 
 test('summarize 统计分布、宿主版本与 distinct session', () => {
   const rows = flattenRows(fx('log-query-938f8ba3.json'));
@@ -33,7 +19,7 @@ test('summarize 统计分布、宿主版本与 distinct session', () => {
   assert.equal(s.distinct_sessions, 2);
 });
 
-test('scan 用注入 runner 产出候选并做族合并，某 BID 失败只记 skipped', async () => {
+test('scan 用注入 runner 以 issue 为单位产出候选，按用户数降序，某 BID 失败只记 skipped', async () => {
   const calls = [];
   const runner = (args) => {
     calls.push(args.join(' '));
@@ -62,11 +48,11 @@ test('scan 用注入 runner 产出候选并做族合并，某 BID 失败只记 s
   assert.equal(byId['938f8ba377ac6484ba8918b19f247350'].latest_event.line, 196);
   assert.equal(byId['938f8ba377ac6484ba8918b19f247350'].project_dir, 'vc-ai');
   assert.equal(byId['938f8ba377ac6484ba8918b19f247350'].distinct_sessions, 2);
-  assert.equal(byId['aaaed08b947f7c1730c780ec481b0cee'].family_users, 8441);
+  assert.equal(byId['aaaed08b947f7c1730c780ec481b0cee'].users, 8441);
   assert.ok(calls.some((c) => c.startsWith('js-error list --bid vc_ai')));
   assert.ok(calls.some((c) => c.includes('--page-size 300')));
   assert.ok(calls.some((c) => c.startsWith('js-error list --bid vc_ai') && c.includes('--order-by user_descend --page-num 1 --page-size 3')));
-  assert.deepEqual(r.candidates.map((c) => c.family_users), [21740, 11391, 8441]);
+  assert.deepEqual(r.candidates.map((c) => c.users), [21740, 11391, 8441]);
   assert.equal(r.page, 1);
   assert.equal(r.page_size, 3);
 });
@@ -117,4 +103,20 @@ test('scan 按页取：--page-num 透传，输出带页码', async () => {
   assert.equal(r.page, 3);
   assert.equal(r.page_size, 20);
   assert.ok(calls[0].includes('--order-by user_descend --page-num 3 --page-size 20'));
+});
+
+test('scan 不合并文案相同的 issue：Slardar 按堆栈拆开的各自成为候选', async () => {
+  const runner = (args) => {
+    if (args[0] === 'js-error') {
+      return { data: { result: [
+        { issue_id: 'a', message: 'APINotProvided', name: 'Error', filename: 'f', count: 10, user: 9, min_crash_time: 0, issue_status: 'unassigned' },
+        { issue_id: 'b', message: 'APINotProvided', name: 'Error', filename: 'f', count: 30, user: 20, min_crash_time: 0, issue_status: 'unassigned' },
+      ] } };
+    }
+    if (args[0] === 'log' && args[1] === 'query') return { data: { table_list: [] } };
+    throw new Error(`unexpected ${args.join(' ')}`);
+  };
+  const r = await scan({ bids: ['vc_ai'], hours: 24, now: 1788853929000, runner });
+  assert.deepEqual(r.candidates.map((c) => [c.issue_id, c.users, c.count]), [['b', 20, 30], ['a', 9, 10]]);
+  assert.equal('family_key' in r.candidates[0], false);
 });

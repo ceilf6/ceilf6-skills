@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 候选池、处置账与台账的唯一读写点。candidates.json 是走查与判定的池子；
 // dispatched.json 是 prepare-dispatch.sh / board.sh 共用的派单处置账，两份文件按 issue_id 对齐；
-// ledger.jsonl 是每次扫描每族一行的量级台账。
+// ledger.jsonl 是每次扫描每个 issue 一行的量级台账。
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -32,14 +32,12 @@ export function saveState(dir, state) {
 function fromScan(c, now) {
   return {
     issue_id: c.issue_id,
-    family_key: c.family_key,
     bid: c.bid,
     message: c.message,
-    member_issue_ids: c.member_issue_ids ?? [c.issue_id],
     issue_url: c.issue_url ?? null,
     slardar_url: c.slardar_url ?? null,
-    users: c.family_users ?? c.users ?? 0,
-    count: c.family_count ?? c.count ?? 0,
+    users: c.users ?? 0,
+    count: c.count ?? 0,
     first_seen: c.first_seen ?? null,
     first_seen_at: now,
     refreshed_at: now,
@@ -53,22 +51,19 @@ function fromScan(c, now) {
 // 扫描是分页的，某页没扫到不代表告警消失；判定与捞回都挂在候选上，缺席的候选一律保留。
 export function mergeScan(state, scanned, now) {
   const pool = { ...state.candidates };
-  const settledFamilies = new Set(Object.values(pool).filter((c) => c.status !== 'pending').map((c) => c.family_key));
   for (const c of scanned) {
     const cur = pool[c.issue_id];
     if (cur) {
       pool[c.issue_id] = {
         ...cur,
-        users: c.family_users ?? c.users ?? cur.users,
-        count: c.family_count ?? c.count ?? cur.count,
+        users: c.users ?? cur.users,
+        count: c.count ?? cur.count,
         issue_url: c.issue_url ?? cur.issue_url,
         slardar_url: c.slardar_url ?? cur.slardar_url,
-        member_issue_ids: c.member_issue_ids ?? cur.member_issue_ids,
         refreshed_at: now,
       };
       continue;
     }
-    if (settledFamilies.has(c.family_key)) continue;
     pool[c.issue_id] = fromScan(c, now);
   }
   return { state: { ...state, candidates: pool } };
@@ -134,21 +129,6 @@ export function markDispatched(state, issueId, { task_id, task_slug, workspace, 
   };
 }
 
-// 同一缺陷可能以不同 issue_id 出现在不同扫描或不同页。结案的同族优先（派单、拒绝对整族生效），
-// 其次是已有判定的那条（跨页不重读代码），都没有才落到自己。
-export function resolveOwner(state, scannedItem) {
-  const self = state.candidates[scannedItem.issue_id];
-  const related = Object.values(state.candidates).filter((p) => p.issue_id === scannedItem.issue_id
-    || (p.member_issue_ids ?? []).includes(scannedItem.issue_id)
-    || p.family_key === scannedItem.family_key);
-  return related.find((p) => p.status === 'dispatched')
-    ?? related.find((p) => p.status === 'rejected')
-    ?? [self, ...related].find((p) => p?.verdict)
-    ?? self
-    ?? related[0]
-    ?? null;
-}
-
 const UNJUDGED = { class: 'unjudged', source: null, reason: '', at: null };
 
 function classify(state, owner) {
@@ -163,23 +143,19 @@ function classify(state, owner) {
   return { class: v.fixable ? 'fixable' : 'skip', source: v.by, reason: v.reason, at: v.at };
 }
 
-// 纯函数：按族用户数降序给出每条的归类。agent 遇到 unjudged 判定落档后重跑，直到第一条非 skip 的是 fixable；
-// 排在它前面的 skip 项就是呈现给用户的跳过清单，不存在不可见的剔除。
+// 纯函数：以 issue 为单位按用户数降序给出每条的归类。agent 遇到 unjudged 判定落档后重跑，直到第一条非 skip 的是 fixable；
+// 排在它前面的 skip 项就是呈现给用户的跳过清单，不存在不可见的剔除。同文案的 issue 各自归类，不互相继承。
 export function walk(state, scanned, { skip = [] } = {}) {
-  const usersOf = (c) => c.family_users ?? c.users ?? 0;
-  const seen = new Set();
   const items = [];
-  for (const c of [...scanned].sort((a, b) => usersOf(b) - usersOf(a))) {
-    const owner = resolveOwner(state, c);
-    const id = owner?.issue_id ?? c.issue_id;
-    if (seen.has(id)) continue;
-    seen.add(id);
+  for (const c of [...scanned].sort((a, b) => (b.users ?? 0) - (a.users ?? 0))) {
+    const id = c.issue_id;
+    const owner = state.candidates[id] ?? null;
     const verdict = classify(state, owner);
     const e = c.latest_event ?? {};
     items.push({
       issue_id: id,
-      users: usersOf(c),
-      count: c.family_count ?? c.count ?? 0,
+      users: c.users ?? 0,
+      count: c.count ?? 0,
       // 池里的 message 冻在首见那次，可能还带着早已换掉的 logId 之类易变量；呈现要用本次扫描的原文。
       message: c.message ?? owner?.message ?? '',
       issue_url: c.issue_url ?? owner?.issue_url ?? null,
@@ -220,26 +196,15 @@ export function readLedger(dir) {
   return rows;
 }
 
-// 同族已结案的新 issue 不入池（见 mergeScan），它的量级记在同族候选名下，status 取那条候选的。
-// 一族可能同时留着 pending 与已结案两条，挡住新 issue 入池的是已结案那条，归属要认它。
 export function ledgerRows(state, scanned, now) {
-  const pool = Object.values(state.candidates);
-  const ownerOf = (c) => {
-    if (state.candidates[c.issue_id]) return state.candidates[c.issue_id];
-    const family = pool.filter((p) => p.family_key === c.family_key);
-    return family.find((p) => p.status !== 'pending') ?? family[0];
-  };
   return scanned.map((c) => {
-    const owner = ownerOf(c);
+    const owner = state.candidates[c.issue_id];
     return {
       at: now,
       bid: c.bid,
       issue_id: c.issue_id,
-      owner_issue_id: owner?.issue_id ?? c.issue_id,
-      family_key: c.family_key,
-      member_issue_ids: c.member_issue_ids ?? [c.issue_id],
-      family_count: c.family_count ?? c.count ?? 0,
-      family_users: c.family_users ?? c.users ?? 0,
+      count: c.count ?? 0,
+      users: c.users ?? 0,
       distinct_sessions: c.distinct_sessions ?? 0,
       pid_top: topOf(c.pid_dist),
       os_top: topOf(c.os_dist),
@@ -274,18 +239,18 @@ export function mergeFromScan(dir, scan) {
   return { pending: pending.length, ledger_appended: appended };
 }
 
-// 候选的 family_key 冻在首见那次，台账行记的是各自扫描当时算出的 key，报错文案一改两者就对不上；
-// 台账行同时带着 issue 身份（issue_id / owner_issue_id / member_issue_ids），按身份认行才不会把一条单的历史截断。
+// 台账行只按 issue_id 认：同文案的其他 issue 是 Slardar 按堆栈拆开的另一条，混进来会虚增基线。
 function rowMatcher(cand) {
-  const ids = new Set([cand.issue_id, ...(cand.member_issue_ids ?? [])]);
-  return (r) => r.family_key === cand.family_key
-    || ids.has(r.issue_id)
-    || ids.has(r.owner_issue_id)
-    || (r.member_issue_ids ?? []).some((id) => ids.has(id));
+  return (r) => r.issue_id === cand.issue_id;
 }
 
-// 回落比拿「派单前最近一次的族次数」对「台账最新一次扫描里本族 + 被覆盖族的次数之和」：
-// 报错文案改名会让原族消失、量转到新族，只看原族会把改名误判成修好了。
+// 早期台账行的次数字段名是 family_count。
+function rowCount(r) {
+  return r.count ?? r.family_count ?? 0;
+}
+
+// 回落比拿「派单前最近一次的次数」对「台账最新一次扫描里本条 + 同缺陷各条（covered_by）的次数之和」：
+// 报错文案改名会让原 issue 消失、量转到新 issue，只看原 issue 会把改名误判成修好了。
 export function history(state, ledger, issueId) {
   const c = state.candidates[issueId];
   if (!c) throw new Error(`候选池里没有 ${issueId}`);
@@ -293,7 +258,7 @@ export function history(state, ledger, issueId) {
   const isOwn = rowMatcher(c);
   const coveredMatchers = Object.values(state.candidates).filter((x) => x.covered_by === issueId).map(rowMatcher);
   const rows = ledger.filter(isOwn).sort(byAt);
-  // 本族的行优先算本族的，同一行不重复进 covered_rows。
+  // 本条的行优先算本条的，同一行不重复进 covered_rows。
   const coveredRows = ledger.filter((r) => !isOwn(r) && coveredMatchers.some((m) => m(r))).sort(byAt);
 
   const events = [{ type: 'first_seen', at: c.first_seen_at }];
@@ -305,20 +270,15 @@ export function history(state, ledger, issueId) {
   // 没派过单就没有「修复前」这个参照，给出数字会被读成一次测量，基线与回落比一律留空。
   const baseline = c.status === 'dispatched' ? (rows.filter((r) => Date.parse(r.at) <= decidedAt).at(-1) ?? rows[0] ?? null) : null;
   const latestAt = ledger.reduce((max, r) => (max === null || Date.parse(r.at) > Date.parse(max) ? r.at : max), null);
-  const latestByFamily = new Map();
-  for (const r of [...rows, ...coveredRows]) {
-    // 本族与被覆盖族可能指向同一族，每族只计一次。
-    if (r.at === latestAt) latestByFamily.set(r.family_key, Math.max(latestByFamily.get(r.family_key) ?? 0, r.family_count));
-  }
-  const latestPresent = latestByFamily.size > 0;
-  const latestCount = [...latestByFamily.values()].reduce((sum, n) => sum + n, 0);
-  // 每次扫描只记前 top N 个族，所以「最新一次扫描里没有这族」不等于降到 0，只说明它低于那次记下的最小次数。
+  const latestRows = [...rows, ...coveredRows].filter((r) => r.at === latestAt);
+  const latestPresent = latestRows.length > 0;
+  const latestCount = latestRows.reduce((sum, r) => sum + rowCount(r), 0);
+  // 每次扫描只记前 N 个 issue，所以「最新一次扫描里没有这条」不等于降到 0，只说明它低于那次记下的最小次数。
   // 回落比误判成已修复的代价（对外沉淀难以收回）远高于误判成未修复，缺席时一律按这个上限算。
-  const latestFloor = ledger.reduce((min, r) => (r.at === latestAt && (min === null || r.family_count < min) ? r.family_count : min), null);
-  const baselineCount = baseline?.family_count ?? null;
+  const latestFloor = ledger.reduce((min, r) => (r.at === latestAt && (min === null || rowCount(r) < min) ? rowCount(r) : min), null);
+  const baselineCount = baseline ? rowCount(baseline) : null;
   return {
     issue_id: issueId,
-    family_key: c.family_key,
     rows,
     covered_rows: coveredRows,
     events,

@@ -40,21 +40,21 @@ git -C <repo> fetch origin master
 ```bash
 node <skill>/scripts/scan.mjs --bid <bids> --hours <hours> --page <N> --page-size 20 --repo <repo> --out <state>/scans/scan-$(date -u +%Y%m%dT%H%M%SZ)-p<N>.json
 ```
-首轮 `N=1`。按影响用户数（`user_descend`）取一页，同 message 的 issue 合成一族，族按族用户数降序。`skipped_bids` 非空说明 vc_ai 本身没扫成：回话题说明原因并停在这一步。
+首轮 `N=1`。按影响用户数（`user_descend`）取一页，以 Slardar issue 为单位、不合并：同文案的 issue 是 Slardar 按堆栈拆开的，各自判定。`skipped_bids` 非空说明 vc_ai 本身没扫成：回话题说明原因并停在这一步。
 
 ### 3. 合并候选池并记台账
 
 ```bash
 node <skill>/scripts/state.mjs merge --dir <state> --scan <scan.json>
 ```
-候选池只增不删：没扫到的页里的候选及其判定都保留。每次扫描的每个族在 `<state>/ledger.jsonl` 留一行（次数、用户、session、各分布主项、状态）。
+候选池只增不删：没扫到的页里的候选及其判定都保留。每次扫描的每个 issue 在 `<state>/ledger.jsonl` 留一行（次数、用户、session、各分布主项、状态）。
 
 ### 4. 走查与判定
 
 ```bash
 node <skill>/scripts/state.mjs walk --dir <state> --scan <scan.json> [--skip <id,id>]
 ```
-`items` 按族用户数降序，每条带 `class`：
+`items` 按用户数降序，每条带 `class`：
 - `skip`：`source` 为 `dispatched`（已派单或同缺陷已派单）/ `rejected`（用户拒过）/ `agent`（agent 判不能修）/ `session`（本会话看过），带 `reason`、`at`
 - `fixable`：`source` 为 `user`（用户捞回）或 `agent`
 - `unjudged`：还没判过
@@ -125,7 +125,7 @@ Issue：<issue_url>
 1. 本会话没有回显过【技术方案】：不派，回话题说明要先走收敛对话。「补充」= 回显的技术方案原文（含用户之后的修改）。
 2. 核对：`node <skill>/scripts/state.mjs pending --dir <state>` 里存在该 issue 且 status=pending；否则回话题说明（已派 / 已拒 / 不在池中）。
 3. 派单前校验，缺则停：`test -f skills/task-schedule/scripts/task-schedule.js`（不成立说明 cwd 不是 byteview-web-harness 仓，回话题说明派单须在该仓内进行）；`bash ~/.claude/skills/bytedcli-meego/scripts/meego.sh map get --repo lark/byteview-web`（应答须含 `template_id` / `dev_owner_key`，回 `{"skipped":true}` 说明仓库没进配置）；`command -v omh-cli orchestrator`。
-4. 写任务书：按 `<skill>/references/task-book-template.md`，第 0 节原样收录技术方案；第 1 节的量级与分布取自 `<scan.json>`（按 `issue_id` 或 `member_issue_ids` / `family_key` 在各页 scan 里找这条；捞回项不在本次扫描里时，量级取 `pending` 里这条的 `users` / `count`，分布写「本次扫描未覆盖」）；第 2 节线上代码用主流程第 4 步查到的 commit；第 3、4 节按方案的缺陷点位、根因、改动范围写；第 5 节首条 AC 写方案的验收方式（复现步骤、改动前实际表现、期望表现）。`{{meego_url}}` 保留占位。
+4. 写任务书：按 `<skill>/references/task-book-template.md`，第 0 节原样收录技术方案；第 1 节的量级与分布取自 `<scan.json>`（按 `issue_id` 在各页 scan 里找这条；捞回项不在本次扫描里时，量级取 `pending` 里这条的 `users` / `count`，分布写「本次扫描未覆盖」）；第 2 节线上代码用主流程第 4 步查到的 commit；第 3、4 节按方案的缺陷点位、根因、改动范围写；第 5 节首条 AC 写方案的验收方式（复现步骤、改动前实际表现、期望表现）。`{{meego_url}}` 保留占位。
 5. 写 Meego 描述文件：现象 / 根因 / 修法 / Slardar 链接（`issue_url`，用 `[]` 包裹），末尾「【人工确认】<技术方案原文>」。标题带「线上告警修复」前缀，这批单日后靠它在需求里捞得出来。
 6. 准备：
 ```bash
@@ -148,7 +148,7 @@ bash <skill>/scripts/board.sh --state <state> --issue-id <id>
 ## 纪律
 
 - 任何情况下不自动派单，包括只有一条能修的、用户上次说过「以后都派」——每次都要本会话的技术方案与显式「派这条」。
-- 走查顺序只看族用户数；判定只有能修 / 不能修两档，拿不准判能修（见 `references/judging.md`）。
+- 走查顺序只看 issue 用户数，列表已按它降序，第一条能修即全局影响最大；判定只有能修 / 不能修两档，拿不准判能修（见 `references/judging.md`）。
 - 用户的拒绝与捞回优先于任何 agent 判定；agent 不改判捞回项。
 - 呈现与收敛对话里，结论由用户说出或在用户要求「说说你的判断」后给出。
 - 写答辩或复盘材料要某条告警的量级时间线：`node <skill>/scripts/state.mjs history --dir <state> --issue-id <id>`，基线取派单时那一行。没派过单的候选没有「派单前」参照，`recovery.ratio` 为 null；`latest_present` 为 false 时 `ratio` 按那次扫描的最小次数算，是上界而不是实测值。技能不判定修复是否见效，这个数只是给人看的原始材料。

@@ -3,7 +3,6 @@ import { mkdirSync, writeFileSync, realpathSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { PROJECTS, UNRESOLVED_FILTER, makeRunner, makeTextRunner, normalizeSourcePath, parseShareLink, resolveBin, resolveRepo } from './lib/cli.mjs';
-import { familyKey } from './lib/family.mjs';
 import { flattenRows, summarize } from './lib/stats.mjs';
 
 const SAMPLE_SIZE = 300;
@@ -88,8 +87,6 @@ async function scanBid(bid, window, page, pageSize, runner, textRunner) {
       detail_error,
       issue_url: issueDetailUrl(bid, window, issue.issue_id, latest.release),
       issue_id: issue.issue_id,
-      family_key: familyKey(issue.message),
-      member_issue_ids: [issue.issue_id],
       bid,
       project_dir: project.directory,
       scm_repos: project.scmRepos,
@@ -98,8 +95,6 @@ async function scanBid(bid, window, page, pageSize, runner, textRunner) {
       filename: issue.filename,
       count: issue.count,
       users: issue.user,
-      family_count: issue.count,
-      family_users: issue.user,
       first_seen: issue.min_crash_time,
       status: issue.issue_status,
       slardar_url: shareLink(bid, window, issue.issue_id, textRunner),
@@ -108,22 +103,6 @@ async function scanBid(bid, window, page, pageSize, runner, textRunner) {
     });
   }
   return candidates;
-}
-
-function mergeFamilies(candidates) {
-  const byKey = new Map();
-  for (const c of candidates) {
-    const key = `${c.bid}::${c.family_key}`;
-    const head = byKey.get(key);
-    if (!head) {
-      byKey.set(key, c);
-      continue;
-    }
-    head.member_issue_ids.push(c.issue_id);
-    head.family_count += c.count;
-    head.family_users += c.users;
-  }
-  return [...byKey.values()];
 }
 
 export async function scan({ bids, hours, page = 1, pageSize = 20, repo, now = Date.now(), runner, textRunner }) {
@@ -145,8 +124,9 @@ export async function scan({ bids, hours, page = 1, pageSize = 20, repo, now = D
       skipped.push({ bid, reason: String(error.message ?? error).slice(0, 300) });
     }
   }
-  // 合族后族用户数可能超过排在它前面的单个 issue，走查顺序以族为准。
-  const candidates = mergeFamilies(all).sort((a, b) => b.family_users - a.family_users);
+  // 候选以 Slardar issue 为单位、不合并：同文案的 issue 是 Slardar 按堆栈拆开的，合并会让一个判定盖住多条调用链。
+  // 列表已按用户数降序，贪心走查的第一条能修即全局影响最大；多个 BID 拼接时重排一次。
+  const candidates = all.sort((a, b) => b.users - a.users);
   return { scanned_at: new Date(now).toISOString(), window, page, page_size: pageSize, skipped_bids: skipped, candidates };
 }
 
