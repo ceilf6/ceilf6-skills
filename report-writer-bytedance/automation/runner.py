@@ -24,14 +24,16 @@ from notifications import (
 
 
 HOME = Path("/Users/bytedance")
-TRAE = HOME / ".local/bin/trae-cli"
+# LaunchAgent 访问 Desktop 下的仓库需要 macOS 为执行器授予文件访问权限。
+# 固定的独立执行器路径可避免 CLI 更新改变授权所关联的路径。
+CODEX = HOME / ".local/lib/trae-daily-report-executor/codex"
 SPACE_ID = "7658115519924686035"
 PARENT_NODE_TOKEN = "ZDvbwhN4eiFRoHkUh1ocXSeInSb"
 PREFLIGHT_TIMEOUT_SECONDS = 120
-TRAE_TIMEOUT_SECONDS = 7200
-TRAE_STARTUP_TIMEOUT_SECONDS = 120
-TRAE_STARTUP_ATTEMPTS = 2
-TRAE_STARTUP_RETRY_DELAY_SECONDS = 5
+CODEX_TIMEOUT_SECONDS = 7200
+CODEX_STARTUP_TIMEOUT_SECONDS = 120
+CODEX_STARTUP_ATTEMPTS = 2
+CODEX_STARTUP_RETRY_DELAY_SECONDS = 5
 VERIFY_TIMEOUT_SECONDS = 120
 FEISHU_OPEN_ID = "ou_c501034db06707b7116eb9ec11896a7d"
 NOTIFICATION_TIMEOUT_SECONDS = 30
@@ -65,7 +67,7 @@ class CommandError(DailyReportError):
         self.label = label
 
 
-class TraeStartupError(CommandError):
+class CodexStartupError(CommandError):
     pass
 
 
@@ -203,15 +205,20 @@ def validate_bits_auth_status(process: subprocess.CompletedProcess) -> None:
 
 
 def run_preflight(env: Dict[str, str], handle=sys.stdout) -> None:
-    required_paths = (TRAE, PROMPT_FILE, SKILL_DIR / "SKILL.md")
+    codex_host = CODEX.with_name("codex-code-mode-host")
+    required_paths = (CODEX, codex_host, PROMPT_FILE, SKILL_DIR / "SKILL.md")
     for path in required_paths:
         if not path.exists() or not os.access(str(path), os.R_OK):
             raise DailyReportError("required path is not readable: {}".format(path))
-    if not os.access(str(TRAE), os.X_OK):
-        raise DailyReportError("TRAE CLI is not executable: {}".format(TRAE))
+    if not os.access(str(CODEX), os.X_OK):
+        raise DailyReportError("Codex CLI is not executable: {}".format(CODEX))
+    if not os.access(str(codex_host), os.X_OK):
+        raise DailyReportError(
+            "Codex code mode host is not executable: {}".format(codex_host)
+        )
 
     required_checks = (
-        ("TRAE login", [str(TRAE), "login", "status"]),
+        ("Codex auth", [str(CODEX), "login", "status"]),
         ("Lark auth", ["lark-cli", "auth", "status", "--json", "--verify"]),
         ("ByteCloud auth", ["bytedcli", "auth", "status"]),
         ("ByteDance user", ["bytedcli", "auth", "userinfo"]),
@@ -223,7 +230,30 @@ def run_preflight(env: Dict[str, str], handle=sys.stdout) -> None:
         log_line(handle, "preflight {} started".format(label))
         process = run_checked(label, argv, PREFLIGHT_TIMEOUT_SECONDS, env)
         if label == "Bits auth":
-            validate_bits_auth_status(process)
+            try:
+                validate_bits_auth_status(process)
+            except CommandError:
+                # Bits token 寿命约一周，午夜跨过 TTL 时无人在场；ByteCloud SSO
+                # 检查排在前面，走到这里 SSO 必然有效，login 可静默换发。先
+                # logout 清掉过期缓存，避免 login 因 "already cached" 短路。
+                log_line(
+                    handle,
+                    "preflight Bits auth expired; refreshing via bits auth login",
+                )
+                run_checked(
+                    label,
+                    ["bytedcli", "bits", "auth", "logout"],
+                    PREFLIGHT_TIMEOUT_SECONDS,
+                    env,
+                )
+                run_checked(
+                    label,
+                    ["bytedcli", "bits", "auth", "login", "--json"],
+                    PREFLIGHT_TIMEOUT_SECONDS,
+                    env,
+                )
+                process = run_checked(label, argv, PREFLIGHT_TIMEOUT_SECONDS, env)
+                validate_bits_auth_status(process)
         log_line(
             handle,
             "preflight {} passed in {:.1f}s".format(label, time.monotonic() - started),
@@ -378,19 +408,16 @@ def render_prompt(target_date: str) -> str:
     return rendered
 
 
-def build_trae_argv(last_message: Path) -> List[str]:
+def build_codex_argv(last_message: Path) -> List[str]:
     return [
-        str(TRAE),
+        str(CODEX),
         "exec",
-        "--permission-mode",
-        "bypass_permissions",
+        "--dangerously-bypass-approvals-and-sandbox",
         "--dangerously-bypass-hook-trust",
         "--ignore-user-config",
         "--ephemeral",
         "-c",
         "shell_environment_policy.inherit=all",
-        "--model",
-        "gpt-5.6-sol",
         "--cd",
         str(HOME),
         "--add-dir",
@@ -403,6 +430,14 @@ def build_trae_argv(last_message: Path) -> List[str]:
         str(last_message),
         "-",
     ]
+
+
+def parse_stream_event(raw_line: bytes) -> Optional[dict]:
+    try:
+        parsed = json.loads(raw_line)
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def stop_process(process: subprocess.Popen) -> None:
@@ -419,13 +454,13 @@ def stop_process(process: subprocess.Popen) -> None:
         process.wait()
 
 
-def run_trae_attempt(
+def run_codex_attempt(
     prompt: str,
     last_message: Path,
     env: Dict[str, str],
     handle,
 ) -> None:
-    argv = build_trae_argv(last_message)
+    argv = build_codex_argv(last_message)
     try:
         process = subprocess.Popen(
             argv,
@@ -433,10 +468,13 @@ def run_trae_attempt(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=env,
+            cwd=str(HOME),
             start_new_session=True,
         )
     except OSError as error:
-        raise CommandError("TRAE execution could not start: {}".format(error)) from error
+        raise CommandError(
+            "Codex execution could not start: {}".format(error)
+        ) from error
 
     assert process.stdin is not None
     assert process.stdout is not None
@@ -448,7 +486,7 @@ def run_trae_attempt(
 
     started = time.monotonic()
     saw_session_output = False
-    startup_probe = b""
+    line_buffer = b""
     selector = selectors.DefaultSelector()
     selector.register(process.stdout, selectors.EVENT_READ)
     try:
@@ -456,19 +494,19 @@ def run_trae_attempt(
             elapsed = time.monotonic() - started
             if (
                 not saw_session_output
-                and elapsed >= TRAE_STARTUP_TIMEOUT_SECONDS
+                and elapsed >= CODEX_STARTUP_TIMEOUT_SECONDS
             ):
                 stop_process(process)
-                raise TraeStartupError(
-                    "TRAE produced no thread.started event within {}s".format(
-                        TRAE_STARTUP_TIMEOUT_SECONDS
+                raise CodexStartupError(
+                    "Codex produced no thread.started event within {}s".format(
+                        CODEX_STARTUP_TIMEOUT_SECONDS
                     )
                 )
-            if elapsed >= TRAE_TIMEOUT_SECONDS:
+            if elapsed >= CODEX_TIMEOUT_SECONDS:
                 stop_process(process)
                 raise CommandError(
-                    "TRAE execution timed out after {}s".format(
-                        TRAE_TIMEOUT_SECONDS
+                    "Codex execution timed out after {}s".format(
+                        CODEX_TIMEOUT_SECONDS
                     )
                 )
 
@@ -476,11 +514,14 @@ def run_trae_attempt(
             for key, _ in events:
                 chunk = os.read(key.fileobj.fileno(), 65536)
                 if chunk:
-                    if not saw_session_output:
-                        startup_probe = (startup_probe + chunk)[-4096:]
-                        saw_session_output = (
-                            b'"type":"thread.started"' in startup_probe
-                        )
+                    line_buffer += chunk
+                    while b"\n" in line_buffer:
+                        raw_line, line_buffer = line_buffer.split(b"\n", 1)
+                        event = parse_stream_event(raw_line)
+                        if event is None:
+                            continue
+                        if event.get("type") == "thread.started":
+                            saw_session_output = True
                     handle.write(chunk.decode("utf-8", errors="replace"))
                     handle.flush()
                 else:
@@ -494,36 +535,36 @@ def run_trae_attempt(
 
     if process.returncode != 0:
         raise CommandError(
-            "TRAE execution failed with status {}".format(process.returncode)
+            "Codex execution failed with status {}".format(process.returncode)
         )
     if not saw_session_output:
-        raise TraeStartupError(
-            "TRAE exited before producing a thread.started event"
+        raise CodexStartupError(
+            "Codex exited before producing a thread.started event"
         )
 
 
-def run_trae(
+def run_codex(
     prompt: str,
     last_message: Path,
     env: Dict[str, str],
     handle,
 ) -> None:
-    for attempt in range(1, TRAE_STARTUP_ATTEMPTS + 1):
+    for attempt in range(1, CODEX_STARTUP_ATTEMPTS + 1):
         try:
-            run_trae_attempt(prompt, last_message, env, handle)
+            run_codex_attempt(prompt, last_message, env, handle)
             return
-        except TraeStartupError as error:
-            if attempt == TRAE_STARTUP_ATTEMPTS:
+        except CodexStartupError as error:
+            if attempt == CODEX_STARTUP_ATTEMPTS:
                 raise
             log_line(
                 handle,
-                "TRAE startup attempt {} failed: {}; retrying".format(
+                "Codex startup attempt {} failed: {}; retrying".format(
                     attempt, error
                 ),
             )
             if last_message.exists():
                 last_message.unlink()
-            time.sleep(TRAE_STARTUP_RETRY_DELAY_SECONDS)
+            time.sleep(CODEX_STARTUP_RETRY_DELAY_SECONDS)
 
 
 def send_lark_dm(event: NotificationEvent, env: Dict[str, str]) -> None:
@@ -590,26 +631,28 @@ def run_full(target_date: str, env: Dict[str, str]) -> int:
         stage = "preflight"
         try:
             run_preflight(env, handle)
-            stage = "trae_execution"
+            stage = "codex_execution"
             prompt = render_prompt(target_date)
-            log_line(handle, "TRAE execution started")
+            log_line(handle, "Codex execution started")
             started = time.monotonic()
-            run_trae(prompt, last_message, env, handle)
+            run_codex(prompt, last_message, env, handle)
             log_line(
                 handle,
-                "TRAE execution exited 0 in {:.1f}s".format(
+                "Codex execution exited 0 in {:.1f}s".format(
                     time.monotonic() - started
                 ),
             )
             stage = "result_contract"
             if not last_message.is_file():
-                raise VerificationError("TRAE did not write its final message")
+                raise VerificationError(
+                    "Codex did not produce a final result message"
+                )
             message = last_message.read_text(encoding="utf-8")
             warnings = parse_report_warnings(message)
             outcome = result_status(message, target_date)
             if outcome is None:
                 raise VerificationError(
-                    "TRAE final message lacks a recognized result sentinel"
+                    "Codex final message lacks a recognized result sentinel"
                 )
             if outcome == "success":
                 stage = "wiki_verification"
