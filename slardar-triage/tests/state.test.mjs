@@ -6,9 +6,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  loadState, saveState, mergeScan, setJudgment, pendingSorted, reject, markDispatched,
+  loadState, saveState, mergeScan, judge, revive, pendingSorted, reject, markDispatched,
   readLedger, ledgerRows, appendLedger, mergeFromScan,
-  pick, cover, history,
+  walk, history,
 } from '../scripts/state.mjs';
 
 const STATE_CLI = fileURLToPath(new URL('../scripts/state.mjs', import.meta.url));
@@ -53,7 +53,8 @@ test('空目录加载得到空状态，保存后可回读', () => {
 test('mergeScan 新候选入池为 pending，已有条目刷新影响数与链接', () => {
   let { state } = mergeScan(empty(), [scanned()], '2026-09-10T00:00:00Z');
   assert.equal(state.candidates.i1.status, 'pending');
-  assert.equal(state.candidates.i1.likelihood, null);
+  assert.equal(state.candidates.i1.verdict, null);
+  assert.deepEqual(state.candidates.i1.verdicts, []);
   assert.equal(state.candidates.i1.first_seen_at, '2026-09-10T00:00:00Z');
   ({ state } = mergeScan(state, [scanned({ family_users: 300, issue_url: 'u2', member_issue_ids: ['i1', 'i9'] })], '2026-09-11T00:00:00Z'));
   assert.equal(state.candidates.i1.users, 300);
@@ -63,18 +64,14 @@ test('mergeScan 新候选入池为 pending，已有条目刷新影响数与链�
   assert.equal(state.candidates.i1.first_seen_at, '2026-09-10T00:00:00Z');
 });
 
-test('mergeScan 对缺席的 pending 记 stale，连续两次移出；dispatched / rejected 不移出', () => {
-  let { state } = mergeScan(empty(), [scanned(), scanned({ issue_id: 'i2', family_key: 'f2' }), scanned({ issue_id: 'i3', family_key: 'f3' })], 't0');
-  markDispatched(state, 'i2', { task_id: 't', supplement: 'x', at: 't0' });
-  reject(state, 'i3', '不修', 't0');
-  let r = mergeScan(state, [], 't1');
-  assert.equal(r.state.candidates.i1.stale_count, 1);
-  assert.deepEqual(r.removed, []);
-  r = mergeScan(r.state, [], 't2');
-  assert.equal(r.state.candidates.i1, undefined);
-  assert.deepEqual(r.removed.map((c) => c.issue_id), ['i1']);
-  assert.equal(r.state.candidates.i2.status, 'dispatched');
-  assert.equal(r.state.candidates.i3.status, 'rejected');
+test('mergeScan 不删除缺席的候选：分页没扫到不代表告警消失', () => {
+  let { state } = mergeScan(empty(), [scanned(), scanned({ issue_id: 'i2', family_key: 'f2' })], 't0');
+  judge(state, 'i2', { fixable: false, reason: 'r', at: 't0' });
+  ({ state } = mergeScan(state, [], 't1'));
+  ({ state } = mergeScan(state, [], 't2'));
+  assert.deepEqual(Object.keys(state.candidates).sort(), ['i1', 'i2']);
+  assert.equal(state.candidates.i2.verdict.reason, 'r');
+  assert.equal('stale_count' in state.candidates.i1, false);
 });
 
 test('mergeScan 同族已 dispatched / rejected 的新 issue 不再入池', () => {
@@ -84,29 +81,77 @@ test('mergeScan 同族已 dispatched / rejected 的新 issue 不再入池', () =
   assert.equal(state.candidates.i7, undefined);
 });
 
-test('setJudgment 与 pendingSorted 按档位再按用户数排序，null 档位最后', () => {
-  let { state } = mergeScan(empty(), [
+test('pendingSorted 只含 pending，按用户数降序', () => {
+  const { state } = mergeScan(empty(), [
     scanned({ issue_id: 'a', family_key: 'fa', family_users: 10 }),
     scanned({ issue_id: 'b', family_key: 'fb', family_users: 900 }),
     scanned({ issue_id: 'c', family_key: 'fc', family_users: 500 }),
-    scanned({ issue_id: 'd', family_key: 'fd', family_users: 999 }),
   ], 't0');
-  setJudgment(state, 'a', { likelihood: '高', summary: 'sa' });
-  setJudgment(state, 'b', { likelihood: '中', summary: 'sb' });
-  setJudgment(state, 'c', { likelihood: '高', summary: 'sc' });
-  assert.deepEqual(pendingSorted(state).map((c) => c.issue_id), ['c', 'a', 'b', 'd']);
-  assert.equal(state.candidates.a.summary, 'sa');
+  reject(state, 'b', '不修', 't1');
+  assert.deepEqual(pendingSorted(state).map((c) => c.issue_id), ['c', 'a']);
+});
+
+test('judge 写 agent 判定并追加 verdicts 历史', () => {
+  const { state } = mergeScan(empty(), [scanned()], T0);
+  judge(state, 'i1', { fixable: false, reason: '调用点在宿主内置脚本', at: T0 });
+  judge(state, 'i1', { fixable: true, reason: '调用方可加能力探测', at: T1 });
+  assert.deepEqual(state.candidates.i1.verdict, { fixable: true, reason: '调用方可加能力探测', by: 'agent', at: T1 });
+  assert.deepEqual(state.candidates.i1.verdicts.map((v) => v.fixable), [false, true]);
+});
+
+test('judge 拒绝：缺理由、fixable 非布尔、池里没有、非 pending、已被用户捞回', () => {
+  const { state } = mergeScan(empty(), [scanned(), scanned({ issue_id: 'i2', family_key: 'f2' })], T0);
+  assert.throws(() => judge(state, 'i1', { fixable: true, reason: '', at: T0 }), /--reason/);
+  assert.throws(() => judge(state, 'i1', { fixable: undefined, reason: 'r', at: T0 }), /yes \/ no/);
+  assert.throws(() => judge(state, 'nope', { fixable: true, reason: 'r', at: T0 }), /候选池里没有/);
+  reject(state, 'i2', '不修', T0);
+  assert.throws(() => judge(state, 'i2', { fixable: true, reason: 'r', at: T0 }), /不是 pending 候选/);
+  revive(state, 'i1', T0);
+  assert.throws(() => judge(state, 'i1', { fixable: false, reason: 'r', at: T1 }), /已由用户捞回/);
+});
+
+test('judge --same-as 写 covered_by 并判不能修，目标须是已派单且不能是自己', () => {
+  const { state } = mergeScan(empty(), [scanned({ issue_id: 'old', family_key: 'k1' }), scanned({ issue_id: 'shared', family_key: 'k2' })], T0);
+  assert.throws(() => judge(state, 'shared', { sameAs: 'old', reason: '同缺陷', at: T0 }), /不是已派单候选/);
+  markDispatched(state, 'old', { task_id: 't', supplement: 'x', at: T0 });
+  assert.throws(() => judge(state, 'shared', { sameAs: 'shared', reason: '同缺陷', at: T0 }), /不能归属到自己/);
+  judge(state, 'shared', { sameAs: 'old', reason: '同缺陷已派单 old', at: T1 });
+  assert.equal(state.candidates.shared.covered_by, 'old');
+  assert.deepEqual(state.candidates.shared.verdict, { fixable: false, reason: '同缺陷已派单 old', by: 'agent', at: T1 });
+});
+
+test('revive 写用户判定、清掉 covered_by，已拒的恢复为 pending，已派单的拒绝', () => {
+  const { state } = mergeScan(empty(), [
+    scanned({ issue_id: 'old', family_key: 'k1' }),
+    scanned({ issue_id: 'a', family_key: 'k2' }),
+    scanned({ issue_id: 'b', family_key: 'k3' }),
+  ], T0);
+  markDispatched(state, 'old', { task_id: 't', supplement: 'x', at: T0 });
+  judge(state, 'a', { sameAs: 'old', reason: '同缺陷', at: T0 });
+  revive(state, 'a', T1);
+  assert.equal(state.candidates.a.covered_by, undefined);
+  assert.deepEqual(state.candidates.a.verdict, { fixable: true, reason: '捞回', by: 'user', at: T1 });
+  assert.equal(state.candidates.a.verdicts.length, 2);
+  reject(state, 'b', '不修', T0);
+  revive(state, 'b', T1);
+  assert.equal(state.candidates.b.status, 'pending');
+  assert.equal(state.candidates.b.decision, null);
+  assert.deepEqual(state.candidates.b.verdicts.map((v) => [v.by, v.fixable, v.reason]), [['user', false, '不修'], ['user', true, '捞回']]);
+  assert.throws(() => revive(state, 'old', T1), /已派单/);
+  assert.throws(() => revive(state, 'nope', T1), /候选池里没有/);
 });
 
 test('reject 与 markDispatched 记录决策并改状态，之后不再出现在 pending', () => {
   let { state } = mergeScan(empty(), [scanned()], 't0');
   reject(state, 'i1', '宿主问题', 't1');
   assert.deepEqual(state.candidates.i1.decision, { reason: '宿主问题', at: 't1' });
+  assert.deepEqual(state.candidates.i1.verdict, { fixable: false, reason: '宿主问题', by: 'user', at: 't1' });
   assert.deepEqual(pendingSorted(state), []);
   ({ state } = mergeScan(empty(), [scanned()], 't0'));
   markDispatched(state, 'i1', { task_id: 'task_x', supplement: 'native 已确认', at: 't2' });
   assert.equal(state.candidates.i1.status, 'dispatched');
   assert.equal(state.candidates.i1.decision.task_id, 'task_x');
+  assert.equal('fix_paths' in state.candidates.i1.decision, false);
   assert.equal(state.dispatched.i1.task_id, 'task_x');
 });
 
@@ -199,19 +244,18 @@ test('readLedger 跳过读不出的坏行，appendLedger 仍照常追加且坏�
 test('mergeFromScan 落候选池、台账与 merge-latest.json', () => {
   const dir = mkdtempSync(join(tmpdir(), 'st-'));
   const out = mergeFromScan(dir, { scanned_at: T0, candidates: [snap(), snap({ issue_id: 'i2', family_key: 'f2' })] });
-  assert.deepEqual(out, { pending: 2, removed: 0, ledger_appended: 2 });
+  assert.deepEqual(out, { pending: 2, ledger_appended: 2 });
   assert.equal(loadState(dir).candidates.i2.status, 'pending');
   assert.equal(readLedger(dir).length, 2);
   const latest = JSON.parse(readFileSync(join(dir, 'scans', 'merge-latest.json'), 'utf8'));
   assert.deepEqual(latest.pending.map((c) => c.issue_id).sort(), ['i1', 'i2']);
-  assert.deepEqual(latest.removed, []);
 });
 
 test('CLI merge 输出一行 JSON', () => {
   const dir = mkdtempSync(join(tmpdir(), 'st-'));
   const scanFile = join(dir, 'scan.json');
   writeFileSync(scanFile, JSON.stringify({ scanned_at: T0, candidates: [snap()] }));
-  assert.deepEqual(cli('merge', '--dir', dir, '--scan', scanFile), { ok: true, pending: 1, removed: 0, ledger_appended: 1 });
+  assert.deepEqual(cli('merge', '--dir', dir, '--scan', scanFile), { ok: true, pending: 1, ledger_appended: 1 });
 });
 
 test('ledgerRows 同族池内既有 pending 又有已结案成员时，归属已结案的那条', () => {
@@ -222,25 +266,22 @@ test('ledgerRows 同族池内既有 pending 又有已结案成员时，归属已
   assert.equal(rows[0].status, 'rejected');
 });
 
-test('CLI merge / pick 缺 --scan 按用法错误退出 2', () => {
+test('CLI merge / walk 缺 --scan 按用法错误退出 2', () => {
   const dir = mkdtempSync(join(tmpdir(), 'st-'));
-  for (const cmd of ['merge', 'pick']) {
+  for (const cmd of ['merge', 'walk']) {
     const { status, stderr } = cliStatus(cmd, '--dir', dir);
     assert.equal(status, 2);
     assert.match(stderr, /用法/);
   }
 });
 
-test('CLI 认 issue 的子命令缺 --issue-id、cover 缺 --by 都按用法错误退出 2', () => {
+test('CLI 认 issue 的子命令缺 --issue-id 按用法错误退出 2', () => {
   const dir = mkdtempSync(join(tmpdir(), 'st-'));
-  for (const cmd of ['judge', 'reject', 'dispatched', 'cover', 'history']) {
+  for (const cmd of ['judge', 'revive', 'reject', 'dispatched', 'history']) {
     const { status, stderr } = cliStatus(cmd, '--dir', dir);
     assert.equal(status, 2, cmd);
     assert.match(stderr, /用法/);
   }
-  const { status, stderr } = cliStatus('cover', '--dir', dir, '--issue-id', 'i1');
-  assert.equal(status, 2);
-  assert.match(stderr, /用法/);
 });
 
 test('CLI history 遇到池里没有的 issue 输出 ok:false 并退出 1', () => {
@@ -254,121 +295,115 @@ test('CLI history 遇到池里没有的 issue 输出 ok:false 并退出 1', () =
 
 const frame = (over = {}) => ({ raw_filename: 'webpack://@byteview-web/vc-ai/./src/a.ts', mapped_path: 'vc-ai/src/a.ts', line: 10, function: 'fa', page: '/webview/ai-layout', release: '7.77.0.21', ...over });
 
-test('pick 按机械规则剔除并写入档位：warn、服务端错误码、豆包页面、native code、帧不在仓内', () => {
-  const scan = [
-    snap({ issue_id: 'warn', family_key: 'k1', message: '[warn] FishBoneError: out of screen' }),
-    snap({ issue_id: 'code', family_key: 'k2', message: '业务错误，ErrorInfo: code: 220301,larkErrorCode: 220301' }),
-    snap({ issue_id: 'user', family_key: 'k3', message: 'invalid user' }),
-    snap({ issue_id: 'api', family_key: 'k4', message: 'APINotProvided' }),
-    snap({ issue_id: 'doubao', family_key: 'k5', pid_dist: { '/webview/doubao-ai-layout-mobile': 300 } }),
-    snap({ issue_id: 'native', family_key: 'k6', latest_event: frame({ raw_filename: '[native code]', mapped_path: null }) }),
-    snap({ issue_id: 'blob', family_key: 'k7', latest_event: frame({ raw_filename: 'blob:https://vc.feishu.cn/x', mapped_path: null }) }),
-    snap({ issue_id: 'ok', family_key: 'k8' }),
-  ];
-  const { state } = mergeScan(empty(), scan, T0);
-  const out = pick(state, scan);
-  assert.deepEqual(out.shortlist.map((c) => c.issue_id), ['ok']);
-  assert.deepEqual(Object.fromEntries(out.filtered.map((f) => [f.issue_id, f.likelihood])), {
-    warn: '排除', code: '低', user: '低', api: '低', doubao: '低', native: '低', blob: '低',
-  });
-  assert.equal(state.candidates.warn.likelihood, '排除');
-  assert.equal(state.candidates.warn.summary, 'warn 级上报');
-  assert.equal(state.candidates.blob.summary, '最新帧不在 vc-ai / packages 源码');
-  assert.equal(state.candidates.ok.likelihood, null);
-});
-
-test('pick 短名单按族用户数降序，Sourcemap 没取到的排末尾，带帧信息；--skip 与已判低 / 排除的不进短名单', () => {
-  const scan = [
-    snap({ issue_id: 'small', family_key: 'k1', family_users: 10 }),
-    snap({ issue_id: 'nomap', family_key: 'k2', family_users: 9999, detail_error: 'sourcemap 404', latest_event: frame({ mapped_path: null }) }),
-    snap({ issue_id: 'big', family_key: 'k3', family_users: 500, latest_event: frame({ mapped_path: 'packages/vc-web-utils/x.ts', line: 29, function: 'fx' }) }),
-    snap({ issue_id: 'shown', family_key: 'k4', family_users: 800 }),
-    snap({ issue_id: 'fixed', family_key: 'k5', family_users: 900 }),
-  ];
-  const { state } = mergeScan(empty(), scan, T0);
-  setJudgment(state, 'fixed', { likelihood: '排除', summary: 'master 已修复' });
-  const out = pick(state, scan, { skip: ['shown'] });
-  assert.deepEqual(out.shortlist.map((c) => c.issue_id), ['big', 'small', 'nomap']);
-  assert.deepEqual(out.shortlist[0], {
-    issue_id: 'big', message: 'm', issue_url: 'u1', users: 500, count: 5000, likelihood: null, detail_error: null,
-    mapped_path: 'packages/vc-web-utils/x.ts', line: 29, function: 'fx', page: '/webview/ai-layout', release: '7.77.0.21',
-  });
-  assert.deepEqual(out.filtered.map((f) => f.issue_id), ['fixed']);
-});
-
-test('pick 短名单的 message 取本次扫描快照，不取池里冻在首见那次的文案', () => {
-  const scan = [snap({ message: '[native-api] command=94003 timed out after 10000ms' })];
-  const { state } = mergeScan(empty(), scan, T0);
-  state.candidates.i1.message = '[native-api] command=94003 timed out after 3000ms';
-  assert.equal(pick(state, scan).shortlist[0].message, '[native-api] command=94003 timed out after 10000ms');
-});
-
-test('pick 不拿机械规则覆盖已判高 / 中的候选', () => {
-  const scan = [snap({ issue_id: 'judged', family_key: 'k1', latest_event: frame({ raw_filename: '[native code]', mapped_path: null }) })];
-  const { state } = mergeScan(empty(), scan, T0);
-  setJudgment(state, 'judged', { likelihood: '中', summary: '疑似 native 未返回' });
-  const out = pick(state, scan);
-  assert.deepEqual(out.shortlist.map((c) => c.issue_id), ['judged']);
-  assert.deepEqual(out.filtered, []);
-  assert.equal(state.candidates.judged.likelihood, '中');
-  assert.equal(state.candidates.judged.summary, '疑似 native 未返回');
-});
-
-test('pick 只看本次扫描到的 pending 候选', () => {
-  const { state } = mergeScan(empty(), [snap(), snap({ issue_id: 'gone', family_key: 'k9' })], T0);
-  assert.deepEqual(pick(state, [snap()]).shortlist.map((c) => c.issue_id), ['i1']);
-});
-
-test('已派单覆盖：帧命中已派单的 fix_paths 进 covered 并写 covered_by，不再随合入与否变化', () => {
-  const scan = [snap({ issue_id: 'old', family_key: 'k1' }), snap({ issue_id: 'renamed', family_key: 'k2' })];
-  const { state } = mergeScan(empty(), scan, T0);
-  markDispatched(state, 'old', { task_id: 't', supplement: 'x', fix_paths: ['vc-ai/src/services/ai-layout.ts'], at: T0 });
-  const out = pick(state, scan);
-  assert.deepEqual(out.shortlist, []);
-  assert.deepEqual(out.covered, [{ issue_id: 'renamed', covered_by: 'old' }]);
-  assert.equal(out.dispatched, 1);
-  assert.equal(state.candidates.renamed.covered_by, 'old');
-  assert.equal(state.candidates.renamed.status, 'pending');
-  assert.deepEqual(pick(state, scan).covered, [{ issue_id: 'renamed', covered_by: 'old' }]);
-});
-
-test('cover 手工建立归属：帧在共享 throw 点、fix_paths 匹配不到时同样进 covered', () => {
-  const scan = [snap({ issue_id: 'old', family_key: 'k1' }), snap({ issue_id: 'shared', family_key: 'k2', latest_event: frame({ mapped_path: 'vc-ai/src/utils/native-api/mobile-native-client.ts' }) })];
-  const { state } = mergeScan(empty(), scan, T0);
-  assert.throws(() => cover(state, 'shared', 'old'), /不是已派单候选/);
-  markDispatched(state, 'old', { task_id: 't', supplement: 'x', at: T0 });
-  assert.deepEqual(state.candidates.old.decision.fix_paths, []);
-  assert.deepEqual(pick(state, scan).shortlist.map((c) => c.issue_id), ['shared']);
-  cover(state, 'shared', 'old');
-  assert.deepEqual(pick(state, scan).covered, [{ issue_id: 'shared', covered_by: 'old' }]);
-});
-
-test('cover 拒绝自己归属自己，也拒绝已结案的候选', () => {
-  const scan = [snap({ issue_id: 'old', family_key: 'k1' }), snap({ issue_id: 'done', family_key: 'k2' })];
-  const { state } = mergeScan(empty(), scan, T0);
-  markDispatched(state, 'old', { task_id: 't', supplement: 'x', at: T0 });
-  assert.throws(() => cover(state, 'old', 'old'), /不能归属到自己/);
-  reject(state, 'done', '宿主问题', T0);
-  assert.throws(() => cover(state, 'done', 'old'), /不是 pending 候选/);
-});
-
-test('CLI pick / dispatched --fix-paths / cover 落盘并输出一行 JSON', () => {
+test('CLI judge / revive 落盘并输出一行 JSON；judge 缺 --reason 报错不落盘；dispatched 不记 fix_paths', () => {
   const dir = mkdtempSync(join(tmpdir(), 'st-'));
   const scanFile = join(dir, 'scan.json');
-  const scan = { scanned_at: T0, candidates: [snap({ issue_id: 'old', family_key: 'k1' }), snap({ issue_id: 'new', family_key: 'k2', latest_event: frame() })] };
-  writeFileSync(scanFile, JSON.stringify(scan));
+  writeFileSync(scanFile, JSON.stringify({ scanned_at: T0, candidates: [snap(), snap({ issue_id: 'i2', family_key: 'f2' })] }));
   cli('merge', '--dir', dir, '--scan', scanFile);
-  assert.deepEqual(cli('dispatched', '--dir', dir, '--issue-id', 'old', '--task-id', 't', '--task-slug', 'old-2026-09-21', '--workspace', '/h/ws/old/byteview-web', '--supplement', 's', '--fix-paths', 'vc-ai/src/x.ts, vc-ai/src/y.ts'), { ok: true, dispatched: 'old' });
-  assert.equal(loadState(dir).dispatched.old.task_slug, 'old-2026-09-21');
-  assert.equal(loadState(dir).dispatched.old.workspace, '/h/ws/old/byteview-web');
-  assert.deepEqual(loadState(dir).candidates.old.decision.fix_paths, ['vc-ai/src/x.ts', 'vc-ai/src/y.ts']);
-  assert.deepEqual(cli('pick', '--dir', dir, '--scan', scanFile).shortlist.map((c) => c.issue_id), ['new']);
-  assert.deepEqual(cli('pick', '--dir', dir, '--scan', scanFile, '--skip', 'new').shortlist, []);
-  assert.deepEqual(cli('cover', '--dir', dir, '--issue-id', 'new', '--by', 'old'), { ok: true, issue_id: 'new', covered_by: 'old' });
-  const out = cli('pick', '--dir', dir, '--scan', scanFile);
+  const r = cliStatus('judge', '--dir', dir, '--issue-id', 'i1', '--fixable', 'no');
+  assert.equal(r.status, 1);
+  assert.match(JSON.parse(r.stdout).error, /--reason/);
+  assert.equal(loadState(dir).candidates.i1.verdict, null);
+  assert.deepEqual(cli('judge', '--dir', dir, '--issue-id', 'i1', '--fixable', 'no', '--reason', '宿主内置脚本'), { ok: true, issue_id: 'i1', fixable: false, covered_by: null });
+  cli('dispatched', '--dir', dir, '--issue-id', 'i2', '--task-id', 't', '--workspace', '/h/ws/i2/byteview-web');
+  assert.equal('fix_paths' in loadState(dir).candidates.i2.decision, false);
+  assert.deepEqual(cli('judge', '--dir', dir, '--issue-id', 'i1', '--same-as', 'i2', '--reason', '同缺陷已派单 i2'), { ok: true, issue_id: 'i1', fixable: false, covered_by: 'i2' });
+  assert.deepEqual(cli('revive', '--dir', dir, '--issue-id', 'i1'), { ok: true, revived: 'i1' });
+  const c = loadState(dir).candidates.i1;
+  assert.equal(c.verdict.by, 'user');
+  assert.equal(c.covered_by, undefined);
+  assert.equal(c.verdicts.length, 3);
+});
+
+test('walk 按族用户数降序归类：已派单 / 同缺陷 > 已拒 > 用户捞回 > agent 能修 > agent 不能修 > 待判', () => {
+  const scan = [
+    snap({ issue_id: 'disp', family_key: 'k1', family_users: 900 }),
+    snap({ issue_id: 'cov', family_key: 'k2', family_users: 800 }),
+    snap({ issue_id: 'rej', family_key: 'k3', family_users: 700 }),
+    snap({ issue_id: 'no', family_key: 'k4', family_users: 600 }),
+    snap({ issue_id: 'rev', family_key: 'k5', family_users: 500 }),
+    snap({ issue_id: 'yes', family_key: 'k6', family_users: 400 }),
+    snap({ issue_id: 'new', family_key: 'k7', family_users: 300 }),
+  ];
+  const { state } = mergeScan(empty(), scan, T0);
+  markDispatched(state, 'disp', { task_id: 't', supplement: 'x', at: T0 });
+  judge(state, 'cov', { sameAs: 'disp', reason: '同缺陷已派单 disp', at: T1 });
+  judge(state, 'rej', { fixable: true, reason: '调用方可 catch', at: T0 });
+  reject(state, 'rej', '只是加日志，没必要', T1);
+  judge(state, 'no', { fixable: false, reason: '调用点在宿主内置脚本', at: T1 });
+  judge(state, 'rev', { fixable: false, reason: '宿主未注入 API', at: T1 });
+  revive(state, 'rev', T2);
+  judge(state, 'yes', { fixable: true, reason: '调用方可加 catch', at: T1 });
+  const out = walk(state, [...scan].reverse());
+  assert.deepEqual(out.items.map((i) => [i.issue_id, i.class, i.source]), [
+    ['disp', 'skip', 'dispatched'],
+    ['cov', 'skip', 'dispatched'],
+    ['rej', 'skip', 'rejected'],
+    ['no', 'skip', 'agent'],
+    ['rev', 'fixable', 'user'],
+    ['yes', 'fixable', 'agent'],
+    ['new', 'unjudged', null],
+  ]);
+  assert.equal(out.items[0].at, T0);
+  assert.equal(out.items[1].reason, '同缺陷已派单 disp');
+  assert.equal(out.items[2].reason, '只是加日志，没必要');
+  assert.equal(out.items[3].reason, '调用点在宿主内置脚本');
+  assert.equal(out.items[3].at, T1);
+  assert.deepEqual(out.todo, [{ issue_id: 'rev', users: 500, message: 'm', issue_url: 'u1', at: T2 }]);
+  assert.equal(out.exhausted, false);
+});
+
+test('walk 的 message 与帧信息取本次扫描快照；--skip 只把非 skip 项记为 session 且不落盘', () => {
+  const scan = [
+    snap({ message: '[native-api] command=94003 timed out after 10000ms', family_users: 50 }),
+    snap({ issue_id: 'i2', family_key: 'f2', family_users: 40 }),
+  ];
+  const { state } = mergeScan(empty(), scan, T0);
+  state.candidates.i1.message = '[native-api] command=94003 timed out after 3000ms';
+  reject(state, 'i2', '不修', T0);
+  const out = walk(state, scan, { skip: ['i1', 'i2'] });
+  assert.deepEqual(out.items[0], {
+    issue_id: 'i1', users: 50, count: 5000, message: '[native-api] command=94003 timed out after 10000ms', issue_url: 'u1',
+    class: 'skip', source: 'session', reason: '', at: null,
+    detail_error: null, mapped_path: 'vc-ai/src/services/ai-layout.ts', line: 271, function: 'getMeetingAISummary', page: '/webview/ai-layout', release: '7.77.0.21',
+  });
+  assert.equal(out.items[1].source, 'rejected');
+  assert.equal(out.exhausted, true);
+  assert.equal(state.candidates.i1.verdict, null);
+});
+
+test('walk 让同族换了 issue_id 的扫描项沿用已派单那条的状态', () => {
+  const { state } = mergeScan(empty(), [snap({ issue_id: 'old', family_key: 'k1' })], T0);
+  markDispatched(state, 'old', { task_id: 't', supplement: 'x', at: T0 });
+  const later = [snap({ issue_id: 'fresh', family_key: 'k1', member_issue_ids: ['fresh'] })];
+  const merged = mergeScan(state, later, T1).state;
+  assert.equal(merged.candidates.fresh, undefined);
+  assert.deepEqual(walk(merged, later).items.map((i) => [i.issue_id, i.class, i.source]), [['old', 'skip', 'dispatched']]);
+});
+
+test('walk 跨页同族：后一页的成员沿用前一页已判定那条的结论', () => {
+  const page1 = [snap({ issue_id: 'a', family_key: 'APINotProvided', family_users: 900 })];
+  let { state } = mergeScan(empty(), page1, T0);
+  judge(state, 'a', { fixable: false, reason: '调用点在宿主内置脚本', at: T0 });
+  const page2 = [snap({ issue_id: 'b', family_key: 'APINotProvided', member_issue_ids: ['b'], family_users: 90 })];
+  ({ state } = mergeScan(state, page2, T1));
+  assert.equal(state.candidates.b.verdict, null);
+  assert.deepEqual(walk(state, page2).items.map((i) => [i.issue_id, i.class, i.reason]), [['a', 'skip', '调用点在宿主内置脚本']]);
+});
+
+test('CLI walk 输出一行 JSON 且不改池子', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'st-'));
+  const scanFile = join(dir, 'scan.json');
+  writeFileSync(scanFile, JSON.stringify({ scanned_at: T0, candidates: [snap(), snap({ issue_id: 'i2', family_key: 'f2', family_users: 100 })] }));
+  cli('merge', '--dir', dir, '--scan', scanFile);
+  cli('judge', '--dir', dir, '--issue-id', 'i1', '--fixable', 'no', '--reason', '宿主内置脚本');
+  const before = readFileSync(join(dir, 'candidates.json'), 'utf8');
+  const out = cli('walk', '--dir', dir, '--scan', scanFile, '--skip', 'i2');
   assert.equal(out.ok, true);
-  assert.deepEqual(out.covered, [{ issue_id: 'new', covered_by: 'old' }]);
-  assert.equal(out.dispatched, 1);
+  assert.deepEqual(out.items.map((i) => [i.issue_id, i.class, i.source]), [['i1', 'skip', 'agent'], ['i2', 'skip', 'session']]);
+  assert.deepEqual(out.todo, []);
+  assert.equal(out.exhausted, true);
+  assert.equal(readFileSync(join(dir, 'candidates.json'), 'utf8'), before);
 });
 
 test('history 给出本族与被覆盖族的台账行、处置事件、回落比（改名新族的量加总后再比）', () => {
@@ -377,9 +412,9 @@ test('history 给出本族与被覆盖族的台账行、处置事件、回落比
   const other = snap({ issue_id: 'other', family_key: 'k3', family_count: 77, latest_event: frame() });
   const { state } = mergeScan(empty(), [old, other], T0);
   const ledger = [...ledgerRows(state, [old, other], T0)];
-  markDispatched(state, 'old', { task_id: 't', supplement: 'x', fix_paths: ['vc-ai/src/services/ai-layout.ts'], at: '2026-09-10T12:00:00.000Z' });
+  markDispatched(state, 'old', { task_id: 't', supplement: 'x', at: '2026-09-10T12:00:00.000Z' });
   const merged = mergeScan(state, [{ ...old, family_count: 1200 }, renamed, other], T1).state;
-  pick(merged, [old, renamed, other]);
+  judge(merged, 'renamed', { sameAs: 'old', reason: '同缺陷已派单 old', at: T1 });
   ledger.push(...ledgerRows(merged, [{ ...old, family_count: 1200 }, renamed, other], T1));
   ledger.push(...ledgerRows(merged, [{ ...renamed, family_count: 90 }, other], T2));
 

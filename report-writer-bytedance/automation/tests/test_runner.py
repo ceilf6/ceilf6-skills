@@ -72,34 +72,14 @@ class PromptContractTests(unittest.TestCase):
 
 
 class SubprocessTests(unittest.TestCase):
-    def test_preflight_requires_codex_code_mode_host(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            home = Path(temp_dir)
-            codex = home / "codex"
-            codex.write_text("", encoding="utf-8")
-            codex.chmod(0o700)
-            prompt = home / "prompt.md"
-            prompt.write_text("", encoding="utf-8")
-            skill = home / "skill"
-            skill.mkdir()
-            (skill / "SKILL.md").write_text("", encoding="utf-8")
-            with mock.patch.object(runner, "CODEX", codex), mock.patch.object(
-                runner, "PROMPT_FILE", prompt
-            ), mock.patch.object(runner, "SKILL_DIR", skill):
-                with self.assertRaisesRegex(runner.DailyReportError, "codex-code-mode-host"):
-                    runner.run_preflight({}, io.StringIO())
-
     def test_local_ai_parser_failure_is_optional(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             home = Path(temp_dir)
-            codex = home / "codex-cli"
+            trae = home / "trae-cli"
             prompt = home / "prompt.md"
             skill = home / "skill"
-            codex.write_text("", encoding="utf-8")
-            codex.chmod(0o700)
-            host = codex.with_name("codex-code-mode-host")
-            host.write_text("", encoding="utf-8")
-            host.chmod(0o700)
+            trae.write_text("", encoding="utf-8")
+            trae.chmod(0o700)
             prompt.write_text("", encoding="utf-8")
             skill.mkdir()
             (skill / "SKILL.md").write_text("", encoding="utf-8")
@@ -118,7 +98,7 @@ class SubprocessTests(unittest.TestCase):
                 )
             ]
 
-            with mock.patch.object(runner, "CODEX", codex), mock.patch.object(
+            with mock.patch.object(runner, "TRAE", trae), mock.patch.object(
                 runner, "PROMPT_FILE", prompt
             ), mock.patch.object(runner, "SKILL_DIR", skill), mock.patch.object(
                 runner, "run_checked", side_effect=outcomes
@@ -135,20 +115,17 @@ class SubprocessTests(unittest.TestCase):
     def test_required_preflight_failure_propagates(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             home = Path(temp_dir)
-            codex = home / "codex-cli"
+            trae = home / "trae-cli"
             prompt = home / "prompt.md"
             skill = home / "skill"
-            codex.write_text("", encoding="utf-8")
-            codex.chmod(0o700)
-            host = codex.with_name("codex-code-mode-host")
-            host.write_text("", encoding="utf-8")
-            host.chmod(0o700)
+            trae.write_text("", encoding="utf-8")
+            trae.chmod(0o700)
             prompt.write_text("", encoding="utf-8")
             skill.mkdir()
             (skill / "SKILL.md").write_text("", encoding="utf-8")
-            failure = runner.CommandError("login failed", label="Codex auth")
+            failure = runner.CommandError("login failed", label="TRAE login")
 
-            with mock.patch.object(runner, "CODEX", codex), mock.patch.object(
+            with mock.patch.object(runner, "TRAE", trae), mock.patch.object(
                 runner, "PROMPT_FILE", prompt
             ), mock.patch.object(runner, "SKILL_DIR", skill), mock.patch.object(
                 runner, "run_checked", side_effect=failure
@@ -158,17 +135,14 @@ class SubprocessTests(unittest.TestCase):
 
         self.assertIs(raised.exception, failure)
 
-    def test_bits_preflight_refreshes_expired_token_status(self):
+    def test_bits_preflight_rejects_expired_token_status(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             home = Path(temp_dir)
-            codex = home / "codex-cli"
+            trae = home / "trae-cli"
             prompt = home / "prompt.md"
             skill = home / "skill"
-            codex.write_text("", encoding="utf-8")
-            codex.chmod(0o700)
-            host = codex.with_name("codex-code-mode-host")
-            host.write_text("", encoding="utf-8")
-            host.chmod(0o700)
+            trae.write_text("", encoding="utf-8")
+            trae.chmod(0o700)
             prompt.write_text("", encoding="utf-8")
             skill.mkdir()
             (skill / "SKILL.md").write_text("", encoding="utf-8")
@@ -184,24 +158,19 @@ class SubprocessTests(unittest.TestCase):
                 ),
                 "",
             )
-            bits_ready = subprocess.CompletedProcess(
-                [], 0, json.dumps({"expired": False}), ""
-            )
-            outcomes = (
-                [successful] * 4
-                + [expired_bits, successful, successful, bits_ready, successful, successful]
-            )
+            outcomes = [successful] * 4 + [expired_bits] + [successful] * 2
 
-            with mock.patch.object(runner, "CODEX", codex), mock.patch.object(
+            with mock.patch.object(runner, "TRAE", trae), mock.patch.object(
                 runner, "PROMPT_FILE", prompt
             ), mock.patch.object(runner, "SKILL_DIR", skill), mock.patch.object(
                 runner, "run_checked", side_effect=outcomes
-            ) as checked:
-                runner.run_preflight({}, io.StringIO())
+            ):
+                with self.assertRaises(runner.CommandError) as raised:
+                    runner.run_preflight({}, io.StringIO())
 
-        self.assertEqual(checked.call_count, 10)
-        self.assertEqual(checked.call_args_list[5].args[1], ["bytedcli", "bits", "auth", "logout"])
-        self.assertEqual(checked.call_args_list[6].args[1], ["bytedcli", "bits", "auth", "login", "--json"])
+        self.assertEqual(raised.exception.label, "Bits auth")
+        self.assertEqual(runner.error_code(raised.exception), "bits_auth")
+        self.assertIn("expired", str(raised.exception))
 
     def test_bits_status_non_object_json_preserves_auth_error_code(self):
         process = subprocess.CompletedProcess([], 0, "[]", "")
@@ -291,29 +260,26 @@ class SubprocessTests(unittest.TestCase):
         self.assertEqual(verified["node_token"], "node-20")
 
 
-class CodexExecutionTests(unittest.TestCase):
-    def test_codex_command_is_isolated_and_fully_unattended(self):
-        self.assertTrue(hasattr(runner, "build_codex_argv"))
-        argv = runner.build_codex_argv(Path("/tmp/last-message.md"))
-        self.assertEqual(argv[:2], [str(runner.CODEX), "exec"])
-        self.assertIn("--dangerously-bypass-approvals-and-sandbox", argv)
+class TraeExecutionTests(unittest.TestCase):
+    def test_trae_command_is_isolated_and_fully_unattended(self):
+        self.assertTrue(hasattr(runner, "build_trae_argv"))
+        argv = runner.build_trae_argv(Path("/tmp/last-message.md"))
+        self.assertIn("--permission-mode", argv)
+        self.assertEqual(argv[argv.index("--permission-mode") + 1], "bypass_permissions")
         self.assertIn("--dangerously-bypass-hook-trust", argv)
         self.assertIn("--ignore-user-config", argv)
         self.assertIn("--ephemeral", argv)
-        self.assertIn("--json", argv)
-        self.assertEqual(argv[argv.index("--output-last-message") + 1], "/tmp/last-message.md")
-        self.assertEqual(argv[-1], "-")
 
-    def test_codex_attempt_times_out_before_session_output(self):
-        self.assertTrue(hasattr(runner, "CodexStartupError"))
-        self.assertTrue(hasattr(runner, "run_codex_attempt"))
+    def test_trae_attempt_times_out_before_session_output(self):
+        self.assertTrue(hasattr(runner, "TraeStartupError"))
+        self.assertTrue(hasattr(runner, "run_trae_attempt"))
         with tempfile.TemporaryDirectory() as temp_dir, mock.patch.object(
             runner,
-            "build_codex_argv",
+            "build_trae_argv",
             return_value=[sys.executable, "-c", "import time; time.sleep(2)"],
-        ), mock.patch.object(runner, "CODEX_STARTUP_TIMEOUT_SECONDS", 0.1):
-            with self.assertRaises(runner.CodexStartupError):
-                runner.run_codex_attempt(
+        ), mock.patch.object(runner, "TRAE_STARTUP_TIMEOUT_SECONDS", 0.1):
+            with self.assertRaises(runner.TraeStartupError):
+                runner.run_trae_attempt(
                     "prompt",
                     Path(temp_dir) / "last.md",
                     {},
@@ -323,30 +289,30 @@ class CodexExecutionTests(unittest.TestCase):
     def test_non_session_output_does_not_satisfy_startup_watchdog(self):
         with tempfile.TemporaryDirectory() as temp_dir, mock.patch.object(
             runner,
-            "build_codex_argv",
+            "build_trae_argv",
             return_value=[
                 sys.executable,
                 "-c",
                 "import time; print('warning', flush=True); time.sleep(0.3)",
             ],
-        ), mock.patch.object(runner, "CODEX_STARTUP_TIMEOUT_SECONDS", 0.1):
-            with self.assertRaises(runner.CodexStartupError):
-                runner.run_codex_attempt(
+        ), mock.patch.object(runner, "TRAE_STARTUP_TIMEOUT_SECONDS", 0.1):
+            with self.assertRaises(runner.TraeStartupError):
+                runner.run_trae_attempt(
                     "prompt",
                     Path(temp_dir) / "last.md",
                     {},
                     io.StringIO(),
                 )
 
-    def test_codex_retries_one_startup_timeout(self):
-        self.assertTrue(hasattr(runner, "CodexStartupError"))
-        self.assertTrue(hasattr(runner, "run_codex_attempt"))
+    def test_trae_retries_one_startup_timeout(self):
+        self.assertTrue(hasattr(runner, "TraeStartupError"))
+        self.assertTrue(hasattr(runner, "run_trae_attempt"))
         with tempfile.TemporaryDirectory() as temp_dir, mock.patch.object(
             runner,
-            "run_codex_attempt",
-            side_effect=[runner.CodexStartupError("stalled"), None],
+            "run_trae_attempt",
+            side_effect=[runner.TraeStartupError("stalled"), None],
         ) as attempt, mock.patch.object(runner.time, "sleep"):
-            runner.run_codex(
+            runner.run_trae(
                 "prompt",
                 Path(temp_dir) / "last.md",
                 {},
@@ -356,7 +322,7 @@ class CodexExecutionTests(unittest.TestCase):
 
 
 class FullRunExitStatusTests(unittest.TestCase):
-    def test_zero_codex_exit_with_failed_message_returns_nonzero(self):
+    def test_zero_trae_exit_with_failed_message_returns_nonzero(self):
         def write_failed_message(prompt, last_message, env, handle):
             last_message.write_text(
                 '<daily-report-result status="failed" date="2026-07-20" />\n',
@@ -367,7 +333,7 @@ class FullRunExitStatusTests(unittest.TestCase):
             with mock.patch.object(runner, "LOG_DIR", Path(temp_dir)), mock.patch.object(
                 runner, "run_preflight"
             ), mock.patch.object(runner, "render_prompt", return_value="prompt"), mock.patch.object(
-                runner, "run_codex", side_effect=write_failed_message
+                runner, "run_trae", side_effect=write_failed_message
             ), mock.patch.object(runner, "verify_wiki") as verify, mock.patch.object(
                 runner, "notify_best_effort"
             ) as notify:
@@ -387,7 +353,7 @@ class FullRunExitStatusTests(unittest.TestCase):
             with mock.patch.object(runner, "LOG_DIR", Path(temp_dir)), mock.patch.object(
                 runner, "run_preflight"
             ), mock.patch.object(runner, "render_prompt", return_value="prompt"), mock.patch.object(
-                runner, "run_codex", side_effect=write_success_message
+                runner, "run_trae", side_effect=write_success_message
             ), mock.patch.object(
                 runner,
                 "verify_wiki",
@@ -409,7 +375,7 @@ class FullRunExitStatusTests(unittest.TestCase):
             with mock.patch.object(runner, "LOG_DIR", Path(temp_dir)), mock.patch.object(
                 runner, "run_preflight"
             ), mock.patch.object(runner, "render_prompt", return_value="prompt"), mock.patch.object(
-                runner, "run_codex", side_effect=write_no_activity_message
+                runner, "run_trae", side_effect=write_no_activity_message
             ), mock.patch.object(runner, "verify_wiki") as verify, mock.patch.object(
                 runner, "notify_best_effort"
             ) as notify:
@@ -491,7 +457,7 @@ class NotificationIntegrationTests(unittest.TestCase):
         ), mock.patch.object(
             runner, "render_prompt", return_value="prompt"
         ), mock.patch.object(
-            runner, "run_codex", side_effect=write_success
+            runner, "run_trae", side_effect=write_success
         ), mock.patch.object(
             runner,
             "verify_wiki",
@@ -521,7 +487,7 @@ class NotificationIntegrationTests(unittest.TestCase):
         ), mock.patch.object(
             runner, "render_prompt", return_value="prompt"
         ), mock.patch.object(
-            runner, "run_codex", side_effect=write_success
+            runner, "run_trae", side_effect=write_success
         ), mock.patch.object(
             runner,
             "verify_wiki",
@@ -551,7 +517,7 @@ class NotificationIntegrationTests(unittest.TestCase):
         ), mock.patch.object(runner, "run_preflight"), mock.patch.object(
             runner, "render_prompt", return_value="prompt"
         ), mock.patch.object(
-            runner, "run_codex", side_effect=write_success
+            runner, "run_trae", side_effect=write_success
         ), mock.patch.object(
             runner,
             "verify_wiki",

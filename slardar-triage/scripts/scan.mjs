@@ -74,9 +74,9 @@ function issueDetailUrl(bid, window, issueId, release) {
   return `https://slardar.bytedance.net/node/web/js/detail?${params.toString()}`;
 }
 
-async function scanBid(bid, window, top, runner, textRunner) {
+async function scanBid(bid, window, page, pageSize, runner, textRunner) {
   const project = PROJECTS[bid];
-  const list = runner(['js-error', 'list', ...commonArgs(bid, window), '--filter', UNRESOLVED_FILTER, '--order-by', 'count_descend', '--page-size', String(top)]);
+  const list = runner(['js-error', 'list', ...commonArgs(bid, window), '--filter', UNRESOLVED_FILTER, '--order-by', 'user_descend', '--page-num', String(page), '--page-size', String(pageSize)]);
   const issues = list?.data?.result ?? [];
   const candidates = [];
   for (const issue of issues) {
@@ -126,7 +126,7 @@ function mergeFamilies(candidates) {
   return [...byKey.values()];
 }
 
-export async function scan({ bids, hours, top, repo, now = Date.now(), runner, textRunner }) {
+export async function scan({ bids, hours, page = 1, pageSize = 20, repo, now = Date.now(), runner, textRunner }) {
   const end = Math.floor(now / 1000);
   const window = { start: end - hours * 3600, end };
   const bin = resolveBin(resolveRepo(repo));
@@ -140,12 +140,14 @@ export async function scan({ bids, hours, top, repo, now = Date.now(), runner, t
       continue;
     }
     try {
-      all = all.concat(await scanBid(bid, window, top, run, runText));
+      all = all.concat(await scanBid(bid, window, page, pageSize, run, runText));
     } catch (error) {
       skipped.push({ bid, reason: String(error.message ?? error).slice(0, 300) });
     }
   }
-  return { scanned_at: new Date(now).toISOString(), window, skipped_bids: skipped, candidates: mergeFamilies(all) };
+  // 合族后族用户数可能超过排在它前面的单个 issue，走查顺序以族为准。
+  const candidates = mergeFamilies(all).sort((a, b) => b.family_users - a.family_users);
+  return { scanned_at: new Date(now).toISOString(), window, page, page_size: pageSize, skipped_bids: skipped, candidates };
 }
 
 function isMain() {
@@ -167,12 +169,13 @@ if (isMain()) {
   const result = await scan({
     bids: arg('--bid', 'vc_ai').split(',').map((s) => s.trim()).filter(Boolean),
     hours: Number(arg('--hours', '24')),
-    top: Number(arg('--top', '10')),
+    page: Number(arg('--page', '1')),
+    pageSize: Number(arg('--page-size', '20')),
     repo: arg('--repo'),
   });
   if (out) {
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, `${JSON.stringify(result, null, 2)}\n`);
   }
-  process.stdout.write(`${JSON.stringify({ ok: true, out: out ?? null, candidates: result.candidates.length, skipped_bids: result.skipped_bids })}\n`);
+  process.stdout.write(`${JSON.stringify({ ok: true, out: out ?? null, page: result.page, candidates: result.candidates.length, skipped_bids: result.skipped_bids })}\n`);
 }

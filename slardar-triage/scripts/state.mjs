@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 候选池、处置账与台账的唯一读写点。candidates.json 是 agent 从中选取、由用户决策的池子；
+// 候选池、处置账与台账的唯一读写点。candidates.json 是走查与判定的池子；
 // dispatched.json 是 prepare-dispatch.sh / board.sh 共用的派单处置账，两份文件按 issue_id 对齐；
 // ledger.jsonl 是每次扫描每族一行的量级台账。
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, realpathSync } from 'node:fs';
@@ -7,13 +7,8 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const FILES = { candidates: 'candidates.json', dispatched: 'dispatched.json' };
-// pending 连续两次扫描都不再出现才移出：一次缺席可能只是 Slardar 采样或时间窗边界。
-const STALE_REMOVE_AT = 2;
 // 候选池里的 count / users 会被后续扫描覆盖，事后要取「修复前 → 修复后」量级只能靠这份只追加的台账。
 const LEDGER = 'ledger.jsonl';
-export const LIKELIHOOD_ORDER = ['高', '中', '低', '排除'];
-const LOW_MESSAGE = /code: \d{6}|larkErrorCode|invalid user|APINotProvided/;
-const OUR_SOURCE = /^(vc-ai|packages)\//;
 
 function readJson(file, fallback) {
   if (!existsSync(file)) return fallback;
@@ -46,22 +41,20 @@ function fromScan(c, now) {
     users: c.family_users ?? c.users ?? 0,
     count: c.family_count ?? c.count ?? 0,
     first_seen: c.first_seen ?? null,
-    likelihood: null,
-    summary: '',
     first_seen_at: now,
     refreshed_at: now,
-    stale_count: 0,
     status: 'pending',
+    verdict: null,
+    verdicts: [],
     decision: null,
   };
 }
 
+// 扫描是分页的，某页没扫到不代表告警消失；判定与捞回都挂在候选上，缺席的候选一律保留。
 export function mergeScan(state, scanned, now) {
   const pool = { ...state.candidates };
-  const seen = new Set();
   const settledFamilies = new Set(Object.values(pool).filter((c) => c.status !== 'pending').map((c) => c.family_key));
   for (const c of scanned) {
-    seen.add(c.issue_id);
     const cur = pool[c.issue_id];
     if (cur) {
       pool[c.issue_id] = {
@@ -72,51 +65,66 @@ export function mergeScan(state, scanned, now) {
         slardar_url: c.slardar_url ?? cur.slardar_url,
         member_issue_ids: c.member_issue_ids ?? cur.member_issue_ids,
         refreshed_at: now,
-        stale_count: 0,
       };
       continue;
     }
     if (settledFamilies.has(c.family_key)) continue;
     pool[c.issue_id] = fromScan(c, now);
   }
-  const removed = [];
-  for (const [id, c] of Object.entries(pool)) {
-    if (seen.has(id) || c.status !== 'pending') continue;
-    const stale = (c.stale_count ?? 0) + 1;
-    if (stale >= STALE_REMOVE_AT) {
-      removed.push(c);
-      delete pool[id];
-    } else {
-      pool[id] = { ...c, stale_count: stale };
-    }
-  }
-  return { state: { ...state, candidates: pool }, removed };
+  return { state: { ...state, candidates: pool } };
 }
 
-export function setJudgment(state, issueId, { likelihood, summary }) {
+// verdict 是当前结论，verdicts 是只追加的完整决策史（agent 判定、用户拒绝与捞回）。
+function withVerdict(c, verdict) {
+  return { ...c, verdict, verdicts: [...(c.verdicts ?? []), verdict] };
+}
+
+// agent 的判定是可被用户推翻的缓存；用户捞回过的条目 agent 不得改判。
+export function judge(state, issueId, { fixable, reason, sameAs, at }) {
   const c = state.candidates[issueId];
   if (!c) throw new Error(`候选池里没有 ${issueId}`);
-  if (!LIKELIHOOD_ORDER.includes(likelihood)) throw new Error(`档位只能是 ${LIKELIHOOD_ORDER.join('/')}：${likelihood}`);
-  state.candidates[issueId] = { ...c, likelihood, summary: summary ?? '' };
+  if (c.status !== 'pending') throw new Error(`${issueId} 不是 pending 候选`);
+  if (c.verdict?.by === 'user') throw new Error(`${issueId} 已由用户捞回，agent 不能改判`);
+  if (!reason) throw new Error('判定必须带 --reason');
+  if (sameAs) {
+    if (sameAs === issueId) throw new Error(`${issueId} 不能归属到自己`);
+    if (state.candidates[sameAs]?.status !== 'dispatched') throw new Error(`${sameAs} 不是已派单候选`);
+    state.candidates[issueId] = withVerdict({ ...c, covered_by: sameAs }, { fixable: false, reason, by: 'agent', at });
+    return;
+  }
+  if (typeof fixable !== 'boolean') throw new Error('--fixable 只能是 yes / no');
+  state.candidates[issueId] = withVerdict(c, { fixable, reason, by: 'agent', at });
+}
+
+// 捞回覆盖 agent 的结论与用户自己之前的拒绝。已派单的续作归 harness 任务链，dispatched.json 的续做记录不能在这里重开。
+export function revive(state, issueId, at) {
+  const c = state.candidates[issueId];
+  if (!c) throw new Error(`候选池里没有 ${issueId}`);
+  if (c.status === 'dispatched') throw new Error(`${issueId} 已派单，不能捞回`);
+  const { covered_by: _coveredBy, ...rest } = c;
+  const reopened = c.status === 'rejected' ? { ...rest, status: 'pending', decision: null } : rest;
+  state.candidates[issueId] = withVerdict(reopened, { fixable: true, reason: '捞回', by: 'user', at });
 }
 
 export function pendingSorted(state) {
-  const rank = (l) => (LIKELIHOOD_ORDER.includes(l) ? LIKELIHOOD_ORDER.indexOf(l) : LIKELIHOOD_ORDER.length);
   return Object.values(state.candidates)
     .filter((c) => c.status === 'pending')
-    .sort((a, b) => rank(a.likelihood) - rank(b.likelihood) || (b.users ?? 0) - (a.users ?? 0));
+    .sort((a, b) => (b.users ?? 0) - (a.users ?? 0));
 }
 
 export function reject(state, issueId, reason, now) {
   const c = state.candidates[issueId];
   if (!c) throw new Error(`候选池里没有 ${issueId}`);
-  state.candidates[issueId] = { ...c, status: 'rejected', decision: { reason, at: now } };
+  state.candidates[issueId] = withVerdict(
+    { ...c, status: 'rejected', decision: { reason, at: now } },
+    { fixable: false, reason, by: 'user', at: now },
+  );
 }
 
-export function markDispatched(state, issueId, { task_id, task_slug, workspace, supplement, fix_paths, at }) {
+export function markDispatched(state, issueId, { task_id, task_slug, workspace, supplement, at }) {
   const c = state.candidates[issueId];
   if (!c) throw new Error(`候选池里没有 ${issueId}`);
-  state.candidates[issueId] = { ...c, status: 'dispatched', decision: { task_id, supplement: supplement ?? '', fix_paths: fix_paths ?? [], at } };
+  state.candidates[issueId] = { ...c, status: 'dispatched', decision: { task_id, supplement: supplement ?? '', at } };
   state.dispatched[issueId] = {
     ...(state.dispatched[issueId] ?? {}),
     task_id,
@@ -126,78 +134,69 @@ export function markDispatched(state, issueId, { task_id, task_slug, workspace, 
   };
 }
 
-// covered_by 只是归属链接，候选仍是 pending；剔除由 pick 按归属的单是否已派单现算。
-export function cover(state, issueId, byIssueId) {
-  const c = state.candidates[issueId];
-  if (!c) throw new Error(`候选池里没有 ${issueId}`);
-  if (issueId === byIssueId) throw new Error(`${issueId} 不能归属到自己`);
-  if (c.status !== 'pending') throw new Error(`${issueId} 不是 pending 候选`);
-  if (state.candidates[byIssueId]?.status !== 'dispatched') throw new Error(`${byIssueId} 不是已派单候选`);
-  state.candidates[issueId] = { ...c, covered_by: byIssueId };
+// 同一缺陷可能以不同 issue_id 出现在不同扫描或不同页。结案的同族优先（派单、拒绝对整族生效），
+// 其次是已有判定的那条（跨页不重读代码），都没有才落到自己。
+export function resolveOwner(state, scannedItem) {
+  const self = state.candidates[scannedItem.issue_id];
+  const related = Object.values(state.candidates).filter((p) => p.issue_id === scannedItem.issue_id
+    || (p.member_issue_ids ?? []).includes(scannedItem.issue_id)
+    || p.family_key === scannedItem.family_key);
+  return related.find((p) => p.status === 'dispatched')
+    ?? related.find((p) => p.status === 'rejected')
+    ?? [self, ...related].find((p) => p?.verdict)
+    ?? self
+    ?? related[0]
+    ?? null;
 }
 
-function mechanicalVerdict(snapshot) {
-  const message = snapshot.message ?? '';
-  if (message.startsWith('[warn]')) return { likelihood: '排除', summary: 'warn 级上报' };
-  if (LOW_MESSAGE.test(message)) return { likelihood: '低', summary: 'message 含服务端错误码 / invalid user / APINotProvided' };
-  const pages = Object.keys(snapshot.pid_dist ?? {});
-  if (pages.length && pages.every((p) => p.startsWith('/webview/doubao-'))) return { likelihood: '低', summary: '页面全部在豆包宿主' };
-  if (snapshot.latest_event?.raw_filename === '[native code]') return { likelihood: '低', summary: '最新帧在 [native code]' };
-  // Sourcemap 没取到时 mapped_path 为空不代表帧不在仓内，留给 agent 判断。
-  if (!snapshot.detail_error && !OUR_SOURCE.test(snapshot.latest_event?.mapped_path ?? '')) return { likelihood: '低', summary: '最新帧不在 vc-ai / packages 源码' };
-  return null;
+const UNJUDGED = { class: 'unjudged', source: null, reason: '', at: null };
+
+function classify(state, owner) {
+  if (!owner) return UNJUDGED;
+  if (owner.status === 'dispatched') return { class: 'skip', source: 'dispatched', reason: '', at: owner.decision?.at ?? null };
+  if (owner.covered_by && state.candidates[owner.covered_by]?.status === 'dispatched') {
+    return { class: 'skip', source: 'dispatched', reason: owner.verdict?.reason ?? '', at: owner.verdict?.at ?? null };
+  }
+  if (owner.status === 'rejected') return { class: 'skip', source: 'rejected', reason: owner.decision?.reason ?? '', at: owner.decision?.at ?? null };
+  const v = owner.verdict;
+  if (!v) return UNJUDGED;
+  return { class: v.fixable ? 'fixable' : 'skip', source: v.by, reason: v.reason, at: v.at };
 }
 
-// 帧与分布只在扫描快照里，候选池不存，所以预筛要两者一起看。
-export function pick(state, scanned, { skip = [] } = {}) {
-  const snapshots = new Map(scanned.map((c) => [c.issue_id, c]));
-  // 派出去的单不再跟踪去向，一经派单就永久算已处理：它自己不再进短名单，同缺陷的候选也跟着被剔除。
-  const handled = Object.values(state.candidates).filter((c) => c.status === 'dispatched');
-  const shortlist = [];
-  const covered = [];
-  const filtered = [];
-  for (const cand of Object.values(state.candidates)) {
-    const snapshot = snapshots.get(cand.issue_id);
-    if (cand.status !== 'pending' || !snapshot) continue;
-    const id = cand.issue_id;
-    if (cand.likelihood === '低' || cand.likelihood === '排除') {
-      filtered.push({ issue_id: id, likelihood: cand.likelihood, summary: cand.summary });
-      continue;
-    }
-    // 机械规则只看最新一帧，而同一 issue 每次扫描的最新帧会变；已记录的判档是 agent 看过全貌的结论，机械规则不得推翻。
-    const verdict = cand.likelihood == null ? mechanicalVerdict(snapshot) : null;
-    if (verdict) {
-      state.candidates[id] = { ...cand, ...verdict };
-      filtered.push({ issue_id: id, ...verdict });
-      continue;
-    }
-    const path = snapshot.latest_event?.mapped_path;
-    const owner = handled.find((d) => d.issue_id === cand.covered_by)
-      ?? handled.find((d) => path && (d.decision?.fix_paths ?? []).includes(path));
-    if (owner) {
-      state.candidates[id] = { ...cand, covered_by: owner.issue_id };
-      covered.push({ issue_id: id, covered_by: owner.issue_id });
-      continue;
-    }
-    if (skip.includes(id)) continue;
-    shortlist.push({
+// 纯函数：按族用户数降序给出每条的归类。agent 遇到 unjudged 判定落档后重跑，直到第一条非 skip 的是 fixable；
+// 排在它前面的 skip 项就是呈现给用户的跳过清单，不存在不可见的剔除。
+export function walk(state, scanned, { skip = [] } = {}) {
+  const usersOf = (c) => c.family_users ?? c.users ?? 0;
+  const seen = new Set();
+  const items = [];
+  for (const c of [...scanned].sort((a, b) => usersOf(b) - usersOf(a))) {
+    const owner = resolveOwner(state, c);
+    const id = owner?.issue_id ?? c.issue_id;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const verdict = classify(state, owner);
+    const e = c.latest_event ?? {};
+    items.push({
       issue_id: id,
+      users: usersOf(c),
+      count: c.family_count ?? c.count ?? 0,
       // 池里的 message 冻在首见那次，可能还带着早已换掉的 logId 之类易变量；呈现要用本次扫描的原文。
-      message: snapshot.message ?? cand.message,
-      issue_url: cand.issue_url,
-      users: cand.users,
-      count: cand.count,
-      likelihood: cand.likelihood,
-      detail_error: snapshot.detail_error ?? null,
-      mapped_path: path ?? null,
-      line: snapshot.latest_event?.line ?? null,
-      function: snapshot.latest_event?.function ?? null,
-      page: snapshot.latest_event?.page ?? null,
-      release: snapshot.latest_event?.release ?? null,
+      message: c.message ?? owner?.message ?? '',
+      issue_url: c.issue_url ?? owner?.issue_url ?? null,
+      ...(verdict.class !== 'skip' && skip.includes(id) ? { class: 'skip', source: 'session', reason: '', at: null } : verdict),
+      detail_error: c.detail_error ?? null,
+      mapped_path: e.mapped_path ?? null,
+      line: e.line ?? null,
+      function: e.function ?? null,
+      page: e.page ?? null,
+      release: e.release ?? null,
     });
   }
-  shortlist.sort((a, b) => Boolean(a.detail_error) - Boolean(b.detail_error) || (b.users ?? 0) - (a.users ?? 0));
-  return { shortlist, covered, filtered, dispatched: handled.length };
+  const todo = Object.values(state.candidates)
+    .filter((p) => p.status === 'pending' && p.verdict?.by === 'user' && p.verdict.fixable)
+    .sort((a, b) => (b.users ?? 0) - (a.users ?? 0))
+    .map((p) => ({ issue_id: p.issue_id, users: p.users ?? 0, message: p.message, issue_url: p.issue_url, at: p.verdict.at }));
+  return { items, todo, exhausted: !items.some((i) => i.class !== 'skip') };
 }
 
 function topOf(dist) {
@@ -266,13 +265,13 @@ export function appendLedger(dir, rows) {
 }
 
 export function mergeFromScan(dir, scan) {
-  const { state, removed } = mergeScan(loadState(dir), scan.candidates, scan.scanned_at);
+  const { state } = mergeScan(loadState(dir), scan.candidates, scan.scanned_at);
   saveState(dir, state);
   const appended = appendLedger(dir, ledgerRows(state, scan.candidates, scan.scanned_at));
   const pending = pendingSorted(state);
   mkdirSync(join(dir, 'scans'), { recursive: true });
-  writeFileSync(join(dir, 'scans', 'merge-latest.json'), `${JSON.stringify({ pending, removed }, null, 2)}\n`);
-  return { pending: pending.length, removed: removed.length, ledger_appended: appended };
+  writeFileSync(join(dir, 'scans', 'merge-latest.json'), `${JSON.stringify({ pending }, null, 2)}\n`);
+  return { pending: pending.length, ledger_appended: appended };
 }
 
 // 候选的 family_key 冻在首见那次，台账行记的是各自扫描当时算出的 key，报错文案一改两者就对不上；
@@ -352,24 +351,32 @@ function listArg(name) {
   return (arg(name) ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 }
 
-const NEEDS_ISSUE_ID = new Set(['judge', 'reject', 'dispatched', 'cover', 'history']);
+const NEEDS_ISSUE_ID = new Set(['judge', 'revive', 'reject', 'dispatched', 'history']);
 
-const USAGE = '用法: state.mjs merge|pick|pending|judge|reject|dispatched|cover|history --dir <state> [--scan <scan.json>] [--skip <id,id>] [--issue-id <id>] [--by <id>] [--likelihood <档>] [--summary <text>] [--reason <text>] [--task-id <id>] [--task-slug <slug>] [--workspace <abs>] [--supplement <text>] [--fix-paths <a,b>]\n';
+const USAGE = '用法: state.mjs merge|walk|pending|judge|revive|reject|dispatched|history --dir <state> [--scan <scan.json>] [--skip <id,id>] [--issue-id <id>] [--fixable yes|no] [--reason <text>] [--same-as <id>] [--task-id <id>] [--task-slug <slug>] [--workspace <abs>] [--supplement <text>]\n';
 
 function usageExit() {
   process.stderr.write(USAGE);
   process.exit(2);
 }
 
+function fixableArg() {
+  const v = arg('--fixable');
+  if (v === 'yes') return true;
+  if (v === 'no') return false;
+  return undefined;
+}
+
 // 技能目录经 symlink 安装，argv[1] 是链接路径而 import.meta.url 是真实路径，须按 realpath 比较。
 if (isMain()) {
   const cmd = process.argv[2];
   const dir = arg('--dir');
-  const needsScan = cmd === 'merge' || cmd === 'pick';
+  const needsScan = cmd === 'merge' || cmd === 'walk';
   const needsIssue = NEEDS_ISSUE_ID.has(cmd);
-  if (!dir || (needsScan && !arg('--scan')) || (needsIssue && !arg('--issue-id')) || (cmd === 'cover' && !arg('--by'))) usageExit();
+  if (!dir || (needsScan && !arg('--scan')) || (needsIssue && !arg('--issue-id'))) usageExit();
   const state = loadState(dir);
   const now = new Date().toISOString();
+  const id = arg('--issue-id');
   try {
     if (cmd === 'merge') {
       const scan = JSON.parse(readFileSync(arg('--scan'), 'utf8'));
@@ -377,30 +384,29 @@ if (isMain()) {
     } else if (cmd === 'pending') {
       process.stdout.write(`${JSON.stringify(pendingSorted(state))}\n`);
     } else if (cmd === 'judge') {
-      setJudgment(state, arg('--issue-id'), { likelihood: arg('--likelihood'), summary: arg('--summary') ?? '' });
+      judge(state, id, { fixable: fixableArg(), reason: arg('--reason'), sameAs: arg('--same-as'), at: now });
       saveState(dir, state);
-      process.stdout.write(`${JSON.stringify({ ok: true, issue_id: arg('--issue-id'), likelihood: arg('--likelihood') })}\n`);
+      const c = state.candidates[id];
+      process.stdout.write(`${JSON.stringify({ ok: true, issue_id: id, fixable: c.verdict.fixable, covered_by: c.covered_by ?? null })}\n`);
+    } else if (cmd === 'revive') {
+      revive(state, id, now);
+      saveState(dir, state);
+      process.stdout.write(`${JSON.stringify({ ok: true, revived: id })}\n`);
     } else if (cmd === 'reject') {
-      reject(state, arg('--issue-id'), arg('--reason') ?? '', now);
+      reject(state, id, arg('--reason') ?? '', now);
       saveState(dir, state);
-      process.stdout.write(`${JSON.stringify({ ok: true, rejected: arg('--issue-id') })}\n`);
+      process.stdout.write(`${JSON.stringify({ ok: true, rejected: id })}\n`);
     } else if (cmd === 'dispatched') {
       // 在途检查与 board.sh 都按 task_id + workspace 定位 omh Task，缺一条这单就查不到。
       for (const k of ['--task-id', '--workspace']) if (!arg(k)) throw new Error(`缺 ${k}`);
-      markDispatched(state, arg('--issue-id'), { task_id: arg('--task-id'), task_slug: arg('--task-slug'), workspace: arg('--workspace'), supplement: arg('--supplement') ?? '', fix_paths: listArg('--fix-paths'), at: now });
+      markDispatched(state, id, { task_id: arg('--task-id'), task_slug: arg('--task-slug'), workspace: arg('--workspace'), supplement: arg('--supplement') ?? '', at: now });
       saveState(dir, state);
-      process.stdout.write(`${JSON.stringify({ ok: true, dispatched: arg('--issue-id') })}\n`);
-    } else if (cmd === 'pick') {
+      process.stdout.write(`${JSON.stringify({ ok: true, dispatched: id })}\n`);
+    } else if (cmd === 'walk') {
       const scan = JSON.parse(readFileSync(arg('--scan'), 'utf8'));
-      const out = pick(state, scan.candidates, { skip: listArg('--skip') });
-      saveState(dir, state);
-      process.stdout.write(`${JSON.stringify({ ok: true, ...out })}\n`);
-    } else if (cmd === 'cover') {
-      cover(state, arg('--issue-id'), arg('--by'));
-      saveState(dir, state);
-      process.stdout.write(`${JSON.stringify({ ok: true, issue_id: arg('--issue-id'), covered_by: arg('--by') })}\n`);
+      process.stdout.write(`${JSON.stringify({ ok: true, ...walk(state, scan.candidates, { skip: listArg('--skip') }) })}\n`);
     } else if (cmd === 'history') {
-      process.stdout.write(`${JSON.stringify({ ok: true, ...history(state, readLedger(dir), arg('--issue-id')) })}\n`);
+      process.stdout.write(`${JSON.stringify({ ok: true, ...history(state, readLedger(dir), id) })}\n`);
     } else {
       process.stderr.write(`未知子命令: ${cmd}\n`);
       process.exit(2);

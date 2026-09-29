@@ -7,7 +7,33 @@
 报错：[native-api] command=94003 timed out after 10000ms
 Issue：https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1789637699&end_time=1789724099&site_type=web&region=cn&layout=normal&issue_id=f49170ba664fefd93aede453eb5dc3ba&release=7.77.0.21
 
+待处理（你捞回过、还没派也没拒）：
+- common.getAvatarBase64 timeout after 60s（2.1k 用户）— 捞回 09-27
+排在它前面、判为不能修的：
+1. APINotProvided（71k 用户）— agent 09-29：调用点在宿主内置脚本，vc-ai 无调用点
+2. [warn] FishBoneError: fishBone out of screen（29k 用户）— 你拒过 09-29：只是加日志，没必要
+3. [InvokeServierPBFast error]: logId=…（13k 用户）— 已派单 09-28
+要捞回哪条直接说「捞回 2」。
+
 先定复现条件。这条既出现在会中 AI 视图（ai-layout），也出现在妙记 PC（minutes-ai-layout-pc）。你想先按哪个场景看？
+
+## 捞回
+
+用户：捞回 1
+（agent 先前判它不能修；用户捞回后 agent 不再拦截，这正是跳过清单要兜住的假阴性。）
+
+agent（`revive` 后切到这条，第一问围绕「vc-ai 能怎么缓解」）：
+
+【Slardar · vc_ai 近 24h】（你捞回的）
+现象：豆包移动端 AI 视图调用宿主接口时，宿主未提供该接口
+报错：APINotProvided
+Issue：https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&site_type=web&region=cn&layout=normal&issue_id=9491f36c4f6de64beb6e43092758d87d
+
+调用点在 `packages/vc-web-utils/gateway/request.ts`，master 上这一段是：
+
+    <git show 贴出的原文>
+
+你倾向在调用前做能力探测、在调用点 catch 后降级，还是去掉这次调用？
 
 ## 收敛对话（每轮一个事实 + 一个问题）
 
@@ -27,16 +53,7 @@ agent：这条的最新帧在 `vc-ai/src/services/ai-layout.ts:271`，master 上
 
 报错原文里的超时是 10000ms。复现条件就定成「会中打开 AI 视图、宿主 command 94003 在 10s 内不回包」，还是你见过别的触发路径？
 
-用户：就这个。调用方怎么调的？
-
-agent：`git grep -n getFishBoneData origin/master -- vc-ai`：
-
-    vc-ai/src/stores/ai-layout.ts:88:    when(() => this.ready, () => this.getFishBoneData());
-    vc-ai/src/stores/ai-layout.ts:142:   getFishBoneDataDebounced = debounce(() => this.getFishBoneData(), 300);
-
-缺陷点位定在 getFishBoneData 本身，还是定在调用方？定下来之后我们看根因归属。
-
-（……按清单继续：根因归属、改动范围、验收方式）
+（……按清单继续：缺陷点位、根因归属、改动范围、验收方式）
 
 ## 技术方案回显
 
@@ -49,8 +66,13 @@ agent：`git grep -n getFishBoneData origin/master -- vc-ai`：
 
 确认后回复「派这条」；要改哪一项直接说。
 
-## 没有可呈现的候选
+## 前 100 条没有能修的
 
-只在 `--top` 已扩到 100 仍无可呈现候选时发，措辞固定，不带「新」字：
+翻到第 5 页仍没有 `fixable` 时发，照样附清单：
 
-没有可修告警。
+前 100 条没有判为能修的。
+待处理（你捞回过、还没派也没拒）：
+- …
+排在前面、判为不能修的：
+1. …
+要捞回哪条直接说「捞回 N」。

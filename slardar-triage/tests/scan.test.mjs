@@ -48,7 +48,7 @@ test('scan 用注入 runner 产出候选并做族合并，某 BID 失败只记 s
     const id = JSON.parse(args[args.indexOf('--filter') + 1])[0].values[0];
     return `正在查询...\n平台链接: https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&filter_id=f-${id.slice(0, 8)}\n`;
   };
-  const r = await scan({ bids: ['vc_ai', 'vc_web'], hours: 24, top: 3, now: 1788853929000, runner, textRunner });
+  const r = await scan({ bids: ['vc_ai', 'vc_web'], hours: 24, pageSize: 3, now: 1788853929000, runner, textRunner });
   assert.deepEqual(r.skipped_bids.map((s) => s.bid), ['vc_web']);
   assert.equal(r.candidates.find((c) => c.issue_id === '938f8ba377ac6484ba8918b19f247350').slardar_url, 'https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&filter_id=f-938f8ba3');
   assert.ok(calls.some((c) => c.startsWith('TEXT log query') && c.includes(`--start-time ${1788853929 - 7 * 86400}`) && !c.includes('--raw') && !c.includes('--no-share')));
@@ -65,6 +65,10 @@ test('scan 用注入 runner 产出候选并做族合并，某 BID 失败只记 s
   assert.equal(byId['aaaed08b947f7c1730c780ec481b0cee'].family_users, 8441);
   assert.ok(calls.some((c) => c.startsWith('js-error list --bid vc_ai')));
   assert.ok(calls.some((c) => c.includes('--page-size 300')));
+  assert.ok(calls.some((c) => c.startsWith('js-error list --bid vc_ai') && c.includes('--order-by user_descend --page-num 1 --page-size 3')));
+  assert.deepEqual(r.candidates.map((c) => c.family_users), [21740, 11391, 8441]);
+  assert.equal(r.page, 1);
+  assert.equal(r.page_size, 3);
 });
 
 test('scan 最新事件 detail 报「正在处理」时退到下一条 dh_key，全失败只记 detail_error', async () => {
@@ -85,18 +89,32 @@ test('scan 最新事件 detail 报「正在处理」时退到下一条 dh_key，
     }
     throw new Error(`unexpected ${args.join(' ')}`);
   };
-  const r = await scan({ bids: ['vc_ai'], hours: 24, top: 1, now: 1788853929000, runner });
+  const r = await scan({ bids: ['vc_ai'], hours: 24, pageSize: 1, now: 1788853929000, runner });
   assert.deepEqual(r.skipped_bids, []);
   assert.equal(r.candidates[0].latest_event.line, 196);
   assert.equal(r.candidates[0].detail_error, null);
   assert.deepEqual(detailKeys, ['k1', 'k2']);
 
   const allFail = (args) => (args[0] === 'log' && args[1] === 'detail' ? (() => { throw new Error('处理中'); })() : runner(args));
-  const r2 = await scan({ bids: ['vc_ai'], hours: 24, top: 1, now: 1788853929000, runner: allFail });
+  const r2 = await scan({ bids: ['vc_ai'], hours: 24, pageSize: 1, now: 1788853929000, runner: allFail });
   assert.equal(r2.candidates[0].latest_event.mapped_path, null);
   assert.match(r2.candidates[0].detail_error, /处理中/);
   assert.equal(
     r2.candidates[0].issue_url,
     `https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=${1788853929 - 24 * 3600}&end_time=1788853929&site_type=web&region=cn&issue_id=aaaed08b947f7c1730c780ec481b0cee&layout=normal`,
   );
+});
+
+test('scan 按页取：--page-num 透传，输出带页码', async () => {
+  const calls = [];
+  const runner = (args) => {
+    calls.push(args.join(' '));
+    if (args[0] === 'js-error') return { data: { result: [] } };
+    throw new Error(`unexpected ${args.join(' ')}`);
+  };
+  const r = await scan({ bids: ['vc_ai'], hours: 24, page: 3, pageSize: 20, now: 1788853929000, runner });
+  assert.deepEqual(r.candidates, []);
+  assert.equal(r.page, 3);
+  assert.equal(r.page_size, 20);
+  assert.ok(calls[0].includes('--order-by user_descend --page-num 3 --page-size 20'));
 });
