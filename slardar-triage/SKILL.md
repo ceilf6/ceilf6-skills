@@ -1,6 +1,6 @@
 ---
 name: slardar-triage
-description: 扫描 Slardar 近 24h 线上 JS 错误（只看 vc_ai，即 vc-ai 方向），按影响用户数从高到低逐条判定 vc-ai 能否修，呈现第一条能修的告警（现象、报错、Issue 链接），并附上排在它前面、判为不能修的全部条目与理由供用户捞回；随后一次一问引导用户收敛技术方案；用户说「派这条」才建 Meego、转交 byteview-web-harness 任务链修复（omh 固定跑 opus）、登记看板。判定、拒绝与派单都持久化并在跳过清单里可见，每次扫描记台账。当用户说「扫一下线上告警」「看看 Slardar」「挑一个告警看看」「换一条」「捞回 N」「派这条」「这条不修」时使用。
+description: 扫描 Slardar 近 24h 线上 JS 错误（只看 vc_ai，即 vc-ai 方向），按影响用户数从高到低逐条判定 vc-ai 能否修，呈现第一条能修的告警（现象、报错、Issue 链接），并附上排在它前面、判为不能修的全部条目与理由供用户捞回；随后一次一问引导用户收敛技术方案；用户说「派这条」才建 Meego、转交 byteview-web-harness 任务链修复、登记看板。判定、拒绝与派单都持久化并在跳过清单里可见，每次扫描记台账。当用户说「扫一下线上告警」「看看 Slardar」「挑一个告警看看」「换一条」「捞回 N」「派这条」「这条不修」时使用。
 ---
 
 # slardar-triage
@@ -133,17 +133,16 @@ bash <skill>/scripts/prepare-dispatch.sh --state <state> --issue-id <id> --slug 
 ```
 输出 `meego_url` 与渲染后的 `task_book`。退出 3：已有未到终态的 omh Task，错误信息里带它的 phase 与工作区，原样转述；退出 1：写停在哪一步，下次「派这条」会续做。
 7. 锚定：按 `<harness>/skills/harness-context/SKILL.md` 把 Slardar issue 链接、Meego 链接与【技术方案】原文存入 context store。`--task-name` 用第 6 步的 slug，与第 8 步一致——`task-schedule create` 按同名 staging 把上下文落进正式任务目录，名字对不上会被静默跳过。
-8. 建任务：按 `<harness>/skills/task-schedule/SKILL.md`「创建任务」执行——`--task-name` 用第 6 步的 slug，`--branch-prefix feat`，`--repos byteview-web`，`--approved-plan-file` 用第 6 步输出的 `task_book`，`--goal-summary` 用呈现时的「现象」一句话；thread 参数按该 skill 的规则取。续派时（第 10 步 cancel 之后再次「派这条」）不走本步，见第 10 步。
-9. 执行：按 `<harness>/skills/task-execute/SKILL.md` 执行。**本 Task 起始到终态之间，每一条运行 omh-loop / stage-monitor / omh-resume 脚本（`task-entry.mjs`、`flow-state.mjs`、各 `submit-*.mjs`、`task watch`）或 `orchestrator` 的 Bash 调用，都以 `ANTHROPIC_MODEL=opus` 为前缀**——runtime daemon 由第一条命令起，之后任何一条命令发现 daemon 死了都会用自己的 env 把它重新拉起；omh 起 stage 子进程不带 `--model`，模型从这棵进程树的 env 继承；只改这一棵树，不动 `~/.claude/settings.json` 与团队 `omh.config.yaml`。渲染 omh-loop handoff 时 `<stage_goal>` 写明：workflow 用 `pc-web-bugfix`；任务书即已批准方案，无需再 plan；Meego 已提供（见任务书首行）；以上前缀规则。
-10. 核验模型：omh-loop 走到 `next_action === "handoff_monitor"` 时——即最后一次 submit 成功之后、调用 stage-monitor 之前——执行（Bash 工具给 `timeout: 600000`）：`node <skill>/scripts/task-model.mjs --workspace <worktree 绝对路径> --task-id <task_id> --expect opus`（默认最多等 540 秒到第一个 stage 启动；stage 在 handoff_monitor 之后才会起，早于这一步跑必然超时）。`matches:false`、超时、或命令没有输出：在 worktree 内 `ANTHROPIC_MODEL=opus orchestrator task cancel --task-id <task_id>`，然后读 `<worktree>/.omh/tasks/<task_id>/meta.json` 确认 `phase` 为 `cancelled`（最多等 60 秒；仍不是就回话题报「Task 仍在跑」并停，不做下面任何一步）；确认后按 task-schedule 把任务置 `blocked`（原因写实际模型），回话题说明并停。不写处置账，issue 保持 pending。续派：下次「派这条」先 `git -C <worktree> status --short` 确认干净（不干净先 `git -C <worktree> checkout -- . && git -C <worktree> clean -fd`），然后执行第 6 步（复用 Meego 与任务书）并直接跳到第 9 步；第 7、8 步不重做（上下文已 materialize、managed task 已存在）。
-11. 第 10 步核验通过后立即落账并登记个人看板——在调用 stage-monitor 之前，不等终态：处置账里的这条记录是拦住并发第二单的依据。`--task-id` 用 omh-loop 建单返回的 `task_id`（不是 monitor 用的 session id，可在 `<worktree>/.omh/tasks/` 下确认）；`--workspace` 是 byteview-web worktree 的绝对路径，即 `<harness>/` 接上 `task-schedule create` 输出的 `repos[].path`：
+8. 建任务：按 `<harness>/skills/task-schedule/SKILL.md`「创建任务」执行——`--task-name` 用第 6 步的 slug，`--branch-prefix feat`，`--repos byteview-web`，`--approved-plan-file` 用第 6 步输出的 `task_book`，`--goal-summary` 用呈现时的「现象」一句话；thread 参数按该 skill 的规则取。
+9. 执行：按 `<harness>/skills/task-execute/SKILL.md` 执行。runtime 与模型由 harness 与 omh 配置决定（`task-schedule` 以 traecli 宿主准备项目），本技能不加前缀、不校验。渲染 omh-loop handoff 时 `<stage_goal>` 写明：workflow 用 `pc-web-bugfix`；任务书即已批准方案，无需再 plan；Meego 已提供（见任务书首行）。
+10. omh-loop 建单成功后立即落账并登记个人看板——在调用 stage-monitor 之前，不等终态：处置账里的这条记录是拦住并发第二单的依据。`--task-id` 用 omh-loop 建单返回的 `task_id`（不是 monitor 用的 session id，可在 `<worktree>/.omh/tasks/` 下确认）；`--workspace` 是 byteview-web worktree 的绝对路径，即 `<harness>/` 接上 `task-schedule create` 输出的 `repos[].path`：
 ```bash
 node <skill>/scripts/state.mjs dispatched --dir <state> --issue-id <id> --task-id <task_id> --task-slug <taskSlug> --workspace <worktree 绝对路径> --supplement "<技术方案原文>"
 bash <skill>/scripts/board.sh --state <state> --issue-id <id>
 ```
 `board.sh` 输出的是个人看板登记结果，失败写原因，不影响任务推进。
-12. 经 lark-sediment skill 沉淀：现象、派单时量级（`history` 最后一行 `rows` 的次数 / 用户 / 分布主项）、技术方案、Meego 链接、taskSlug、Task ID。这是本技能唯一的外发动作，只发生在派单当次。
-13. 回话题：Issue 一句话、Meego 链接、taskSlug、Task ID、worktree、实际模型、个人看板登记结果。叫停：在 worktree 内 `ANTHROPIC_MODEL=opus orchestrator task cancel --task-id <id>`，再按 task-schedule 把任务置为 `cancelled_pending_confirmation`。派单后本技能不再跟这条单；omh 的陪跑、confirm / unblock 与阻塞上报，是 task-execute 对当前会话的约束。
+11. 经 lark-sediment skill 沉淀：现象、派单时量级（`history` 最后一行 `rows` 的次数 / 用户 / 分布主项）、技术方案、Meego 链接、taskSlug、Task ID。这是本技能唯一的外发动作，只发生在派单当次。
+12. 回话题：Issue 一句话、Meego 链接、taskSlug、Task ID、worktree、个人看板登记结果。叫停：在 worktree 内 `orchestrator task cancel --task-id <id>`，再按 task-schedule 把任务置为 `cancelled_pending_confirmation`。派单后本技能不再跟这条单；omh 的陪跑、confirm / unblock 与阻塞上报，是 task-execute 对当前会话的约束。
 
 ## 纪律
 
@@ -153,6 +152,5 @@ bash <skill>/scripts/board.sh --state <state> --issue-id <id>
 - 呈现与收敛对话里，结论由用户说出或在用户要求「说说你的判断」后给出。
 - 写答辩或复盘材料要某条告警的量级时间线：`node <skill>/scripts/state.mjs history --dir <state> --issue-id <id>`，基线取派单时那一行。没派过单的候选没有「派单前」参照，`recovery.ratio` 为 null；`latest_present` 为 false 时 `ratio` 按那次扫描的最小次数算，是上界而不是实测值。技能不判定修复是否见效，这个数只是给人看的原始材料。
 - 派单只经 byteview-web-harness 任务链；本技能不开 worktree、不起 omh。
-- slardar-triage 派的 omh 固定跑 opus：`ANTHROPIC_MODEL=opus` 前缀覆盖本 Task 起始到终态之间每一条运行 omh-loop / stage-monitor / omh-resume 脚本或 `orchestrator` 的 Bash 调用，起单后经 `task-model.mjs` 核验第一个 stage 的实际模型，不符即 cancel。不改 `~/.claude/settings.json`，不改 `byteview-web` 的 `omh.config.yaml`。
 - 个人看板登记的是调用本技能的 claude 线程；meta 带 meego_id / meego_type=story / meego_url / slardar_url，看板点「完成」时 `meego.sh done` 据 meego_type 推需求节点。看板 ctx 在 `<state>/board/<slug>`，不随 harness 回收 worktree 而消失；harness 看板由 `workspaces/tasks/<taskSlug>/task.json` 自动呈现，无需登记。补登记：`bash <skill>/scripts/board.sh --state <state> --issue-id <id> [--mr-id] [--session-id] [--slardar-url]`，`--mr-id` 由调用者手给，技能自己不去查。
 - 向其他 bot 要结论时，消息里要显式要求对方 `--mention` 回本 bot，否则回答只到人那里，自己收不到；查 open_id 用 `botmux bots list`，细节见 `<skill>/references/log-forensics.md`。
