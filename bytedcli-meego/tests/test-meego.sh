@@ -2,10 +2,16 @@
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 MG="$HERE/../scripts/meego.sh"
+SKILL="$HERE/../SKILL.md"
 export PATH="$HERE/stubs:$PATH"
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); echo "  ok: $1"; }
 bad() { FAIL=$((FAIL+1)); echo "  FAIL: $1"; }
+
+echo "== byteview-web Slardar 缺陷默认端分类 =="
+grep -Eq '"field_key": "field_610176",[[:space:]]*"field_value": "option_3"' "$SKILL" \
+  && ok "PC 默认使用 option_3" \
+  || bad "PC 默认不应使用可见性受限的 Web(PC) option_4"
 
 # fixture：R/.harness-ceilf6/feat__x 两层 ctx；origin 指向 lark/byteview-web（repo slug 判定依据）
 make_fixture() {
@@ -28,6 +34,7 @@ make_fixture() {
     issue:{done_state:"RESOLVED", template_id:"4", dev_roles:["operator"],
            create_fields:[{field_key:"business", field_value:"biz-1"},
                           {field_key:"priority", field_value:"2"},
+                          {field_key:"field_610176", field_value:"option_3"},
                           {field_key:"field_2f21a0", field_value:[{option_id:"ver-1"}]}]}}}}' > "$BYTEDCLI_MEEGO_CONFIG"
   export STUB_STATE="$T/stub"; mkdir -p "$STUB_STATE"
 }
@@ -162,7 +169,7 @@ make_fixture
 jq -n '{work_item_id:7999000222}' > "$STUB_STATE/created.json"
 printf '【现象】…\n' > "$T/desc.md"
 out=$(bash "$MG" create --ctx-dir "$ctx" --type issue --title "线上缺陷" --description-file "$T/desc.md" \
-  --field field_610176=option_4 --field 'field_2f21a0=[{"option_id":"ver-2"}]')
+  --field field_extra=extra-value --field 'field_2f21a0=[{"option_id":"ver-2"}]')
 [ "$(printf '%s' "$out" | jq -r '.type')" = "issue" ] && ok "输出 type=issue" || bad "issue create: $out"
 case "$(printf '%s' "$out" | jq -r '.url')" in */issue/detail/7999000222) ok "url 走 issue/detail" ;; *) bad "issue url: $out" ;; esac
 [ "$(jq -r '.meego_type' "$ctx/meta.json")" = "issue" ] && ok "meta 落 meego_type=issue" || bad "meta type: $(cat "$ctx/meta.json")"
@@ -175,7 +182,8 @@ fields=${line#*--fields }
 [ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="priority") | .field_value')" = "2" ] && ok "issue.create_fields 原样附加" || bad "priority: $fields"
 [ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="field_2f21a0") | .field_value')" = '[{"option_id":"ver-2"}]' ] && ok "--field 覆盖配置同名字段" || bad "覆盖: $fields"
 [ "$(printf '%s' "$fields" | jq -r '[.[] | select(.field_key=="field_2f21a0")] | length')" = 1 ] && ok "覆盖后不重复" || bad "重复键: $fields"
-[ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="field_610176") | .field_value')" = "option_4" ] && ok "--field 追加新字段" || bad "追加: $fields"
+[ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="field_610176") | .field_value')" = "option_3" ] && ok "PC 缺陷默认端分类" || bad "端分类: $fields"
+[ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="field_extra") | .field_value')" = "extra-value" ] && ok "--field 追加新字段" || bad "追加: $fields"
 [ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="business") | .field_value')" = "biz-1" ] && ok "未覆盖字段保留" || bad "保留: $fields"
 # --field 形状守卫
 rc=0; err=$(bash "$MG" create --repo lark/byteview-web --type issue --title "x" --description-file "$T/desc.md" --field nokv 2>&1 >/dev/null) || rc=$?

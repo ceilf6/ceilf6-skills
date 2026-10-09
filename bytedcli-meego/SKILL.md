@@ -47,7 +47,7 @@ Meego 全生命周期管理的机械层单点。运行期动作（关联 / 创�
         { "field_key": "priority",     "field_value": "2" },
         { "field_key": "field_4fd05c", "field_value": "option_4" },
         { "field_key": "issue_stage",  "field_value": "stage_online" },
-        { "field_key": "field_610176", "field_value": "option_4" },
+        { "field_key": "field_610176", "field_value": "option_3" },
         { "field_key": "field_2f21a0", "field_value": [ { "option_id": "824b84db4" } ] } ],
       "done_state": "RESOLVED" } } } }
 ```
@@ -67,7 +67,7 @@ Meego 全生命周期管理的机械层单点。运行期动作（关联 / 创�
   | `priority` | 优先级 | select | `0` P0 / `1` P1 / `2` P2 / `3` P3 / `c5hbev548` P4 / `99` 待定 |
   | `field_4fd05c` | 缺陷发现环境 | select | `option_4` online / `option_3` pre release / `q9_0k24oh` PPE / `option_2` boe |
   | `issue_stage` | 缺陷代码所在阶段 | select | `stage_online` 线上阶段 / `Msra_-MII` 日常线上监控 / `stage_grey` 字节灰度 |
-  | `field_610176` | Bug端分类 | select | `option_2` iOS / `option_1` Android / `option_3` PC / `option_4` Web(PC) / `fs33_qRsW` 移动端 / `2eSUDyQvh` 全端；`d300xvqMn` Web(Mobile) 对本业务线报 `ErrOptionVisibilityUnmet` 不可用 |
+  | `field_610176` | Bug端分类 | select | `option_2` iOS / `option_1` Android / `option_3` PC / `option_4` Web(PC) / `fs33_qRsW` 移动端 / `2eSUDyQvh` 全端；byteview-web 的 Slardar 缺陷默认用 `option_3`，`option_4` Web(PC) 与 `d300xvqMn` Web(Mobile) 在当前业务线会报 `ErrOptionVisibilityUnmet`，不可作为默认值 |
   | `field_2f21a0` | 缺陷发现版本 | multi-select | 字符串化数组 `[{"option_id":…}]`，裸 option_id 报 `field [field_2f21a0] is illegal`。选项标签随发版改名（`c0dd860ab` 曾显示 7.76，现为 8.0），用前按 `--field-query 缺陷发现版本` 现查：`c0dd860ab` 8.0 / `68ea01dbd` 8.1 / `990936762` 8.2 / `4b760b74c` 8.3 / `824b84db4` 8.4 / `v7_81_test` 8.5 |
 
 - `issue.done_state: RESOLVED`；`issue.done_transition: ["IN PROGRESS", "RESOLVED"]` 是从起点到终态要经过的状态序列（不含起点，末项即 done_state）；`issue.state_forms`：`{状态键: [{field_key, field_value}]}`，进入该状态前要补的确认表单，只补空值、`{{mr_url}}` 展开同 node_forms。larksuite 缺陷两跳的取值（2026-09-09 真机核对字段与选项）：
