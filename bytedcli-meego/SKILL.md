@@ -39,7 +39,17 @@ Meego 全生命周期管理的机械层单点。运行期动作（关联 / 创�
         { "field_key": "field_1",      "field_value": "{{mr_url}}" },
         { "field_key": "field_8e6a9f", "field_value": "pbgnb05kk" },
         { "field_key": "field_d40cc0", "field_value": "option_2" } ] } },
-    "issue": { "done_state": "RESOLVED" } } } }
+    "issue": {
+      "template_id": "4",
+      "dev_roles": ["operator"],
+      "create_fields": [
+        { "field_key": "business",     "field_value": "694269fe841acec8b67164b2" },
+        { "field_key": "priority",     "field_value": "2" },
+        { "field_key": "field_4fd05c", "field_value": "option_4" },
+        { "field_key": "issue_stage",  "field_value": "stage_online" },
+        { "field_key": "field_610176", "field_value": "option_4" },
+        { "field_key": "field_2f21a0", "field_value": [ { "option_id": "824b84db4" } ] } ],
+      "done_state": "RESOLVED" } } } }
 ```
 
 - `template_id: 498109` =「技术需求流程」。节点流：需求提出 → 技术评审 → **安全技术评审 与 需求开发并行** → 需求测试 → 需求合入（2026-08-18 真机 `node get` 核对：技术评审 confirm 后两者同时 `doing`）。
@@ -47,6 +57,19 @@ Meego 全生命周期管理的机械层单点。运行期动作（关联 / 创�
 - `story.node_forms`：节点 confirm 前要补的必填表单，`{节点名: [{field_key, field_value}]}`；只补空值，用户在页面改过的以页面为准；`{{mr_url}}` 展开为 meta.mr_id（或 `advance --mr-id`）对应的 Bits MR 链接。498109「技术评审」的三项与取值见「转人工后的处理参考」表。
 - `story.dev_roles`：create 时把 dev_owner_key 挂到这些角色的 `role_owners`；advance 每次开跑前也校验一遍，缺了就补（只加本人、只加不删）——早于本配置建的存量条目靠这一步自愈。`tech_owner`（技术负责人）决定「技术评审」「需求合入」两个节点的 owner，也决定谁能编辑这两个节点上属技术负责人组的表单字段。「需求开发」这类由节点负责人（而非角色）把关的节点，其 owner 由 `schedule` 回填，空着时 advance 也会补本人。
 - `story.create_fields`：模板必填自定义字段，create 时原样附加。498109 必填「业务线 business」与「关联 Story field_4225f8」（`3000712092` 是 VC AI 主 story）；缺了服务端报 `{field} 必填`。
+- `issue.template_id: "4"` =「普通缺陷」（缺陷模板可列：`workitem config field list --work-item-type issue --field-keys '["template"]'`，字段名「缺陷类型」，另有 `23636` KA缺陷 / `127260` 多机房部署）。`create --type issue` 只认这一项，不回退顶层 `template_id`。
+- `issue.dev_roles: ["operator"]`：经办人。create 时把 dev_owner_key 挂上去，缺陷状态流转的权限主体就是它（advance 撞 No Permission 时也是换这个角色）。
+- `issue.create_fields`：缺陷模板 4 的必填自定义字段，服务端 `ErrFieldRequired` 一次报全（2026-09-08 真机建 7374348254 实测，2026-10-09 复核选项）。上面配置是 Slardar 线上告警修复的默认值；端分类与发现版本逐单不同，建单时用 `--field` 覆盖：
+
+  | field_key | 字段 | 类型 | 取值 |
+  |---|---|---|---|
+  | `business` | 业务线 | select | `694269fe841acec8b67164b2`（与 story 同值） |
+  | `priority` | 优先级 | select | `0` P0 / `1` P1 / `2` P2 / `3` P3 / `c5hbev548` P4 / `99` 待定 |
+  | `field_4fd05c` | 缺陷发现环境 | select | `option_4` online / `option_3` pre release / `q9_0k24oh` PPE / `option_2` boe |
+  | `issue_stage` | 缺陷代码所在阶段 | select | `stage_online` 线上阶段 / `Msra_-MII` 日常线上监控 / `stage_grey` 字节灰度 |
+  | `field_610176` | Bug端分类 | select | `option_2` iOS / `option_1` Android / `option_3` PC / `option_4` Web(PC) / `fs33_qRsW` 移动端 / `2eSUDyQvh` 全端；`d300xvqMn` Web(Mobile) 对本业务线报 `ErrOptionVisibilityUnmet` 不可用 |
+  | `field_2f21a0` | 缺陷发现版本 | multi-select | 字符串化数组 `[{"option_id":…}]`，裸 option_id 报 `field [field_2f21a0] is illegal`。选项标签随发版改名（`c0dd860ab` 曾显示 7.76，现为 8.0），用前按 `--field-query 缺陷发现版本` 现查：`c0dd860ab` 8.0 / `68ea01dbd` 8.1 / `990936762` 8.2 / `4b760b74c` 8.3 / `824b84db4` 8.4 / `v7_81_test` 8.5 |
+
 - `issue.done_state: RESOLVED`；`issue.done_transition: ["IN PROGRESS", "RESOLVED"]` 是从起点到终态要经过的状态序列（不含起点，末项即 done_state）；`issue.state_forms`：`{状态键: [{field_key, field_value}]}`，进入该状态前要补的确认表单，只补空值、`{{mr_url}}` 展开同 node_forms。larksuite 缺陷两跳的取值（2026-09-09 真机核对字段与选项）：
 
   ```json
@@ -75,7 +98,7 @@ Meego 全生命周期管理的机械层单点。运行期动作（关联 / 创�
 | 子命令 | 职责 | 关键纪律 |
 |---|---|---|
 | `resolve` | 从链接/ID 解析条目并（ctx 模式）落 meta | 解析失败 die，不静默转创建；换绑不同 id 拒绝 |
-| `create` | 走底层 `workitem create --fields` 建需求（恒 story）：template / name / description + `role_owners`（按 dev_roles）+ `create_fields`。ctx 模式落 meta；`--repo` 模式只建单、输出 id/url（harness 之外给存量 MR 补建，随后 `bits mr update --meego <url>` 绑 MR） | ctx 模式 meta 已有 meego_id 防重 die；field_value 一律字符串；`--dry-run` 只回显归一化载荷，不建单、不写 meta |
+| `create` | 走底层 `workitem create --fields` 建条目，`--type story|issue`（缺省 story；Bug 类型 MR 只能绑 issue）：template / name / description + `role_owners`（按 `<type>.dev_roles`）+ `<type>.create_fields`，再按 `--field <key>=<value>`（可重复）覆盖同名字段或追加新字段。ctx 模式落 meta（meego_type 随 --type）；`--repo` 模式只建单、输出 id/type/url（harness 之外给存量 MR 补建，随后 `bits mr update --meego <url>` 绑 MR） | ctx 模式 meta 已有 meego_id 防重 die；field_value 一律字符串（`--field` 的值原样当字符串，multi-select 传字符串化数组）；`--dry-run` 只回显归一化载荷，不建单、不写 meta |
 | `comment` | 进度评论（`--message-file` 或 `--preset qa`，qa 文案带 meta.mr_id） | 【bot】前缀机械层强制 |
 | `schedule` | 回填 schedule_node 节点排期/估分/负责人 | 仅 story；issue 输出 skipped；`--points` 只收纯数字 |
 | `advance` | done 流转。story：先按 dev_roles 补齐角色，再按 done_transition 顺序从当前节点**推到底**——已完成空转、映射外/不存在的节点不碰、confirm 前按 node_forms 补空的必填项、confirm 后回读校验；issue：按 done_transition 从当前状态逐跳推到 done_state——每跳先按 state_forms 补空的确认表单（联动字段分轮补写，最多三轮），确认表单里配置没覆盖的字段转人工并点名，流转后回读状态核验，撞 No Permission 时用 `--role-operate` 把经办人换成本人再试一次 | owner 守卫：owner 为空或含本人才推，别人的节点撞上即停下如实报（后续串行节点不再空试）；撞 `ErrOwnerRequired` 时给空 owner 的节点补本人再试一次；未到达重取一次再试；回读非 finished 隔一拍再读一次才判死；任一步失败退出 1，幂等可重跑；`--repo` 模式可带 `--mr-id` 供 `{{mr_url}}` |
@@ -86,7 +109,7 @@ Meego 全生命周期管理的机械层单点。运行期动作（关联 / 创�
 
 ## 首次映射（唯一停点）
 
-仓库已绑定空间但配置缺映射项（`template_id` / `schedule_node` / `dev_owner_key` / `done_transition` / `node_forms` / `dev_roles` / `done_state` / `create_fields`，缺哪项由用到它的子命令或服务端报出）时：
+仓库已绑定空间但配置缺映射项（`template_id` / `issue.template_id` / `schedule_node` / `dev_owner_key` / `done_transition` / `node_forms` / `dev_roles` / `done_state` / `create_fields`，缺哪项由用到它的子命令或服务端报出）时：
 1. 读一个真实条目：`bytedcli --json meego node get --project-key <pk> --work-item-id <id>`（story 节点流，`list[]` 的顺序不是流转顺序，顺序要按页面节点图定）与 `bytedcli --json meego state list …`（issue 状态流）；
 2. 按「事实完成才流转」原则提出建议映射：done_transition 列本端从起点到终点要经过的全部节点，别人负责的节点与自动节点（如「已上车」）不进映射；带必填表单的节点把字段与固定取值写进 node_forms；
 3. 亮给用户确认后 `map set` 落配置；此后同仓库全机械，不再问。
@@ -97,7 +120,7 @@ Meego 全生命周期管理的机械层单点。运行期动作（关联 / 创�
 - **dev_owner_key 必须反查验人**：参照条目的节点 owner 可能是别人（实测某参照 story 的开发节点 owner `6976056325272862721` 是尹上；本人是 `7657492291354954694`）。候选 key 一律 `user search --user-keys` 反查出姓名邮箱再定，不凭「在某条目上出现过」采信；本人 key 按「前置」里的 username → user search 取。配错的后果：schedule 会把错的人写成节点负责人（团队可见）。
 - **节点名跟模板走，不跟空间走**：同一空间不同模板节点流不同（498109「技术需求流程」是「需求开发」，旧流程才有「前端开发」）。映射节点名必须以**目标模板实际创建出的条目**的 `node get` 结果为准，不能照抄别的条目。
 - **模板 id 无 CLI 列表可查**：从同模板既有条目 `bytedcli --json meego workitem get --project-key <pk> --work-item-id <id>` 的 `work_item_attribute.template.id` 读取。
-- **模板必填字段无处列表可查**：`create` 撞 `{field} 必填` 就把该字段补进 `create_fields`；选项类字段的 option_id 用 `workitem config field list --field-keys '["<key>"]'` 查（见「直调配方」）。
+- **模板必填字段无处列表可查**：`config field list` 不带必填标记；`create` 撞 `{field} 必填` 就把该字段补进 `<type>.create_fields`（缺陷模板 4 的六项已登记在「前置」）；选项类字段的 option_id 用 `workitem config field list --field-keys '["<key>"]'` 查（见「直调配方」）。
 
 ## 已知边界
 
@@ -111,7 +134,7 @@ Meego 全生命周期管理的机械层单点。运行期动作（关联 / 创�
 - issue 确认表单只填 `issue.state_forms` 配置过的字段，配置没覆盖的必填字段转人工并点名；当前状态无到下一跳的合法转移同样转人工。`state transition required get --mode unfinished` 对本空间缺陷实测恒回 `{}`，不能拿它发现必填项，只能靠 state list 的 confirm_form 与配置。
 - 检索能力弱：`workitem get` 不支持按标题查（报 invalid param）；`story --title` 相似检索有索引延迟且范围有限（刚建的条目查不到）。获取靠链接/ID；create 应答须完整捕获新 id，丢了用 `meego todo list` 找回（新建条目会进本人待办）。
 - **排期字段形状（2026-08-11 真机核对完成，脚本已按此实现）**：`node_schedule.estimate_start_date` / `estimate_end_date` 为**按时区 00:00:00 的毫秒级时间戳（number）**，传 "YYYY-MM-DD" 字符串会被 thrift 拒收；`points` 单位为天；未传估分时服务端 `is_auto` 默认按工期自动补（实测 10 天工期自动补 10 分）。
-- **create 载荷纪律（脚本已按此实现）**：快捷 `bytedcli meego create` 传不了模板必填自定义字段，绑定空间的仓库必报 `{field} 必填`，所以 create 走 `bytedcli --json meego workitem create --project-key <pk> --work-item-type story --fields '<json>'`。fields 为 `[{field_key, field_value}]`，**field_value 一律字符串**——裸数字会被序列化成 float64 遭 thrift 拒收；对象 / 数组（multi-select、role_owners）按 `tojson` 字符串化；模板以 `{"field_key":"template","field_value":"<id>"}` 传入。真机建单前先 `create --dry-run` 看归一化载荷。
+- **create 载荷纪律（脚本已按此实现）**：快捷 `bytedcli meego create` 传不了模板必填自定义字段，绑定空间的仓库必报 `{field} 必填`，所以 create 走 `bytedcli --json meego workitem create --project-key <pk> --work-item-type story|issue --fields '<json>'`。fields 为 `[{field_key, field_value}]`，**field_value 一律字符串**——裸数字会被序列化成 float64 遭 thrift 拒收；对象 / 数组（multi-select、role_owners）按 `tojson` 字符串化；模板以 `{"field_key":"template","field_value":"<id>"}` 传入。真机建单前先 `create --dry-run` 看归一化载荷。
 
 ## 转人工后的处理参考
 

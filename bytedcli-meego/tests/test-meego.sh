@@ -25,7 +25,10 @@ make_fixture() {
            create_fields:[{field_key:"business", field_value:"biz-1"},
                           {field_key:"field_4225f8", field_value:3000712092},
                           {field_key:"apps", field_value:[{option_id:"option_1"}]}]},
-    issue:{done_state:"RESOLVED"}}}}' > "$BYTEDCLI_MEEGO_CONFIG"
+    issue:{done_state:"RESOLVED", template_id:"4", dev_roles:["operator"],
+           create_fields:[{field_key:"business", field_value:"biz-1"},
+                          {field_key:"priority", field_value:"2"},
+                          {field_key:"field_2f21a0", field_value:[{option_id:"ver-1"}]}]}}}}' > "$BYTEDCLI_MEEGO_CONFIG"
   export STUB_STATE="$T/stub"; mkdir -p "$STUB_STATE"
 }
 cleanup() { rm -rf "$T" 2>/dev/null || { sleep 1; rm -rf "$T"; }; }
@@ -152,6 +155,45 @@ jq 'del(.meego_id, .meego_type, .meego_url)' "$ctx/meta.json" > "$ctx/tmp" && mv
 rc=0; err=$(bash "$MG" create --ctx-dir "$ctx" --title "坏配置" --description-file "$T/desc.md" 2>&1 >/dev/null) || rc=$?
 [ "$rc" = 1 ] && case "$err" in *create_fields*) ok "create_fields 形状不对 die 并点名" ;; *) bad "坏配置 stderr: $err" ;; esac || bad "坏配置 exit $rc"
 grep -q -- "meego workitem create" "$STUB_STATE/calls.log" && bad "坏配置仍发了 create" || ok "坏配置不发 create"
+cleanup
+
+echo "== create --type issue：缺陷模板、经办人角色、--field 覆盖、落 meta =="
+make_fixture
+jq -n '{work_item_id:7999000222}' > "$STUB_STATE/created.json"
+printf '【现象】…\n' > "$T/desc.md"
+out=$(bash "$MG" create --ctx-dir "$ctx" --type issue --title "线上缺陷" --description-file "$T/desc.md" \
+  --field field_610176=option_4 --field 'field_2f21a0=[{"option_id":"ver-2"}]')
+[ "$(printf '%s' "$out" | jq -r '.type')" = "issue" ] && ok "输出 type=issue" || bad "issue create: $out"
+case "$(printf '%s' "$out" | jq -r '.url')" in */issue/detail/7999000222) ok "url 走 issue/detail" ;; *) bad "issue url: $out" ;; esac
+[ "$(jq -r '.meego_type' "$ctx/meta.json")" = "issue" ] && ok "meta 落 meego_type=issue" || bad "meta type: $(cat "$ctx/meta.json")"
+[ "$(jq -r '.meego_id' "$ctx/meta.json")" = "7999000222" ] && ok "meta 落 meego_id" || bad "meta id 未落"
+line=$(grep -- "meego workitem create" "$STUB_STATE/calls.log" | head -1)
+case "$line" in *"--work-item-type issue"*) ok "工作项类型 issue" ;; *) bad "类型: $line" ;; esac
+fields=${line#*--fields }
+[ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="template") | .field_value')" = "4" ] && ok "模板取 issue.template_id（不是顶层 story 模板）" || bad "模板: $fields"
+[ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="role_owners") | .field_value | fromjson | .[0].role')" = "operator" ] && ok "经办人挂 issue.dev_roles" || bad "role_owners: $fields"
+[ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="priority") | .field_value')" = "2" ] && ok "issue.create_fields 原样附加" || bad "priority: $fields"
+[ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="field_2f21a0") | .field_value')" = '[{"option_id":"ver-2"}]' ] && ok "--field 覆盖配置同名字段" || bad "覆盖: $fields"
+[ "$(printf '%s' "$fields" | jq -r '[.[] | select(.field_key=="field_2f21a0")] | length')" = 1 ] && ok "覆盖后不重复" || bad "重复键: $fields"
+[ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="field_610176") | .field_value')" = "option_4" ] && ok "--field 追加新字段" || bad "追加: $fields"
+[ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="business") | .field_value')" = "biz-1" ] && ok "未覆盖字段保留" || bad "保留: $fields"
+# --field 形状守卫
+rc=0; err=$(bash "$MG" create --repo lark/byteview-web --type issue --title "x" --description-file "$T/desc.md" --field nokv 2>&1 >/dev/null) || rc=$?
+[ "$rc" = 1 ] && case "$err" in *"--field"*) ok "--field 无 = 时 die 并点名" ;; *) bad "--field stderr: $err" ;; esac || bad "--field exit $rc"
+rc=0; bash "$MG" create --repo lark/byteview-web --type task --title "x" --description-file "$T/desc.md" 2>/dev/null || rc=$?
+[ "$rc" = 1 ] && ok "--type 非 story|issue die" || bad "--type exit $rc"
+# 缺 issue.template_id：die 点名，且不回退顶层 template_id 去建缺陷
+jq 'del(.repos["lark/byteview-web"].issue.template_id)' "$BYTEDCLI_MEEGO_CONFIG" > "$T/c2.json" && mv "$T/c2.json" "$BYTEDCLI_MEEGO_CONFIG"
+: > "$STUB_STATE/calls.log"
+rc=0; err=$(bash "$MG" create --repo lark/byteview-web --type issue --title "x" --description-file "$T/desc.md" 2>&1 >/dev/null) || rc=$?
+[ "$rc" = 1 ] && case "$err" in *"issue.template_id"*) ok "缺 issue.template_id die 并点名" ;; *) bad "缺模板 stderr: $err" ;; esac || bad "缺模板 exit $rc"
+grep -q -- "meego workitem create" "$STUB_STATE/calls.log" && bad "缺模板仍发了 create" || ok "缺模板不发 create"
+# story 模板优先取 story.template_id，缺省回退顶层
+jq '.repos["lark/byteview-web"].story.template_id = "tmpl-story"' "$BYTEDCLI_MEEGO_CONFIG" > "$T/c2.json" && mv "$T/c2.json" "$BYTEDCLI_MEEGO_CONFIG"
+: > "$STUB_STATE/calls.log"
+bash "$MG" create --repo lark/byteview-web --title "需求" --description-file "$T/desc.md" >/dev/null
+fields=$(grep -- "meego workitem create" "$STUB_STATE/calls.log" | head -1); fields=${fields#*--fields }
+[ "$(printf '%s' "$fields" | jq -r '.[] | select(.field_key=="template") | .field_value')" = "tmpl-story" ] && ok "story.template_id 优先于顶层" || bad "story 模板: $fields"
 cleanup
 
 echo "== comment：【bot】前缀强制、preset、失败非零 =="

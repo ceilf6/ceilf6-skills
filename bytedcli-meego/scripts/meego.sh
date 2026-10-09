@@ -16,7 +16,8 @@ CFG="${BYTEDCLI_MEEGO_CONFIG:-$HOME/.bytedcli-meego/config.json}"
 usage() {
   cat >&2 <<'EOF'
 用法：meego.sh resolve  (--ctx-dir <路径> | --repo <slug>) (--url <链接> | --id <id> --type story|issue)
-      meego.sh create   (--ctx-dir <路径> | --repo <slug>) --title <标题> --description-file <文件> [--dry-run]
+      meego.sh create   (--ctx-dir <路径> | --repo <slug>) [--type story|issue] --title <标题> --description-file <文件>
+                        [--field <field_key>=<field_value>]… [--dry-run]
       meego.sh comment  (--ctx-dir <路径> | --repo <slug> --id <id>) (--message-file <文件> | --preset qa)
       meego.sh schedule (--ctx-dir <路径> | --repo <slug> --id <id> --type story|issue) --start <YYYY-MM-DD> --due <YYYY-MM-DD> [--points <数>]
       meego.sh advance  (--ctx-dir <路径> | --repo <slug> --id <id> --type story|issue) [--mr-id <MR id>]
@@ -30,6 +31,7 @@ sub="${1:-}"; [ -n "$sub" ] || usage; shift
 mapop=""
 if [ "$sub" = map ]; then mapop="${1:-}"; case "$mapop" in get|set) shift ;; *) usage ;; esac; fi
 ctx="" repo="" id="" wtype="" url_in="" title="" descfile="" msgfile="" preset="" start="" due="" points="" jsonfile="" dry="" mr_id_opt=""
+field_overrides='[]'
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) dry=1; shift ;;
@@ -47,6 +49,11 @@ while [ $# -gt 0 ]; do
     --points) points="${2:?--points 需要值}"; shift 2 ;;
     --json-file) jsonfile="${2:?--json-file 需要值}"; shift 2 ;;
     --mr-id) mr_id_opt="${2:?--mr-id 需要值}"; shift 2 ;;
+    --field)
+      fv="${2:?--field 需要值}"
+      case "$fv" in *=*) : ;; *) echo "meego: --field 须为 <field_key>=<field_value>：$fv" >&2; exit 1 ;; esac
+      field_overrides=$(printf '%s' "$field_overrides" | jq -c --arg k "${fv%%=*}" --arg v "${fv#*=}" '. + [{field_key:$k, field_value:$v}]')
+      shift 2 ;;
     *) usage ;;
   esac
 done
@@ -134,43 +141,54 @@ case "$sub" in
     # ctx 模式落 meta（harness 主路径）；--repo 模式只建单并输出 id/url（harness 之外的存量 MR 补建）
     { [ -n "$title" ] && [ -n "$descfile" ]; } || usage
     [ -r "$descfile" ] || die "description 文件不可读：$descfile"
+    wtype="${wtype:-story}"
+    case "$wtype" in story|issue) : ;; *) die "--type 只收 story|issue" ;; esac
     if [ -n "$ctx" ]; then
       cur=$(jq -r '.meego_id // empty' "$META")
       [ -z "$cur" ] || die "meta 已关联 meego ${cur}，拒绝重复创建（续入复用既有条目）"
     fi
-    TID=$(printf '%s' "$rc_cfg" | jq -r '.template_id // empty')
-    [ -n "$TID" ] || die "配置缺 template_id（repo ${repo}）：先 map set 落首次映射"
+    # 模板按类型取：story 认 story.template_id，缺省回退顶层 template_id；issue 只认 issue.template_id——
+    # 不回退顶层，否则会拿需求模板去建缺陷，服务端不一定拒绝。
+    if [ "$wtype" = story ]; then TID=$(printf '%s' "$rc_cfg" | jq -r '.story.template_id // .template_id // empty')
+    else TID=$(printf '%s' "$rc_cfg" | jq -r '.issue.template_id // empty'); fi
+    [ -n "$TID" ] || die "配置缺 ${wtype} 模板 id（repo ${repo}，$([ "$wtype" = story ] && echo template_id || echo issue.template_id)）：先 map set 落首次映射"
     desc=$(cat "$descfile")
-    # 走底层 workitem create：快捷 `meego create` 传不了模板必填自定义字段（498109 要求业务线、关联 Story），
-    # 绑定空间的仓库必报 `{field} 必填`。必填项按仓库配置 story.create_fields 原样附加；
-    # 配了 dev_roles 时把 dev_owner_key 挂到这些角色（如 tech_owner：技术评审 / 需求合入 节点 owner 由此而来）。
-    # field_value 一律字符串：裸数字会被序列化成 float64 遭 thrift 拒收，对象/数组按 tojson 字符串化
-    # （multi-select / role_owners 的入参形状即如此）。
-    fields=$(printf '%s' "$rc_cfg" | jq -c --arg t "$TID" --arg n "$title" --arg d "$desc" '
+    # 走底层 workitem create：快捷 `meego create` 只建需求且传不了模板必填自定义字段（498109 要求业务线、
+    # 关联 Story；缺陷模板 4 要求业务线、优先级、发现环境、阶段、端分类、发现版本），绑定空间的仓库必报
+    # `{field} 必填`。必填项按仓库配置 <type>.create_fields 原样附加，再按 --field 覆盖（同 key 替换、新 key
+    # 追加——发现版本、端分类这类逐单不同的值由此传入）；配了 <type>.dev_roles 时把 dev_owner_key 挂到这些
+    # 角色（story 的 tech_owner 决定技术评审 / 需求合入节点 owner；issue 的 operator 是经办人，状态流转的
+    # 权限主体）。field_value 一律字符串：裸数字会被序列化成 float64 遭 thrift 拒收，对象/数组按 tojson
+    # 字符串化（multi-select / role_owners 的入参形状即如此）。
+    fields=$(printf '%s' "$rc_cfg" | jq -c --arg t "$TID" --arg n "$title" --arg d "$desc" --arg w "$wtype" \
+      --argjson ov "$field_overrides" '
       def s: if type == "string" then . elif type == "number" then tostring else tojson end;
-      [ {field_key:"template", field_value:$t}, {field_key:"name", field_value:$n},
-        {field_key:"description", field_value:$d} ]
-      + (if ((.dev_owner_key // "") | tostring) != "" and ((.story.dev_roles // []) | length) > 0
-         then [ {field_key:"role_owners",
-                 field_value:([ .dev_owner_key as $o | .story.dev_roles[] | {role:., owners:[($o | tostring)]} ] | tojson)} ]
-         else [] end)
-      + [ (.story.create_fields // [])[] | {field_key, field_value:(.field_value | s)} ]') \
-      || die "组装 create 字段失败（检查配置 story.create_fields 形状 [{field_key, field_value}] 与 story.dev_roles 形状 [角色key]）"
+      .[$w] as $tc
+      | ([ {field_key:"template", field_value:$t}, {field_key:"name", field_value:$n},
+           {field_key:"description", field_value:$d} ]
+         + (if ((.dev_owner_key // "") | tostring) != "" and (($tc.dev_roles // []) | length) > 0
+            then [ {field_key:"role_owners",
+                    field_value:([ .dev_owner_key as $o | $tc.dev_roles[] | {role:., owners:[($o | tostring)]} ] | tojson)} ]
+            else [] end)
+         + [ ($tc.create_fields // [])[] | {field_key, field_value:(.field_value | s)} ]) as $base
+      | ($ov | map(.field_key)) as $ovk
+      | ($base | map(select(.field_key as $k | ($ovk | index($k)) == null))) + $ov') \
+      || die "组装 create 字段失败（检查配置 ${wtype}.create_fields 形状 [{field_key, field_value}] 与 ${wtype}.dev_roles 形状 [角色key]）"
     if [ -n "$dry" ]; then
-      bytedcli --json meego workitem create --project-key "$PK" --work-item-type story \
+      bytedcli --json meego workitem create --project-key "$PK" --work-item-type "$wtype" \
         --fields "$fields" --dry-run
       exit $?
     fi
-    out=$(bytedcli --json meego workitem create --project-key "$PK" --work-item-type story \
+    out=$(bytedcli --json meego workitem create --project-key "$PK" --work-item-type "$wtype" \
       --fields "$fields" 2>"$ERRF") \
       || die "meego workitem create 失败：$(err_tail)"
     # 新条目 id 的键名按真机为准：递归找第一个数字型 work_item_id / id（同 cr-group.sh 手法）
     nid=$(printf '%s' "$out" | mcp_text | jq -r 'first(.. | objects | (.work_item_id? // .id? // empty) | select(type=="number" or (type=="string" and test("^[0-9]+$")))) // empty' 2>/dev/null | head -1)
     [ -n "$nid" ] || die "create 应答解析不出新条目 id：$(snippet "$out")"
-    url_out="https://meego.larkoffice.com/$(printf '%s' "$rc_cfg" | jq -r '.space // "larksuite"')/story/detail/${nid}"
-    [ -z "$ctx" ] || meta_write --arg i "$nid" --arg u "$url_out" \
-      '.meego_id = ($i|tostring) | .meego_type = "story" | .meego_url = $u'
-    jq -n --arg i "$nid" --arg u "$url_out" '{id:$i, url:$u}'
+    url_out="https://meego.larkoffice.com/$(printf '%s' "$rc_cfg" | jq -r '.space // "larksuite"')/${wtype}/detail/${nid}"
+    [ -z "$ctx" ] || meta_write --arg i "$nid" --arg t "$wtype" --arg u "$url_out" \
+      '.meego_id = ($i|tostring) | .meego_type = $t | .meego_url = $u'
+    jq -n --arg i "$nid" --arg t "$wtype" --arg u "$url_out" '{id:$i, type:$t, url:$u}'
     ;;
   comment)
     [ -n "$id" ] || { jq -n '{skipped:true, reason:"无 meego 关联（meta 缺 meego_id）"}'; exit 0; }
