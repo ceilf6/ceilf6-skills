@@ -14,3 +14,4 @@
 RESULT {"verdict":"ask|working|pass|fail","branch":"{{BRANCH}}","mr_url":"","summary":"","reason":"","question":""}
 
 pass=全部评论处置完（修复+回复+台账齐，pending_user 清单写进 summary）；fail=处置失败。**没有 skip**——本任务不存在「不是任务」的分支，评论不值得处置也要在台账记录后以 pass 收轮。
+
