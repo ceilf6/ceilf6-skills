@@ -291,6 +291,9 @@ def result_status(message: str, target_date: str) -> Optional[str]:
         "success": '<daily-report-result status="success" date="{}" />'.format(
             target_date
         ),
+        "failed": '<daily-report-result status="failed" date="{}" />'.format(
+            target_date
+        ),
         "skipped": (
             '<daily-report-result status="skipped" date="{}" '
             'reason="no_reportable_activity" />'
@@ -653,6 +656,12 @@ def run_full(target_date: str, env: Dict[str, str]) -> int:
             if outcome is None:
                 raise VerificationError(
                     "Codex final message lacks a recognized result sentinel"
+                )
+            if outcome == "failed":
+                stage = "report_result"
+                raise CommandError(
+                    "Codex reported that the daily report was not published",
+                    label="report_failed",
                 )
             if outcome == "success":
                 stage = "wiki_verification"

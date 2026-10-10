@@ -71,6 +71,8 @@ Keep parser `path` values and local filesystem diagnostics in the assistant cove
 - Use low confidence for weak clues and avoid overstating them as completed work.
 - Calendar attendance without outcome is coverage-only.
 - Empty source results are coverage-only.
+- Records without enough detail to identify a work item are coverage-only;
+  they do not block events supported by other evidence.
 - Daily report pages created by this automation are `self_generated_report_artifact` coverage-only, including a prior-date report written just after midnight. They must never become WorkEvents.
 - Local AI sessions can be direct evidence when they show user-owned outcome, progress, decision, blocker, validation, or next action; do not paste raw transcript text or local filesystem paths into the report.
 

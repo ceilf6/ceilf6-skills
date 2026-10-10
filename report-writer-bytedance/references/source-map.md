@@ -199,6 +199,9 @@ Rules:
 - Empty results belong in the assistant response coverage summary, not the report body.
 - Oncall is optional. `not logged in`, expired credentials, or query failures
   are recorded as skipped and do not stop the report.
+- An Oncall flow with only origin metadata and no identifiable topic or work
+  item is coverage-only. Do not connect it to an MR or project by inference,
+  and continue reporting independently evidenced work.
 - For `not logged in`, emit exactly
   `<daily-report-warning kind="configuration_required" source="oncall" code="not_logged_in" />`
   before the final result sentinel. For other Oncall query failures, emit exactly

@@ -19,6 +19,9 @@ class SourcePolicyContractTests(unittest.TestCase):
         self.assertIn("Oncall is optional", skill)
         self.assertIn("Oncall is optional", source_map)
         self.assertIn("Oncall 是可选来源", prompt)
+        self.assertIn("coverage ledger only", skill)
+        self.assertIn("coverage-only", source_map)
+        self.assertIn("缺少主题或工作项标识的单条记录仅计入来源覆盖", prompt)
         configuration_warning = (
             '<daily-report-warning kind="configuration_required" '
             'source="oncall" code="not_logged_in" />'

@@ -60,10 +60,16 @@ When creating or updating Feishu docs, also read the current embedded Lark docs 
 - Treat daily report pages created by this automation as `self_generated_report_artifact` coverage only. Never turn the current or prior automated report into a WorkEvent.
 - Oncall is optional. Record unavailable Oncall coverage as skipped with the
   concrete reason. Never stop publication solely because Oncall is unavailable.
+- When an Oncall record has no identifiable topic or work item after available
+  detail queries, keep it in the coverage ledger only. Do not infer its relation
+  to another event, and do not block a report supported by independent evidence.
 - Only the runner may send a self-DM for configuration or task failure.
   The report agent must not send group messages, mail, broadcasts, or routine
   success notifications.
-- Do not guess unclear platform mappings. If a source name, project, repo, or ownership is uncertain after querying available tools, ask the user.
+- Do not guess platform mappings for claims included in the report. If an
+  included event depends on an uncertain source name, project, repo, or owner,
+  ask the user. Exclude unrelated or unidentifiable records from report claims
+  and document their coverage without stopping independently supported work.
 
 ## Safety Checks
 

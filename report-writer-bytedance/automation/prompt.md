@@ -11,7 +11,7 @@
 3. 必须先执行技能规定的工具与鉴权预检。任何必要的 `lark-cli`、`bytedcli` 或 ByteDance 鉴权不可用时，立即停止并报告具体原因；不得生成或发布残缺日报。
 4. 本地 AI 解析器使用绝对路径 `{{SKILL_DIR}}/scripts/collect-local-ai-context.py`。
 5. 只使用技能允许的 ByteDance 平台和本地 AI 数据源，不使用互联网资料，不复制原始私聊、邮件、提示词、会话全文或本地文件路径到日报正文。
-6. 如果平台映射、项目、仓库或归属不明确，不要猜测；停止发布并在最终结果中列出待用户确认的具体问题。
+6. 报告中的具体事实不得猜测平台映射、项目、仓库或归属。缺少主题或工作项标识的单条记录仅计入来源覆盖，不得强行关联其他事件，也不得阻止已有独立证据支持的工作写入；只有拟写入的事实本身依赖不明确归属时，才停止发布并列出待确认问题。
 7. Meego 必需覆盖以技能列出的 OAuth 状态和 `todo list` 等普通接口为准；`workitem get --rich` 属于可选补充证据。若它返回 `MEEGO_GOAPI_AUTH_REQUIRED`，记录为“Meego 富文本详情跳过（缺 GoAPI Web session）”，改用普通 Meego 结果、MR 与飞书文档交叉核验，不得仅因此停止日报。
 8. 先检查日结父 Wiki 的同名子页面；存在则更新，不存在才创建，确保同一天重复执行不会创建重复页面。
 9. 完成证据归一化后，先把本任务或上一轮自动生成的日结页面标记为 `self_generated_report_artifact`，仅计入覆盖，不得映射为 WorkEvent。若其余证据中不存在任何具有目标日活动的 `completed`、`in_progress` 或 `blocked` WorkEvent，则不得创建或更新日报、不得追加 SOP/成长沉淀库；在覆盖摘要后直接输出 `no_reportable_activity` 的 skipped sentinel。存在可报告 WorkEvent 时，严格执行 mentor → 主管 → HR 的串行评审与最多两轮修订；两轮后仍有 blocking finding 时停止发布。

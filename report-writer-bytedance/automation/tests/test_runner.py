@@ -40,6 +40,7 @@ class ResultContractTests(unittest.TestCase):
         self.assertFalse(runner.has_success_sentinel(failed, "2026-07-20"))
         self.assertTrue(runner.has_success_sentinel(success, "2026-07-20"))
         self.assertFalse(runner.has_success_sentinel(trailing, "2026-07-20"))
+        self.assertEqual(runner.result_status(failed, "2026-07-20"), "failed")
 
     def test_unique_target_node_is_required(self):
         with self.assertRaises(runner.VerificationError):
@@ -375,6 +376,8 @@ class FullRunExitStatusTests(unittest.TestCase):
         self.assertEqual(status, 1)
         verify.assert_not_called()
         notify.assert_called_once()
+        self.assertEqual(notify.call_args.args[0].source, "report_result")
+        self.assertEqual(notify.call_args.args[0].code, "report_failed")
 
     def test_success_requires_sentinel_and_wiki_verification(self):
         def write_success_message(prompt, last_message, env, handle):
