@@ -52,11 +52,25 @@ fi
 
 mkdir -p "${here}/logs" "${here}/state"
 
+# launchd 的 stdout/stderr 由 xpcproxy 在 exec 前打开，它拿不到 TCC 的桌面/文稿目录授权：仓库检出在
+# ~/Desktop 下时直接写 logs/ 会让 launchd 以 78（EX_CONFIG）拒绝拉起、且不留任何日志。真文件钉在
+# ~/Library/Logs（不受 TCC 管），logs/ 里留同名 symlink，runbook 与排障命令的 logs/launchd.*.log 路径不变。
+logs_dir="${HOME}/Library/Logs/harness-ceilf6-bot"
+mkdir -p "$logs_dir"
+for name in launchd.out.log launchd.err.log; do
+  link="${here}/logs/${name}"
+  if [ -f "$link" ] && [ ! -L "$link" ]; then
+    cat "$link" >> "${logs_dir}/${name}"   # 保留改用 symlink 之前已写下的历史
+    rm -f "$link"
+  fi
+  ln -sfn "${logs_dir}/${name}" "$link"
+done
+
 path_extra="$(dirname "$node_bin"):$(dirname "$(command -v lark-cli)"):$(dirname "$(command -v claude)")"
 path_extra="${path_extra}:$(dirname "$(command -v bytedcli)"):$(dirname "$(command -v traex)")"
 # & 是 sed 替换里的「整个匹配」、\ 是 sed 的转义引导符（探针实证会被静默吞掉）、& 与 < 又是 XML
 # 元字符：含这些字符的路径不会报错，只会静默渲染出一份错误的 plist。
-case "${here}${node_bin}${path_extra}" in
+case "${here}${node_bin}${path_extra}${logs_dir}" in
   *"&"*|*"|"*|*"<"*|*">"*|*"\\"*) echo "路径含 & | < > \\ ，无法安全渲染 plist：${here}" >&2; exit 1 ;;
 esac
 
@@ -72,7 +86,7 @@ if [ -f "$legacy_plist" ]; then
   rm -f "$legacy_plist"
   echo "已清理改名前的旧常驻：${legacy_plist}"
 fi
-sed -e "s|__NODE__|${node_bin}|g" -e "s|__ROOT__|${here}|g" -e "s|__PATH_EXTRA__|${path_extra}|g" \
+sed -e "s|__NODE__|${node_bin}|g" -e "s|__ROOT__|${here}|g" -e "s|__LOGS__|${logs_dir}|g" -e "s|__PATH_EXTRA__|${path_extra}|g" \
   "${here}/com.ceilf6.harness-ceilf6-bot.plist.tpl" > "$plist"
 
 launchctl unload "$plist" 2>/dev/null || true

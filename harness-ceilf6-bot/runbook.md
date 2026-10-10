@@ -196,6 +196,7 @@ skip 清场保护是防御性守卫——值班会话按契约不产出 skip，�
 - 单任务日志：`harness-ceilf6-bot/logs/task-<message_id>.log`（headless claude 全量输出，排查「它为什么这么干」的唯一依据）。
 - 停止：`launchctl unload ~/Library/LaunchAgents/com.ceilf6.harness-ceilf6-bot.plist`；重新启用：重跑 `bash harness-ceilf6-bot/install.sh`（幂等，即重装重启）。
 - **有 PID 却毫无反应**（`launchctl list` 看得到进程，群里发消息没任何表情）：先核对 `config.json` 的 `chatId` 与目标群是否一致。chat 不匹配的消息是被**刻意静音**忽略的（否则机器人在的每个群都会刷屏日志），所以日志里连一行线索都不会有。群 id 用 `lark-cli` 的群列表查（`im +chat-list` / `im +chat-search`）。控制端口被别的进程占住时症状相同（launchd 反复重启一个起不来的实例），但那一类在 `logs/launchd.err.log` 里有明确的「控制端口 … 启动失败」，先看日志再查 chatId。
+- **没有 PID、`launchctl print gui/$(id -u)/com.ceilf6.harness-ceilf6-bot` 里 `last exit code = 78`、runs 不断上涨、`logs/launchd.err.log` 却一行不增**：launchd 在 exec 之前就被拒了，node 根本没起来。几乎都是 plist 里 stdout/stderr 路径落在 TCC 受保护目录（~/Desktop、~/Documents）——`log show --last 2m --info --predicate 'eventMessage CONTAINS "harness-ceilf6-bot"'` 能看到 `sandboxd rejected ... kTCCServiceSystemPolicyDesktopFolder`。install.sh 已把真文件钉在 `~/Library/Logs/harness-ceilf6-bot/`、`logs/` 里只留 symlink；看到这个症状就重跑一次 install。
 - 重置某条消息重新处理：从 `state/processed.jsonl` 删除该行后重启。**注意**：这只在事件流会再次投递同一 `message_id` 时才有效（平台重投）；日常想重跑一条任务，最可靠的做法是在群里重新发一条消息——那是新的 `message_id`，根本不必动 `processed.jsonl`。
 - 话题登记表 `state/threads.jsonl`（`thread_id → {branch, worktree, messageId}`）：话题内回复靠它找到归属任务。想让某话题的后续回复重新按新任务处理：删掉对应那一行后**重启** bot（该文件只在启动时读进内存）。
 - 终态记账 `state/settled.jsonl`：正常终态与人工叫停都写一行，启动扫描据此区分「被重启收割、还没人处置」与「已经处置过」。这份账为空的机器（如刚换机、刚清过 `state/`）先跑一次播种，免得历史上早已跑完的任务被当成滞留捞回控制面：

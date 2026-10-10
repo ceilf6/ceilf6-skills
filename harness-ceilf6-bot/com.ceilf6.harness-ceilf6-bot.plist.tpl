@@ -10,8 +10,11 @@
   <key>WorkingDirectory</key><string>__ROOT__</string>
   <key>KeepAlive</key><true/>
   <key>RunAtLoad</key><true/>
-  <key>StandardOutPath</key><string>__ROOT__/logs/launchd.out.log</string>
-  <key>StandardErrorPath</key><string>__ROOT__/logs/launchd.err.log</string>
+  <!-- stdout/stderr 由 xpcproxy 在 exec 前打开，它没有 TCC 的桌面/文稿目录授权：
+       这两个路径一旦落在 ~/Desktop、~/Documents 等受保护目录下，launchd 会以 78（EX_CONFIG）
+       静默拒绝拉起，日志里一行都不会有。install.sh 把它们钉在 ~/Library/Logs 下并回链到 logs/。 -->
+  <key>StandardOutPath</key><string>__LOGS__/launchd.out.log</string>
+  <key>StandardErrorPath</key><string>__LOGS__/launchd.err.log</string>
   <key>EnvironmentVariables</key><dict>
     <key>PATH</key><string>/usr/local/bin:/usr/bin:/bin:__PATH_EXTRA__</string>
   </dict>
