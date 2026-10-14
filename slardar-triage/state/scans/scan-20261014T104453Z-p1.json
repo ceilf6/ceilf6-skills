@@ -1,0 +1,1299 @@
+{
+  "scanned_at": "2026-10-14T10:44:53.212Z",
+  "window": {
+    "start": 1791888293,
+    "end": 1791974693
+  },
+  "page": 1,
+  "page_size": 20,
+  "skipped_bids": [],
+  "candidates": [
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=9491f36c4f6de64beb6e43092758d87d&layout=normal&release=1.0.0.360",
+      "issue_id": "9491f36c4f6de64beb6e43092758d87d",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "APINotProvided",
+      "error_name": "Error",
+      "filename": "webpack://@byteview-web/vc-ai/../packages/vc-web-utils/gateway/request.ts",
+      "count": 142841,
+      "users": 81555,
+      "first_seen": 1791888293493,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=5fecb58c725d53f4a22a64599e0160bf",
+      "pid_dist": {
+        "/webview/doubao-ai-layout-mobile": 300
+      },
+      "os_dist": {
+        "iOS": 300
+      },
+      "release_dist": {
+        "1.0.0.360": 300
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "unknown": 300
+      },
+      "distinct_sessions": 300,
+      "latest_event": {
+        "page": "/webview/doubao-ai-layout-mobile",
+        "release": "1.0.0.360",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/doubao-ai-layout-mobile.tsx",
+        "mapped_path": "vc-ai/src/doubao-ai-layout-mobile.tsx",
+        "line": 79,
+        "function": "react"
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=b2e3841f80ed849311b3abbb90aa4f4c&layout=normal&release=8.2.0.0",
+      "issue_id": "b2e3841f80ed849311b3abbb90aa4f4c",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[warn] FishBoneError: fishBone out of screen",
+      "error_name": "Error",
+      "filename": "blob:https://vc.feishu.cn/36f59059-8d86-4fb2-9a35-d98b174010ae",
+      "count": 36601,
+      "users": 34777,
+      "first_seen": 1791888293922,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=64e363fdf6d6cbd37a44f41f20ea8e2c",
+      "pid_dist": {
+        "/webview/ai-layout-mobile": 300
+      },
+      "os_dist": {
+        "iOS": 108,
+        "Android": 170,
+        "OpenHarmony": 22
+      },
+      "release_dist": {
+        "8.2.0.0": 258,
+        "7.77.0.21": 7,
+        "7.74.0.275": 6,
+        "7.76.0.234": 26,
+        "7.74.0.34": 2,
+        "7.76.0.118": 1
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "unknown": 130,
+        "7.69.6": 3,
+        "8.0.2": 4,
+        "8.2.6": 63,
+        "8.1.12": 66,
+        "7.62.6": 7,
+        "7.75.17": 3,
+        "7.72.10": 2,
+        "7.76.14": 3,
+        "7.73.11": 5,
+        "7.70.13": 1,
+        "7.67.9": 1,
+        "7.74.9": 2,
+        "7.61.8": 2,
+        "7.70.12": 1,
+        "7.66.6": 4,
+        "7.64.5": 1,
+        "7.75.15": 1,
+        "7.65.6": 1
+      },
+      "distinct_sessions": 300,
+      "latest_event": {
+        "page": "/webview/ai-layout-mobile",
+        "release": "8.2.0.0",
+        "source_type": "manual",
+        "raw_filename": "blob:https://vc.feishu.cn/a58ab369-7913-4f44-bd3a-904d151a3bcc",
+        "mapped_path": null,
+        "line": 1,
+        "function": "?"
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=240971710520850c0091a8716fce41f2&layout=normal&release=1.0.0.360",
+      "issue_id": "240971710520850c0091a8716fce41f2",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "APINotProvided",
+      "error_name": "Error",
+      "filename": "[native code]",
+      "count": 49952,
+      "users": 27748,
+      "first_seen": 1791888293624,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=a772bf10fe8bb6821c2e3de256be3ba6",
+      "pid_dist": {
+        "/webview/doubao-ai-layout-mobile": 300
+      },
+      "os_dist": {
+        "iOS": 300
+      },
+      "release_dist": {
+        "1.0.0.360": 300
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "unknown": 300
+      },
+      "distinct_sessions": 300,
+      "latest_event": {
+        "page": "/webview/doubao-ai-layout-mobile",
+        "release": "1.0.0.360",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/doubao-ai-layout-mobile.tsx",
+        "mapped_path": "vc-ai/src/doubao-ai-layout-mobile.tsx",
+        "line": 79,
+        "function": "react"
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=e80f1cb596fed62717435e6bfcc16b67&layout=normal&release=8.2.0.0",
+      "issue_id": "e80f1cb596fed62717435e6bfcc16b67",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[InvokeServierPBFast error]: logId=20261014184438E30E796B266911733F3B, invalid user",
+      "error_name": "InvokeServerPbError",
+      "filename": "webpack://@byteview-web/vc-ai/./src/services/transport-layer/webview/utils/server-pb.ts",
+      "count": 52023,
+      "users": 19602,
+      "first_seen": 1791888293253,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=79946553a0a2f0f445d096014653681b",
+      "pid_dist": {
+        "/webview/ai-layout": 178,
+        "/webview/minutes-ai-layout-pc": 122
+      },
+      "os_dist": {
+        "Windows": 179,
+        "Mac": 121
+      },
+      "release_dist": {
+        "8.2.0.0": 300
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 298,
+        "manual": 2
+      },
+      "host_version_dist": {
+        "8.2.14": 18,
+        "7.70.10": 14,
+        "7.69.15": 17,
+        "7.53.16": 74,
+        "8.1.17": 111,
+        "7.76.21": 6,
+        "7.66.0": 27,
+        "7.72.0": 1,
+        "7.62.0": 1,
+        "8.0.6": 3,
+        "8.3.3": 2,
+        "7.74.21": 1,
+        "8.0.3": 3,
+        "7.50.0": 4,
+        "8.1.22": 2,
+        "7.73.9": 2,
+        "7.75.18": 1,
+        "7.50.9": 1,
+        "7.62.1": 3,
+        "7.72.11": 1,
+        "7.53.15": 6,
+        "7.65.8": 1,
+        "8.2.6": 1
+      },
+      "distinct_sessions": 135,
+      "latest_event": {
+        "page": "/webview/ai-layout",
+        "release": "8.2.0.0",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/services/ai-layout.ts",
+        "mapped_path": "vc-ai/src/services/ai-layout.ts",
+        "line": 271,
+        "function": "res"
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=8fa2bf7fe1bb48335eb9d75827c7ebd4&layout=normal&release=8.2.0.0",
+      "issue_id": "8fa2bf7fe1bb48335eb9d75827c7ebd4",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[warn] CommonError: [InvokeServierPBFast error]: logId=202610141844300EFD6DA3F444066EAC2F, invalid user",
+      "error_name": "InvokeServerPbError",
+      "filename": "webpack://@byteview-web/vc-ai/./src/services/transport-layer/webview/utils/server-pb.ts",
+      "count": 17970,
+      "users": 17445,
+      "first_seen": 1791888297505,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=177c31805455e02bd715693c0ceb7c4d",
+      "pid_dist": {
+        "/webview/ai-layout": 294,
+        "/webview/minutes-ai-layout-pc": 6
+      },
+      "os_dist": {
+        "Windows": 223,
+        "Mac": 69,
+        "GNU/Linux": 8
+      },
+      "release_dist": {
+        "8.2.0.0": 298,
+        "7.77.0.21": 2
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "8.1.17": 148,
+        "7.54.0": 1,
+        "7.74.16": 2,
+        "7.76.21": 17,
+        "7.62.1": 9,
+        "8.2.14": 29,
+        "8.0.6": 7,
+        "7.72.11": 9,
+        "7.67.9": 3,
+        "8.0.3": 8,
+        "7.74.21": 6,
+        "7.66.5": 2,
+        "7.62.9": 3,
+        "7.75.18": 6,
+        "7.53.16": 5,
+        "7.66.1": 1,
+        "7.66.0": 5,
+        "7.69.15": 5,
+        "7.59.5": 1,
+        "7.72.8": 3,
+        "7.68.6": 1,
+        "7.62.0": 12,
+        "7.65.8": 1,
+        "8.1.22": 2,
+        "7.72.23": 2,
+        "7.66.11": 2,
+        "7.71.12": 1,
+        "7.69.9": 1,
+        "8.2.9": 1,
+        "7.59.15": 1,
+        "7.50.9": 2,
+        "7.73.9": 1,
+        "7.58.5": 2,
+        "8.2.6": 1
+      },
+      "distinct_sessions": 299,
+      "latest_event": {
+        "page": "/webview/ai-layout",
+        "release": "8.2.0.0",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/services/transport-layer/webview/ai-layout.ts",
+        "mapped_path": "vc-ai/src/services/transport-layer/webview/ai-layout.ts",
+        "line": 133,
+        "function": "res"
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=aaaed08b947f7c1730c780ec481b0cee&layout=normal&release=1.0.0.360",
+      "issue_id": "aaaed08b947f7c1730c780ec481b0cee",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "业务错误，ErrorInfo: code: -352,larkErrorCode: -352,debugMessage: NetError { code: -352, msg: \"\", extra: {\"code\": \"11\", \"msg\": \"\"} },displayMessage: 糟糕...发生了一些错误，请稍后重试,userErrTitle: ,requestID: ,ttLogId: Optional(\"\")",
+      "error_name": "Error",
+      "filename": "webpack://@byteview-web/vc-ai/./src/utils/native.ts",
+      "count": 114511,
+      "users": 15754,
+      "first_seen": 1791888293422,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=2ae68b162ad14577eba526441991f900",
+      "pid_dist": {
+        "/webview/doubao-ai-layout-mobile": 299,
+        "/webview/doubao-end-summary-mobile": 1
+      },
+      "os_dist": {
+        "iOS": 300
+      },
+      "release_dist": {
+        "1.0.0.360": 300
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 268,
+        "manual": 32
+      },
+      "host_version_dist": {
+        "unknown": 300
+      },
+      "distinct_sessions": 129,
+      "latest_event": {
+        "page": "/webview/doubao-ai-layout-mobile",
+        "release": "1.0.0.360",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/utils/native.ts",
+        "mapped_path": "vc-ai/src/utils/native.ts",
+        "line": 715,
+        "function": "Error"
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=f49170ba664fefd93aede453eb5dc3ba&layout=normal&release=8.2.0.0",
+      "issue_id": "f49170ba664fefd93aede453eb5dc3ba",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[native-api] command=94003 timed out after 10000ms",
+      "error_name": "NativeApiRequestTimeoutError",
+      "filename": "webpack://@byteview-web/vc-ai/./src/utils/native-api/pc-bridge.ts",
+      "count": 19581,
+      "users": 14206,
+      "first_seen": 1791888302426,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=595b5378ba6ebef8faa6a4d89380a6ed",
+      "pid_dist": {
+        "/webview/minutes-ai-layout-pc": 68,
+        "/webview/ai-layout": 231,
+        "/webview/doubao-in-lark-ai-layout": 1
+      },
+      "os_dist": {
+        "Windows": 211,
+        "Mac": 89
+      },
+      "release_dist": {
+        "8.2.0.0": 298,
+        "7.77.0.21": 2
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 300
+      },
+      "host_version_dist": {
+        "8.1.17": 160,
+        "7.69.15": 2,
+        "8.2.14": 43,
+        "7.76.21": 12,
+        "7.50.16": 1,
+        "8.0.6": 15,
+        "8.1.22": 10,
+        "7.53.16": 6,
+        "8.3.3": 2,
+        "7.62.1": 3,
+        "8.0.3": 7,
+        "7.72.1": 1,
+        "7.75.15": 2,
+        "8.0.5": 1,
+        "7.74.21": 10,
+        "7.72.8": 3,
+        "7.65.8": 1,
+        "7.75.18": 3,
+        "8.2.6": 1,
+        "7.62.0": 1,
+        "7.66.0": 3,
+        "7.54.0": 1,
+        "7.72.7": 2,
+        "7.72.11": 2,
+        "7.73.9": 3,
+        "7.64.6": 1,
+        "7.58.4": 1,
+        "8.1.25": 1,
+        "8.2.9": 2
+      },
+      "distinct_sessions": 263,
+      "latest_event": {
+        "page": "/webview/minutes-ai-layout-pc",
+        "release": "8.2.0.0",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/services/ai-layout.ts",
+        "mapped_path": "vc-ai/src/services/ai-layout.ts",
+        "line": 271,
+        "function": "getMeetingAISummary"
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=99a016f19b51da0f856ce6a8fad515d7&layout=normal&release=8.2.0.0",
+      "issue_id": "99a016f19b51da0f856ce6a8fad515d7",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[warn] FishBoneError: fishBone out of screen",
+      "error_name": "Error",
+      "filename": "webpack://@byteview-web/vc-ai/./src/utils/track.ts",
+      "count": 11703,
+      "users": 11223,
+      "first_seen": 1791888295848,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=55874dca04fce747451b72da6658ec2e",
+      "pid_dist": {
+        "/webview/ai-layout-mobile": 285,
+        "/webview/doubao-ai-layout-mobile": 10,
+        "/webview/ai-layout": 5
+      },
+      "os_dist": {
+        "Android": 157,
+        "iOS": 118,
+        "OpenHarmony": 20,
+        "Windows": 3,
+        "Mac": 2
+      },
+      "release_dist": {
+        "8.2.0.0": 290,
+        "1.0.0.360": 10
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "8.1.12": 63,
+        "unknown": 148,
+        "7.75.17": 4,
+        "7.73.11": 6,
+        "7.72.10": 6,
+        "7.75.13": 2,
+        "8.0.2": 8,
+        "7.66.6": 2,
+        "7.62.6": 10,
+        "7.68.10": 1,
+        "7.76.14": 6,
+        "7.61.8": 1,
+        "7.69.6": 1,
+        "8.2.6": 27,
+        "7.70.12": 1,
+        "7.67.9": 3,
+        "7.63.9": 2,
+        "8.1.17": 3,
+        "7.75.15": 2,
+        "7.72.8": 1,
+        "7.71.8": 1,
+        "8.0.3": 1,
+        "7.65.6": 1
+      },
+      "distinct_sessions": 292,
+      "latest_event": {
+        "page": "/webview/ai-layout-mobile",
+        "release": "8.2.0.0",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/handlers/setup-fish-bone-monitor-handler.ts",
+        "mapped_path": "vc-ai/src/handlers/setup-fish-bone-monitor-handler.ts",
+        "line": 39,
+        "function": ""
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=6351f27a3cee69a9651adcda80c202c5&layout=normal&release=8.2.0.0",
+      "issue_id": "6351f27a3cee69a9651adcda80c202c5",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "Load failed",
+      "error_name": "Error",
+      "filename": "[native code]",
+      "count": 8695,
+      "users": 7851,
+      "first_seen": 1791888297985,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=17b7d97d32a8c12cde40704084f1a5ed",
+      "pid_dist": {
+        "/webview/ai-layout-mobile": 286,
+        "/webview/end-summary-mobile": 14
+      },
+      "os_dist": {
+        "iOS": 300
+      },
+      "release_dist": {
+        "8.2.0.0": 260,
+        "7.76.0.234": 20,
+        "7.77.0.21": 11,
+        "7.74.0.275": 6,
+        "7.76.0.118": 2,
+        "7.74.0.34": 1
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 297,
+        "manual": 3
+      },
+      "host_version_dist": {
+        "unknown": 300
+      },
+      "distinct_sessions": 282,
+      "latest_event": {
+        "page": "/webview/ai-layout-mobile",
+        "release": "8.2.0.0",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "blob:https://vc.feishu.cn/b9fbe83c-d785-4b81-afdd-c2e4753a0f5f",
+        "mapped_path": null,
+        "line": 1,
+        "function": "s"
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=0d42f73bfb1550d7caab59b6b18d5747&layout=normal&release=8.2.0.0",
+      "issue_id": "0d42f73bfb1550d7caab59b6b18d5747",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[native-api] common.getAvatarBase64 timed out after 60000ms",
+      "error_name": "NativeApiRequestTimeoutError",
+      "filename": "blob:https://vc.feishu.cn/68521ca4-20c3-4230-9d31-93895ed25794",
+      "count": 9374,
+      "users": 7603,
+      "first_seen": 1791888296130,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=f78dc95322a73d05ab7daf0d4ff1b685",
+      "pid_dist": {
+        "/webview/end-summary-mobile": 125,
+        "/webview/ai-layout-mobile": 175
+      },
+      "os_dist": {
+        "Android": 95,
+        "iOS": 186,
+        "OpenHarmony": 19
+      },
+      "release_dist": {
+        "8.2.0.0": 298,
+        "7.77.0.21": 2
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 300
+      },
+      "host_version_dist": {
+        "8.2.6": 35,
+        "unknown": 205,
+        "8.0.2": 3,
+        "7.69.6": 2,
+        "8.1.12": 36,
+        "7.75.17": 1,
+        "7.63.9": 3,
+        "7.62.6": 1,
+        "7.60.11": 1,
+        "7.74.9": 3,
+        "7.75.15": 2,
+        "8.1.14": 1,
+        "7.72.10": 3,
+        "7.70.12": 1,
+        "7.65.6": 1,
+        "7.73.11": 1,
+        "7.71.8": 1
+      },
+      "distinct_sessions": 300,
+      "latest_event": {
+        "page": "/webview/end-summary-mobile",
+        "release": "8.2.0.0",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "blob:https://vc.feishu.cn/e77aa7d3-65dd-4364-a02b-2d03419237d1",
+        "mapped_path": null,
+        "line": 1,
+        "function": "?"
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=974fe886cf47a615d57b5cb3e5007897&layout=normal&release=1.0.0.360",
+      "issue_id": "974fe886cf47a615d57b5cb3e5007897",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "APINotProvided",
+      "error_name": "Error",
+      "filename": "webpack://@byteview-web/vc-ai/../packages/vc-web-utils/gateway/request.ts",
+      "count": 11734,
+      "users": 6789,
+      "first_seen": 1791888297515,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=0239d20b8adeedfd4b7db127702c5da7",
+      "pid_dist": {
+        "/webview/doubao-ai-layout-mobile": 300
+      },
+      "os_dist": {
+        "iOS": 300
+      },
+      "release_dist": {
+        "1.0.0.360": 300
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "unknown": 300
+      },
+      "distinct_sessions": 300,
+      "latest_event": {
+        "page": "/webview/doubao-ai-layout-mobile",
+        "release": "1.0.0.360",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/doubao-ai-layout-mobile.tsx",
+        "mapped_path": "vc-ai/src/doubao-ai-layout-mobile.tsx",
+        "line": 79,
+        "function": "react"
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=9c474016317ef0a74616ef0a583df508&layout=normal&release=1.0.0.360",
+      "issue_id": "9c474016317ef0a74616ef0a583df508",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "APINotProvided",
+      "error_name": "Error",
+      "filename": "[native code]",
+      "count": 11923,
+      "users": 6279,
+      "first_seen": 1791888294353,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=c4a25a683447fc2aaf0ccdf8f7f5a938",
+      "pid_dist": {
+        "/webview/doubao-ai-layout-mobile": 300
+      },
+      "os_dist": {
+        "iOS": 300
+      },
+      "release_dist": {
+        "1.0.0.360": 300
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "unknown": 300
+      },
+      "distinct_sessions": 300,
+      "latest_event": {
+        "page": "/webview/doubao-ai-layout-mobile",
+        "release": "1.0.0.360",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/doubao-ai-layout-mobile.tsx",
+        "mapped_path": "vc-ai/src/doubao-ai-layout-mobile.tsx",
+        "line": 79,
+        "function": "react"
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=953f6435b7944029e76d62cff152ff0e&layout=normal&release=8.2.0.0",
+      "issue_id": "953f6435b7944029e76d62cff152ff0e",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[warn] CommonError: Failed to fetch",
+      "error_name": "Error",
+      "filename": "blob:https://vc.feishu.cn/fd6f27d7-053d-41c4-beb7-a53f8da574c1",
+      "count": 6072,
+      "users": 5657,
+      "first_seen": 1791888294556,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=2cc88f2d2a89d5c35c22b8b4f78fa694",
+      "pid_dist": {
+        "/webview/end-summary-mobile": 246,
+        "/webview/ai-layout-mobile": 40,
+        "/webview/minutes-end-summary": 12,
+        "/webview/minutes-ai-layout-mobile": 2
+      },
+      "os_dist": {
+        "Android": 228,
+        "OpenHarmony": 72
+      },
+      "release_dist": {
+        "8.2.0.0": 263,
+        "7.74.0.275": 7,
+        "7.76.0.234": 24,
+        "7.74.0.34": 3,
+        "7.76.0.118": 1,
+        "7.77.0.21": 2
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "8.1.12": 85,
+        "7.62.6": 8,
+        "unknown": 72,
+        "8.0.2": 6,
+        "8.2.6": 95,
+        "7.74.9": 5,
+        "7.66.6": 4,
+        "7.75.15": 2,
+        "7.72.10": 5,
+        "7.73.5": 1,
+        "7.73.11": 1,
+        "7.64.5": 1,
+        "7.70.12": 1,
+        "7.69.6": 5,
+        "8.1.14": 5,
+        "7.57.6": 1,
+        "8.2.5": 1,
+        "7.76.14": 1,
+        "7.67.9": 1
+      },
+      "distinct_sessions": 299,
+      "latest_event": {
+        "page": "/webview/end-summary-mobile",
+        "release": "8.2.0.0",
+        "source_type": "manual",
+        "raw_filename": "blob:https://vc.feishu.cn/4399b9b4-dba3-4e4d-9714-ec32bc5f0a3d",
+        "mapped_path": null,
+        "line": 1,
+        "function": "s"
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=ef97ebec118df9f99e21056c052bc2cc&layout=normal&release=8.2.0.0",
+      "issue_id": "ef97ebec118df9f99e21056c052bc2cc",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "Failed to fetch",
+      "error_name": "Error",
+      "filename": "blob:https://vc.feishu.cn/94aef5e0-bc1c-480e-9021-9d254d140cf7",
+      "count": 5969,
+      "users": 5505,
+      "first_seen": 1791888293451,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=70fec2fa749f91bcdbd1663a00db6b2d",
+      "pid_dist": {
+        "/webview/ai-layout-mobile": 244,
+        "/webview/minutes-ai-layout-mobile": 11,
+        "/webview/end-summary-mobile": 45
+      },
+      "os_dist": {
+        "Android": 241,
+        "OpenHarmony": 59
+      },
+      "release_dist": {
+        "8.2.0.0": 262,
+        "7.76.0.234": 18,
+        "7.77.0.21": 13,
+        "7.76.0.118": 2,
+        "7.74.0.34": 3,
+        "7.74.0.275": 2
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 300
+      },
+      "host_version_dist": {
+        "7.72.10": 8,
+        "8.0.2": 5,
+        "7.70.12": 4,
+        "unknown": 59,
+        "7.65.6": 4,
+        "8.2.6": 87,
+        "8.1.12": 93,
+        "7.74.9": 4,
+        "7.73.11": 3,
+        "7.73.5": 2,
+        "7.62.6": 7,
+        "7.75.17": 2,
+        "8.1.14": 4,
+        "7.66.6": 6,
+        "7.75.13": 1,
+        "8.2.5": 2,
+        "7.63.9": 2,
+        "7.76.14": 2,
+        "7.71.8": 2,
+        "7.58.9": 1,
+        "7.68.10": 1,
+        "8.1.4": 1
+      },
+      "distinct_sessions": 285,
+      "latest_event": {
+        "page": "/webview/ai-layout-mobile",
+        "release": "8.2.0.0",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "blob:https://vc.feishu.cn/94aef5e0-bc1c-480e-9021-9d254d140cf7",
+        "mapped_path": null,
+        "line": 1,
+        "function": "s"
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=8996dc26db1d3d8ad1121f86b308daa4&layout=normal&release=8.2.0.0",
+      "issue_id": "8996dc26db1d3d8ad1121f86b308daa4",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[warn] CommonError: [native-api] command=94003 timed out after 10000ms",
+      "error_name": "NativeApiRequestTimeoutError",
+      "filename": "webpack://@byteview-web/vc-ai/./src/utils/native-api/pc-bridge.ts",
+      "count": 5812,
+      "users": 5305,
+      "first_seen": 1791888297082,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=7cb5d047a1cae58d56757366b11969dc",
+      "pid_dist": {
+        "/webview/ai-layout": 251,
+        "/webview/minutes-ai-layout-pc": 48,
+        "/webview/doubao-in-lark-ai-layout": 1
+      },
+      "os_dist": {
+        "Windows": 228,
+        "Mac": 70,
+        "GNU/Linux": 2
+      },
+      "release_dist": {
+        "8.2.0.0": 300
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "8.2.14": 48,
+        "8.1.17": 124,
+        "8.0.6": 14,
+        "7.72.11": 13,
+        "7.62.1": 6,
+        "8.0.3": 25,
+        "8.1.22": 24,
+        "7.69.15": 3,
+        "7.53.16": 4,
+        "7.74.16": 3,
+        "7.74.21": 5,
+        "7.70.12": 1,
+        "7.75.18": 6,
+        "7.72.7": 1,
+        "7.73.9": 1,
+        "7.66.10": 1,
+        "7.53.15": 2,
+        "7.53.6": 1,
+        "7.62.0": 4,
+        "7.51.10": 1,
+        "7.75.15": 1,
+        "8.2.9": 1,
+        "7.66.0": 2,
+        "7.67.9": 1,
+        "7.66.5": 1,
+        "7.62.9": 1,
+        "8.0.5": 3,
+        "7.72.8": 1,
+        "7.70.10": 1,
+        "7.66.3": 1
+      },
+      "distinct_sessions": 294,
+      "latest_event": {
+        "page": "/webview/ai-layout",
+        "release": "8.2.0.0",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/../packages/vc-web-utils/fetch-queue.ts",
+        "mapped_path": "packages/vc-web-utils/fetch-queue.ts",
+        "line": 72,
+        "function": "_this_queue"
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=0b75b307239b5885b9d756f1b0654277&layout=normal&release=7.76.0.234",
+      "issue_id": "0b75b307239b5885b9d756f1b0654277",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "invalid user",
+      "error_name": "Error",
+      "filename": "blob:https://vc.feishu.cn/3cc16543-a4fe-4ce9-95a0-39f994389d29",
+      "count": 5143,
+      "users": 5083,
+      "first_seen": 1791888296092,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=9d6cd50583dc76fcd5590fcfd8adf832",
+      "pid_dist": {
+        "/webview/ai-layout-mobile": 299,
+        "/webview/minutes-ai-layout-mobile": 1
+      },
+      "os_dist": {
+        "iOS": 41,
+        "Android": 245,
+        "OpenHarmony": 14
+      },
+      "release_dist": {
+        "7.76.0.234": 27,
+        "8.2.0.0": 248,
+        "7.77.0.21": 14,
+        "7.74.0.275": 5,
+        "7.74.0.34": 5,
+        "7.76.0.118": 1
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 298,
+        "manual": 2
+      },
+      "host_version_dist": {
+        "unknown": 55,
+        "8.2.6": 94,
+        "7.74.9": 6,
+        "8.1.12": 83,
+        "7.62.6": 7,
+        "7.75.15": 1,
+        "7.57.6": 1,
+        "7.66.6": 14,
+        "7.71.8": 2,
+        "8.0.2": 7,
+        "7.70.12": 4,
+        "7.73.11": 3,
+        "7.75.17": 6,
+        "7.76.14": 3,
+        "7.68.10": 1,
+        "7.58.9": 1,
+        "8.2.3": 1,
+        "8.1.14": 4,
+        "7.72.10": 1,
+        "7.67.9": 1,
+        "7.58.11": 1,
+        "8.2.5": 1,
+        "7.65.6": 1,
+        "7.63.9": 1,
+        "7.59.6": 1
+      },
+      "distinct_sessions": 300,
+      "latest_event": {
+        "page": "/webview/ai-layout-mobile",
+        "release": "7.76.0.234",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "blob:https://vc.feishu.cn/cbe4163a-a046-4890-9933-3f19f95d07a5",
+        "mapped_path": null,
+        "line": 1,
+        "function": "i"
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=67257ea434d49854d38d698fd1fe63fe&layout=normal&release=8.2.0.0",
+      "issue_id": "67257ea434d49854d38d698fd1fe63fe",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "invalid user",
+      "error_name": "Error",
+      "filename": "webpack://@byteview-web/vc-ai/../packages/vc-web-utils/gateway/request.ts",
+      "count": 15740,
+      "users": 4964,
+      "first_seen": 1791888293106,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=d1adf8ee7c9a2eecb44580db54f5442c",
+      "pid_dist": {
+        "/webview/minutes-ai-layout-mobile": 296,
+        "/webview/ai-layout-mobile": 4
+      },
+      "os_dist": {
+        "iOS": 298,
+        "Android": 2
+      },
+      "release_dist": {
+        "8.2.0.0": 300
+      },
+      "source_type_dist": {
+        "manual": 150,
+        "onunhandledrejection": 150
+      },
+      "host_version_dist": {
+        "unknown": 298,
+        "7.50.13": 1,
+        "8.0.2": 1
+      },
+      "distinct_sessions": 217,
+      "latest_event": {
+        "page": "/webview/minutes-ai-layout-mobile",
+        "release": "8.2.0.0",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/../packages/vc-web-utils/gateway/utils/constants.ts",
+        "mapped_path": "packages/vc-web-utils/gateway/utils/constants.ts",
+        "line": 29,
+        "function": ""
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=119c64c67c474d16d04cb2fe88153878&layout=normal&release=7.76.0.234",
+      "issue_id": "119c64c67c474d16d04cb2fe88153878",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "Error invoking invokeNative: Java bridge method invocation error",
+      "error_name": "Error",
+      "filename": "blob:https://vc.feishu.cn/fe40a043-ed58-46c9-bb70-0074a343715f",
+      "count": 6073,
+      "users": 4689,
+      "first_seen": 1791888299410,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=e52237cca23d21c2717fe9c5e65e7a47",
+      "pid_dist": {
+        "/webview/ai-layout-mobile": 289,
+        "/webview/end-summary-mobile": 8,
+        "/webview/minutes-end-summary": 3
+      },
+      "os_dist": {
+        "Android": 300
+      },
+      "release_dist": {
+        "7.76.0.234": 16,
+        "8.2.0.0": 262,
+        "7.68.0.41": 1,
+        "7.77.0.21": 11,
+        "7.74.0.34": 7,
+        "7.76.0.118": 1,
+        "7.74.0.275": 2
+      },
+      "source_type_dist": {
+        "onerror": 297,
+        "onunhandledrejection": 2,
+        "manual": 1
+      },
+      "host_version_dist": {
+        "8.2.6": 108,
+        "8.1.14": 10,
+        "8.1.12": 115,
+        "7.66.6": 4,
+        "7.58.9": 1,
+        "7.60.12": 1,
+        "7.75.15": 3,
+        "7.74.9": 7,
+        "7.75.13": 2,
+        "7.62.6": 4,
+        "8.0.2": 6,
+        "7.68.10": 3,
+        "7.75.17": 5,
+        "7.72.10": 4,
+        "7.65.6": 2,
+        "8.3.2": 1,
+        "7.73.11": 2,
+        "7.69.6": 8,
+        "7.67.9": 2,
+        "7.63.9": 3,
+        "7.76.14": 3,
+        "7.70.12": 2,
+        "7.71.8": 2,
+        "7.64.5": 1,
+        "8.2.5": 1
+      },
+      "distinct_sessions": 255,
+      "latest_event": {
+        "page": "/webview/ai-layout-mobile",
+        "release": "7.76.0.234",
+        "source_type": "onerror",
+        "raw_filename": "blob:https://vc.feishu.cn/fe40a043-ed58-46c9-bb70-0074a343715f",
+        "mapped_path": null,
+        "line": 1,
+        "function": "?"
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=78dd4626fc301cd450f3d1abe274931d&layout=normal&release=7.76.0.234",
+      "issue_id": "78dd4626fc301cd450f3d1abe274931d",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "Error invoking invokeNative: Java object is gone",
+      "error_name": "Error",
+      "filename": "blob:https://vc.feishu.cn/ba9747f5-bebd-4000-acfa-084e684c87a9",
+      "count": 6163,
+      "users": 4263,
+      "first_seen": 1791888300777,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=feae81f83fff663d41ca31793f63e628",
+      "pid_dist": {
+        "/webview/ai-layout-mobile": 275,
+        "/webview/end-summary-mobile": 10,
+        "/webview/minutes-end-summary": 15
+      },
+      "os_dist": {
+        "Android": 300
+      },
+      "release_dist": {
+        "7.76.0.234": 25,
+        "8.2.0.0": 249,
+        "7.77.0.21": 12,
+        "7.74.0.275": 5,
+        "7.76.0.118": 3,
+        "7.74.0.34": 5,
+        "7.68.0.41": 1
+      },
+      "source_type_dist": {
+        "onerror": 269,
+        "onunhandledrejection": 29,
+        "manual": 2
+      },
+      "host_version_dist": {
+        "7.75.15": 3,
+        "8.1.12": 115,
+        "7.74.9": 11,
+        "8.2.6": 74,
+        "7.57.6": 2,
+        "8.1.14": 20,
+        "8.2.5": 1,
+        "7.69.6": 4,
+        "7.58.9": 4,
+        "7.67.9": 4,
+        "7.65.6": 1,
+        "7.75.13": 2,
+        "8.0.2": 6,
+        "7.71.8": 1,
+        "7.76.14": 4,
+        "7.72.11": 2,
+        "7.66.6": 15,
+        "7.70.12": 2,
+        "7.68.10": 5,
+        "7.72.10": 2,
+        "7.62.6": 8,
+        "7.73.11": 4,
+        "7.64.5": 1,
+        "7.58.11": 2,
+        "7.75.17": 5,
+        "7.63.9": 1,
+        "7.61.8": 1
+      },
+      "distinct_sessions": 209,
+      "latest_event": {
+        "page": "/webview/ai-layout-mobile",
+        "release": "7.76.0.234",
+        "source_type": "onerror",
+        "raw_filename": "blob:https://vc.feishu.cn/ba9747f5-bebd-4000-acfa-084e684c87a9",
+        "mapped_path": null,
+        "line": 1,
+        "function": "?"
+      }
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1791888293&end_time=1791974693&site_type=web&region=cn&issue_id=105eafb56510ec3f115c9b8b2afda720&layout=normal&release=8.2.0.0",
+      "issue_id": "105eafb56510ec3f115c9b8b2afda720",
+      "bid": "vc_ai",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[warn] CommonError: Failed to fetch",
+      "error_name": "Error",
+      "filename": "webpack://@byteview-web/vc-ai/../packages/vc-web-utils/gateway/request.ts",
+      "count": 4990,
+      "users": 3938,
+      "first_seen": 1791888343274,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1791369893&end_time=1791974693&filter_id=9a44ffaa84dea8514fb363fc355b8ef1",
+      "pid_dist": {
+        "/webview/ai-layout-mobile": 132,
+        "/webview/end-summary-mobile": 34,
+        "/webview/minutes-ai-layout-mobile": 108,
+        "/webview/minutes-end-summary": 9,
+        "/webview/minutes-end-summary-pc": 17
+      },
+      "os_dist": {
+        "Android": 53,
+        "iOS": 222,
+        "Windows": 9,
+        "OpenHarmony": 8,
+        "Mac": 8
+      },
+      "release_dist": {
+        "8.2.0.0": 299,
+        "7.77.0.21": 1
+      },
+      "source_type_dist": {
+        "manual": 128,
+        "onunhandledrejection": 172
+      },
+      "host_version_dist": {
+        "7.71.8": 1,
+        "7.74.2": 1,
+        "unknown": 230,
+        "8.2.6": 18,
+        "8.1.12": 19,
+        "7.66.6": 1,
+        "7.57.6": 1,
+        "7.67.9": 3,
+        "8.1.14": 1,
+        "8.0.2": 1,
+        "8.2.5": 1,
+        "7.72.10": 1,
+        "7.69.15": 5,
+        "7.68.3": 1,
+        "7.50.13": 2,
+        "7.62.6": 3,
+        "7.70.12": 2,
+        "7.71.12": 1,
+        "7.73.9": 1,
+        "7.66.0": 1,
+        "7.72.8": 2,
+        "7.69.9": 2,
+        "7.76.14": 1,
+        "7.59.9": 1
+      },
+      "distinct_sessions": 261,
+      "latest_event": {
+        "page": "/webview/ai-layout-mobile",
+        "release": "8.2.0.0",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/../packages/vc-web-utils/gateway/utils/constants.ts",
+        "mapped_path": "packages/vc-web-utils/gateway/utils/constants.ts",
+        "line": 29,
+        "function": ""
+      }
+    }
+  ]
+}
