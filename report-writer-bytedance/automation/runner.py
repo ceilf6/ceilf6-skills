@@ -204,6 +204,22 @@ def validate_bits_auth_status(process: subprocess.CompletedProcess) -> None:
         )
 
 
+def run_preflight_check(
+    label: str, argv: Sequence[str], env: Dict[str, str], handle
+) -> subprocess.CompletedProcess:
+    try:
+        return run_checked(label, argv, PREFLIGHT_TIMEOUT_SECONDS, env)
+    except CommandError as error:
+        if list(argv) not in (
+            ["bytedcli", "auth", "status"],
+            ["bytedcli", "auth", "userinfo"],
+        ) or "ERR_STREAM_WRITE_AFTER_END" not in str(error):
+            raise
+        log_line(handle, "preflight {} retry after stream error: {}".format(label, error))
+        time.sleep(1)
+        return run_checked(label, argv, PREFLIGHT_TIMEOUT_SECONDS, env)
+
+
 def run_preflight(env: Dict[str, str], handle=sys.stdout) -> None:
     codex_host = CODEX.with_name("codex-code-mode-host")
     required_paths = (CODEX, codex_host, PROMPT_FILE, SKILL_DIR / "SKILL.md")
@@ -228,7 +244,7 @@ def run_preflight(env: Dict[str, str], handle=sys.stdout) -> None:
     for label, argv in required_checks:
         started = time.monotonic()
         log_line(handle, "preflight {} started".format(label))
-        process = run_checked(label, argv, PREFLIGHT_TIMEOUT_SECONDS, env)
+        process = run_preflight_check(label, argv, env, handle)
         if label == "Bits auth":
             try:
                 validate_bits_auth_status(process)
@@ -415,6 +431,8 @@ def build_codex_argv(last_message: Path) -> List[str]:
     return [
         str(CODEX),
         "exec",
+        "--model",
+        "gpt-6.1-sol",
         "--dangerously-bypass-approvals-and-sandbox",
         "--dangerously-bypass-hook-trust",
         "--ignore-user-config",

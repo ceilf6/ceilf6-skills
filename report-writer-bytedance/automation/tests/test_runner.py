@@ -73,6 +73,37 @@ class PromptContractTests(unittest.TestCase):
 
 
 class SubprocessTests(unittest.TestCase):
+    def test_auth_stream_failure_retries_and_requires_success(self):
+        failure = runner.CommandError("ERR_STREAM_WRITE_AFTER_END", label="ByteCloud auth")
+        success = subprocess.CompletedProcess([], 0, "Authenticated", "")
+        handle = io.StringIO()
+        with mock.patch.object(runner, "run_checked", side_effect=[failure, success]) as checked, mock.patch.object(runner.time, "sleep"):
+            actual = runner.run_preflight_check("ByteCloud auth", ["bytedcli", "auth", "status"], {}, handle)
+        self.assertIs(actual, success)
+        self.assertEqual(checked.call_count, 2)
+        self.assertIn("ERR_STREAM_WRITE_AFTER_END", handle.getvalue())
+
+    def test_auth_stream_retry_failure_stops(self):
+        failure = runner.CommandError("ERR_STREAM_WRITE_AFTER_END", label="ByteDance user")
+        with mock.patch.object(runner, "run_checked", side_effect=failure) as checked, mock.patch.object(runner.time, "sleep"):
+            with self.assertRaises(runner.CommandError):
+                runner.run_preflight_check("ByteDance user", ["bytedcli", "auth", "userinfo"], {}, io.StringIO())
+        self.assertEqual(checked.call_count, 2)
+
+    def test_auth_failure_without_stream_error_is_not_retried(self):
+        failure = runner.CommandError("not logged in", label="ByteCloud auth")
+        with mock.patch.object(runner, "run_checked", side_effect=failure) as checked:
+            with self.assertRaises(runner.CommandError):
+                runner.run_preflight_check("ByteCloud auth", ["bytedcli", "auth", "status"], {}, io.StringIO())
+        self.assertEqual(checked.call_count, 1)
+
+    def test_other_command_stream_error_is_not_retried(self):
+        failure = runner.CommandError("ERR_STREAM_WRITE_AFTER_END", label="write")
+        with mock.patch.object(runner, "run_checked", side_effect=failure) as checked:
+            with self.assertRaises(runner.CommandError):
+                runner.run_preflight_check("write", ["bytedcli", "bits", "auth", "logout"], {}, io.StringIO())
+        self.assertEqual(checked.call_count, 1)
+
     def test_preflight_requires_codex_code_mode_host(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             home = Path(temp_dir)
@@ -297,6 +328,7 @@ class CodexExecutionTests(unittest.TestCase):
         self.assertTrue(hasattr(runner, "build_codex_argv"))
         argv = runner.build_codex_argv(Path("/tmp/last-message.md"))
         self.assertEqual(argv[:2], [str(runner.CODEX), "exec"])
+        self.assertEqual(argv[argv.index("--model") + 1], "gpt-6.1-sol")
         self.assertIn("--dangerously-bypass-approvals-and-sandbox", argv)
         self.assertIn("--dangerously-bypass-hook-trust", argv)
         self.assertIn("--ignore-user-config", argv)

@@ -21,6 +21,12 @@ bytedcli bits auth status
 bytedcli meego status
 ```
 
+Run `bytedcli auth status` and `bytedcli auth userinfo` serially. If either
+exits nonzero with `ERR_STREAM_WRITE_AFTER_END`, wait one second and retry that
+command once, serially. Only a successful exit passes the check; partial auth
+output from a failed attempt is not sufficient. If the retry fails, retain both
+attempts in the diagnostics and stop under the required-source failure policy.
+
 If a required tool or auth is missing, stop and ask the user to install or authorize. The user explicitly wants ByteDance information sources filled in before the report proceeds.
 
 If the local AI parser is unavailable, mark local AI sources skipped with the concrete reason and continue ByteDance platform source collection unless the user explicitly requires local AI coverage.
