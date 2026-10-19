@@ -158,6 +158,8 @@ export function walk(state, scanned, { skip = [] } = {}) {
       count: c.count ?? 0,
       // 池里的 message 冻在首见那次，可能还带着早已换掉的 logId 之类易变量；呈现要用本次扫描的原文。
       message: c.message ?? owner?.message ?? '',
+      message_core: c.message_core ?? c.message ?? owner?.message ?? '',
+      bid: c.bid ?? owner?.bid ?? null,
       issue_url: c.issue_url ?? owner?.issue_url ?? null,
       ...(verdict.class !== 'skip' && skip.includes(id) ? { class: 'skip', source: 'session', reason: '', at: null } : verdict),
       detail_error: c.detail_error ?? null,
@@ -166,6 +168,8 @@ export function walk(state, scanned, { skip = [] } = {}) {
       function: e.function ?? null,
       page: e.page ?? null,
       release: e.release ?? null,
+      sourcemap_missing: e.sourcemap_missing ?? false,
+      chunk_files: e.chunk_files ?? [],
     });
   }
   const todo = Object.values(state.candidates)

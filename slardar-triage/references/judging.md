@@ -25,6 +25,13 @@
 
 判定时保留真正异常的可观测性：改法应只排除已证实的误报条件，并在恢复可见、恢复活跃或超出允许时序后继续检测真实故障。不能用「整类不上报」掩盖真问题。
 
+### 录音页（minutes_record）候选
+
+这个 bid 的候选是录音页里挂载的 vc-ai 视图抛出、经录音 SDK 转报的，判定口径与 vc_ai 完全一致，只有定位方式不同（见 SKILL.md 第 4 步：按 `message_core` 文案 grep）。两点特殊：
+
+- 「sourcemap 没解析」「堆栈只有 CDN chunk」不是判不能修的理由；`project_frames>0` 已经说明调用链在 vc-ai bundle 里。
+- `project_frames=0` 且文案在 `vc-ai/`、`packages/` 都 grep 不到，再去 byteview-mm-web 的 `apps/record/record-sdk` 确认抛出点；确认在那里才判不能修，理由写 `调用点在录音 SDK（byteview-mm-web），vc-ai 无调用点`。
+
 「请求确实超时 / 网络确实失败，原因来自用户设备或环境」不自动等于误报；如果告警忠实表达了真实失败，而且 vc-ai 没有更合理的降级或信号治理点，仍可判不能修。反过来，`source_type=manual`、`[warn]`、错误已被 catch、未崩溃，也都不能单独作为跳过依据。
 
 ```bash

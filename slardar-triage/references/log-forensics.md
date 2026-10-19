@@ -4,7 +4,7 @@
 
 ## 1. Slardar：拿事件级锚点
 
-`js-error detail` 只有聚合统计，没有 event 级 context。要 context 必须两步走：
+`js-error detail` 只有聚合统计，没有 event 级 context。要 context 必须两步走（下面以 vc_ai 为例；minutes_record 把 `--bid minutes_record --env production` 换上，环境名错了返回空而不报错）：
 
 ```bash
 # 先 query 拿 dh_key

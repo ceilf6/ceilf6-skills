@@ -349,9 +349,10 @@ test('walk 的 message 与帧信息取本次扫描快照；--skip 只把非 skip
   reject(state, 'i2', '不修', T0);
   const out = walk(state, scan, { skip: ['i1', 'i2'] });
   assert.deepEqual(out.items[0], {
-    issue_id: 'i1', users: 50, count: 5000, message: '[native-api] command=94003 timed out after 10000ms', issue_url: 'u1',
+    issue_id: 'i1', users: 50, count: 5000, message: '[native-api] command=94003 timed out after 10000ms', message_core: '[native-api] command=94003 timed out after 10000ms', bid: 'vc_ai', issue_url: 'u1',
     class: 'skip', source: 'session', reason: '', at: null,
     detail_error: null, mapped_path: 'vc-ai/src/services/ai-layout.ts', line: 271, function: 'getMeetingAISummary', page: '/webview/ai-layout', release: '7.77.0.21',
+    sourcemap_missing: false, chunk_files: [],
   });
   assert.equal(out.items[1].source, 'rejected');
   assert.equal(out.exhausted, true);

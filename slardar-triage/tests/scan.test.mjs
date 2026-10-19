@@ -5,6 +5,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { summarize, flattenRows } from '../scripts/lib/stats.mjs';
 import { scan } from '../scripts/scan.mjs';
+import { coreMessage, normalizeSourcePath } from '../scripts/lib/cli.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = (name) => JSON.parse(readFileSync(join(here, 'fixtures', name), 'utf8'));
@@ -119,4 +120,93 @@ test('scan 不合并文案相同的 issue：Slardar 按堆栈拆开的各自成�
   const r = await scan({ bids: ['vc_ai'], hours: 24, now: 1788853929000, runner });
   assert.deepEqual(r.candidates.map((c) => [c.issue_id, c.users, c.count]), [['b', 20, 30], ['a', 9, 10]]);
   assert.equal('family_key' in r.candidates[0], false);
+});
+
+const recordDetail = {
+  data: {
+    metric_map: { pid: { value: 'record-page' }, release: { value: '8.2.14' }, source_type: { value: 'manual' } },
+    json: JSON.stringify({
+      pid: 'record-page',
+      release: '8.2.14',
+      stack: { values: [{ raw_stacktrace: { frames: [
+        { filename: 'https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/9824-220d04167504d12f073c-ai.js', lineno: 1, colno: 104742, function: 'HTMLDivElement.u', parse_code: 201, parse_msg: 'Sourcemap Miss' },
+        { filename: 'https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/5213-dfa7789d408dae604ef1-ai.js', lineno: 1, colno: 39145, function: 'v', parse_code: 201, parse_msg: 'Sourcemap Miss' },
+      ] } }] },
+    }),
+  },
+};
+
+test('scan minutes_record 走 production 环境，帧停在 vc-ai CDN chunk 时给出 sourcemap 缺失与 chunk 线索', async () => {
+  const calls = [];
+  const runner = (args) => {
+    calls.push(args.join(' '));
+    if (args[0] === 'js-error') {
+      return { data: { result: [
+        { issue_id: 'r1', message: '[RECORD_SDK] [warn] FishBoneError: track fish_move when hidden', name: 'Error', filename: 'https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/5213-dfa7789d408dae604ef1-ai.js', count: 40, user: 12, min_crash_time: 0, issue_status: 'unassigned' },
+      ] } };
+    }
+    if (args[0] === 'log' && args[1] === 'query') return { data: { table_list: [{ metric_map: { dh_key: { value: 'k1' }, pid: { value: 'record-page' }, release: { value: '8.2.14' }, session_id: { value: 's1' }, user_agent: { value: 'Mozilla/5.0 Lark/8.2.14' } } }] } };
+    if (args[0] === 'log' && args[1] === 'detail') return recordDetail;
+    throw new Error(`unexpected ${args.join(' ')}`);
+  };
+  const r = await scan({ bids: ['minutes_record'], hours: 24, now: 1788853929000, runner });
+  assert.deepEqual(r.skipped_bids, []);
+  assert.deepEqual(r.bids, { minutes_record: 1 });
+  assert.ok(calls.every((c) => c.includes('--bid minutes_record --env production')), calls.join('\n'));
+  const c = r.candidates[0];
+  assert.equal(c.project_dir, 'vc-ai');
+  assert.equal(c.message_core, 'FishBoneError: track fish_move when hidden');
+  assert.equal(c.latest_event.mapped_path, null);
+  assert.equal(c.latest_event.sourcemap_missing, true);
+  assert.equal(c.latest_event.project_frames, 2);
+  assert.deepEqual(c.latest_event.chunk_files, ['9824-220d04167504d12f073c-ai.js', '5213-dfa7789d408dae604ef1-ai.js']);
+  assert.equal(c.latest_event.release, '8.2.14');
+  assert.deepEqual(c.host_version_dist, { '8.2.14': 1 });
+  assert.match(c.issue_url, /^https:\/\/slardar\.bytedance\.net\/node\/web\/js\/detail\?env=production&bid=minutes_record&/);
+});
+
+test('scan 多个 bid 并行起跑：异步 runner 下两个 bid 的列表请求都先于任何样本请求发出', async () => {
+  const calls = [];
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+  const runner = async (args) => {
+    calls.push(args.slice(0, 2).join(' '));
+    await tick();
+    if (args[0] === 'js-error') return fx('list-vc_ai.json');
+    if (args[0] === 'log' && args[1] === 'query') return fx('log-query-938f8ba3.json');
+    if (args[0] === 'log' && args[1] === 'detail') return fx('log-detail-938f8ba3.json');
+    throw new Error(`unexpected ${args.join(' ')}`);
+  };
+  const r = await scan({ bids: ['vc_ai', 'minutes_record'], hours: 24, pageSize: 2, now: 1788853929000, runner });
+  assert.deepEqual(calls.slice(0, 2), ['js-error list', 'js-error list']);
+  assert.deepEqual(r.bids, { vc_ai: 3, minutes_record: 3 });
+  assert.equal(r.candidates.length, 6);
+  assert.deepEqual(r.candidates.map((c) => c.users), [21740, 21740, 11391, 11391, 8441, 8441]);
+  assert.equal(r.candidates.filter((c) => c.bid === 'minutes_record').length, 3);
+});
+
+test('scan vc_ai 常规事件不受帧线索影响：webpack 帧已解析，sourcemap_missing 为 false', async () => {
+  const runner = (args) => {
+    if (args[0] === 'js-error') { const l = fx('list-vc_ai.json'); return { ...l, data: { ...l.data, result: l.data.result.slice(0, 1) } }; }
+    if (args[0] === 'log' && args[1] === 'query') return fx('log-query-938f8ba3.json');
+    if (args[0] === 'log' && args[1] === 'detail') return fx('log-detail-938f8ba3.json');
+    throw new Error(`unexpected ${args.join(' ')}`);
+  };
+  const r = await scan({ bids: ['vc_ai'], hours: 24, pageSize: 1, now: 1788853929000, runner });
+  const e = r.candidates[0].latest_event;
+  assert.equal(e.sourcemap_missing, false);
+  assert.equal(e.project_frames >= 1, true);
+  assert.equal(r.candidates[0].message_core, r.candidates[0].message);
+});
+
+test('normalizeSourcePath 对 <anonymous> 与 CDN / blob 地址返回 null，webpack 路径归到项目目录', () => {
+  assert.equal(normalizeSourcePath('<anonymous>', 'vc-ai'), null);
+  assert.equal(normalizeSourcePath('https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/1-a-ai.js', 'vc-ai'), null);
+  assert.equal(normalizeSourcePath('webpack://@byteview-web/vc-ai/./src/utils/native.ts', 'vc-ai'), 'vc-ai/src/utils/native.ts');
+});
+
+test('coreMessage 只剥录音 SDK 前缀，其他文案原样', () => {
+  assert.equal(coreMessage('[RECORD_SDK] [warn] FishBoneError: x'), 'FishBoneError: x');
+  assert.equal(coreMessage('[RECORD_SDK] CommonError: y'), 'CommonError: y');
+  assert.equal(coreMessage('[warn] FishBoneError: z'), '[warn] FishBoneError: z');
+  assert.equal(coreMessage(undefined), '');
 });

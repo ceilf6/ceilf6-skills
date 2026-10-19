@@ -1,6 +1,6 @@
 ---
 name: slardar-triage
-description: 扫描 Slardar 近 24h 线上 JS 错误（只看 vc_ai，即 vc-ai 方向），按影响用户数从高到低逐条判定 vc-ai 能否修，呈现第一条能修的告警（现象、报错、Issue 链接），并附上排在它前面、判为不能修的全部条目与理由供用户捞回；随后一次一问引导用户收敛技术方案；用户说「派这条」才建 Meego、转交 byteview-web-harness 任务链修复、登记看板。判定、拒绝与派单都持久化并在跳过清单里可见，每次扫描记台账。当用户说「扫一下线上告警」「看看 Slardar」「挑一个告警看看」「换一条」「捞回 N」「派这条」「这条不修」时使用。
+description: 扫描 Slardar 近 24h 线上 JS 错误（并行扫 vc_ai 与 minutes_record 两个 bid，后者是录音页里挂载的 vc-ai 视图，一律只判 vc-ai 能否修），按影响用户数从高到低逐条判定 vc-ai 能否修，呈现第一条能修的告警（现象、报错、Issue 链接），并附上排在它前面、判为不能修的全部条目与理由供用户捞回；随后一次一问引导用户收敛技术方案；用户说「派这条」才建 Meego、转交 byteview-web-harness 任务链修复、登记看板。判定、拒绝与派单都持久化并在跳过清单里可见，每次扫描记台账。当用户说「扫一下线上告警」「看看 Slardar」「挑一个告警看看」「换一条」「捞回 N」「派这条」「这条不修」时使用。
 ---
 
 # slardar-triage
@@ -23,7 +23,11 @@ description: 扫描 Slardar 近 24h 线上 JS 错误（只看 vc_ai，即 vc-ai 
 | 「派这条」 | 「派单」一节 |
 | 「这条不修 <摘要或 issue_id>，原因：<文本>」 | `node <skill>/scripts/state.mjs reject --dir <state> --issue-id <id> --reason "<原话>"`，回话题确认 |
 
-参数：`--bid`（默认 `vc_ai`；本技能只看 vc-ai 方向，不加 vc_web / vc_pages）、`--hours`（24）、`--page-size`（20，按影响用户数一页的条数；最多翻到第 5 页）。
+参数：`--bid`（默认 `vc_ai,minutes_record`，两个 bid 并行扫、按用户数合并排序；本技能只看 vc-ai 方向，不加 vc_web / vc_pages）、`--hours`（24）、`--page-size`（20，每个 bid 按影响用户数各取一页；最多翻到第 5 页）。
+
+两个 bid 的差别（脚本已处理，判定时要知道）：
+- `vc_ai`：会中 / 妙记 / 豆包里的 AI 视图自己上报，环境名 `online`，sourcemap 已绑定，`mapped_path` 直接指到源码。
+- `minutes_record`：录音页（`pid=record-page`）的 bid，环境名 `production`。录音 SDK（byteview-mm-web `apps/record/record-sdk`）把页内挂载的 vc-ai bundle 抛出的错误统一加 `[RECORD_SDK] [warn|error]` 前缀后上报，`message_core` 是剥掉前缀的原文。vc-ai 的 sourcemap 只绑在 vc_ai bid，所以这里的帧停在 `feishu-static/byteview/vc-ai/static/js/*-ai.js` 这类 CDN chunk 上：`latest_event.sourcemap_missing=true`、`mapped_path=null`、`project_frames` 是落在 vc-ai bundle 的帧数、`chunk_files` 是涉及的 chunk 文件名。`release` 与 `release_dist` 在这个 bid 里是飞书客户端版本（如 8.2.14），不是 vc-ai 的 web 发布版本，不能拿去查 SCM；vc-ai 侧版本信息事件里没有。
 
 ## 主流程
 
@@ -34,14 +38,14 @@ ls <repo>/node_modules/.bin/slardar-web-cli
 <repo>/node_modules/.bin/slardar-web-cli --raw js-error list --bid vc_ai --env online --site-type web --start-time $(( $(date +%s) - 600 )) --end-time $(date +%s) --page-size 1
 git -C <repo> fetch origin master
 ```
-失败对应的补法：JWT → 让用户在本机执行 `npx -y agentbuddy get-jwt`；fetch 失败 → 报网络/权限。默认路径不需要 Meego，它只在派单前校验。
+失败对应的补法：JWT → 让用户在本机执行 `npx -y agentbuddy get-jwt`；fetch 失败 → 报网络/权限。默认路径不需要 Meego，它只在派单前校验。minutes_record 不单独探活：它和 vc_ai 共用 JWT，扫不成会落在第 2 步的 `skipped_bids` 里。
 
 ### 2. 扫描
 
 ```bash
 node <skill>/scripts/scan.mjs --bid <bids> --hours <hours> --page <N> --page-size 20 --repo <repo> --out <state>/scans/scan-$(date -u +%Y%m%dT%H%M%SZ)-p<N>.json
 ```
-首轮 `N=1`。按影响用户数（`user_descend`）取一页，以 Slardar issue 为单位、不合并：同文案的 issue 是 Slardar 按堆栈拆开的，各自判定。`skipped_bids` 非空说明 vc_ai 本身没扫成：回话题说明原因并停在这一步。
+首轮 `N=1`。每个 bid 按影响用户数（`user_descend`）各取一页、并行拉取，合并后再按用户数重排；以 Slardar issue 为单位、不合并：同文案的 issue 是 Slardar 按堆栈拆开的，各自判定；两个 bid 里出现同一文案也各算一条，是否同缺陷要读过调用链再归（`--same-as`）。stdout 的 `bids` 是各 bid 的候选数。`skipped_bids` 里有 vc_ai：回话题说明原因并停在这一步；只有 minutes_record 没扫成：继续走，但呈现时带一句「录音页本次未扫到：<reason>」。
 
 ### 3. 合并候选池并记台账
 
@@ -62,7 +66,9 @@ node <skill>/scripts/state.mjs walk --dir <state> --scan <scan.json> [--skip <id
 
 从头往下看：第一条非 `skip` 的是 `fixable` 就停，进第 5 步；是 `unjudged` 就按 `<skill>/references/judging.md` 读代码判定、`judge` 落档，然后重跑 `walk`。`items[].issue_id` 就是 `judge` / `revive` 要用的池内键。
 
-读代码：`git -C <repo> show origin/master:<mapped_path> | sed -n '<line-30>,<line+30>p'`，位置已变时 `git -C <repo> log --oneline -5 origin/master -- <mapped_path>`、`git -C <repo> grep -n '<函数名>' origin/master -- <project_dir>`。完整堆栈：`<repo>/node_modules/.bin/slardar-web-cli --raw log detail --bid vc_ai --env online --site-type web --start-time <window.start> --end-time <window.end> --ev-type js_error --dh-key <dh_key>`（`dh_key` 取 `log query --filter issue_id` 的样本）。线上 release 对应 commit：`bytedcli --json scm repo version list <scm_repo> --type online --version <release> --page-size 10` 取 `data.versions[].base_commit_hash`（vc_ai 同时试 `ee/lark/vc_ai` 与 `ee/lark/vc_ai_doubao`，type 再试 test）。
+读代码：`git -C <repo> show origin/master:<mapped_path> | sed -n '<line-30>,<line+30>p'`，位置已变时 `git -C <repo> log --oneline -5 origin/master -- <mapped_path>`、`git -C <repo> grep -n '<函数名>' origin/master -- <project_dir>`。完整堆栈：`<repo>/node_modules/.bin/slardar-web-cli --raw log detail --bid <bid> --env <vc_ai→online / minutes_record→production> --site-type web --start-time <window.start> --end-time <window.end> --ev-type js_error --dh-key <dh_key>`（`dh_key` 取 `log query --filter issue_id` 的样本）。线上 release 对应 commit：`bytedcli --json scm repo version list <scm_repo> --type online --version <release> --page-size 10` 取 `data.versions[].base_commit_hash`（vc_ai 同时试 `ee/lark/vc_ai` 与 `ee/lark/vc_ai_doubao`，type 再试 test）。
+
+`minutes_record` 候选（`walk` 项带 `bid`、`message_core`、`sourcemap_missing`、`chunk_files`）的定位方法：`mapped_path` 为空是常态，用文案定位——`git -C <repo> grep -n -F '<message_core 里的关键片段>' origin/master -- vc-ai packages`，错误名（`FishBoneError`、`ParseDiagramError`、`CommonError` 等）再 grep 一次收窄到抛出点；堆栈里的函数名是压缩后的单字母，不用它。`project_frames=0` 且文案在 vc-ai / packages 里 grep 不到，才看它是不是录音 SDK 自身（byteview-mm-web）的代码。线上版本对位：`release` 是飞书客户端版本，不查 SCM；要判「master 已修」用 `git log -S` 加提交日期与告警的 `min_crash_time` / 最近事件时间对照，并说明线上 vc-ai 版本未知。
 
 读 web 代码判不出责任方时（超时、无响应、数据与预期不符），按 `<skill>/references/log-forensics.md` 往下查：Slardar 事件级 context → 网关与业务 PSM 日志 → Logifier 端侧日志。那份文档同时写了和其他 bot 要结论时的纪律。
 
@@ -73,7 +79,7 @@ node <skill>/scripts/state.mjs walk --dir <state> --scan <scan.json> [--skip <id
 `botmux send` 一条消息，格式见 `<skill>/references/example-report.md`：
 
 ```
-【Slardar · vc_ai 近 24h】
+【Slardar · <bid> 近 24h】
 现象：<一句人话：哪个端、哪个页面、用户侧或运行时发生了什么>
 报错：<原始 message>
 Issue：<issue_url>
@@ -86,6 +92,7 @@ Issue：<issue_url>
 
 <第一个引导问题>
 ```
+- 标题里的 `<bid>` 写当前这条的 bid（`vc_ai` 或 `minutes_record`）；minutes_record 的「现象」要点明是录音页里的 AI 视图。
 - 当前条 `source=user` 时标题后加「（你捞回的）」。
 - 待处理 = `walk.todo` 去掉当前这条；为空省略该节。
 - 跳过清单 = 当前这条之前的全部 `skip` 项（跨页累积），全部列出、不折叠，从 1 编号，「捞回 N」按这个编号。来源措辞：`agent` → `agent`，`rejected` → `你拒过`，`dispatched` → `已派单`，`session` → `本会话看过`（不带理由）。为空省略该节。
@@ -149,6 +156,7 @@ bash <skill>/scripts/board.sh --state <state> --issue-id <id>
 
 - 任何情况下不自动派单，包括只有一条能修的、用户上次说过「以后都派」——每次都要本会话的技术方案与显式「派这条」。
 - 误报不是「无需处理」的同义词。只要 vc-ai 能识别允许状态并停止错误上报，消除告警噪音本身就是修复目标；没有崩溃、没有用户可见影响、错误已被拦截或上报文案是 `[warn]`，都不能单独作为跳过理由。具体边界与反例按 `references/judging.md` 的「误报本身就是待修问题」执行。
+- 两个 bid 合在一个候选池、一个走查顺序里，不分开各挑一条；minutes_record 的告警不因为 `[warn]` 前缀或 `source_type=manual` 而降权。
 - 走查顺序只看 issue 用户数，列表已按它降序，第一条能修即全局影响最大；判定只有能修 / 不能修两档，拿不准判能修（见 `references/judging.md`）。
 - 用户的拒绝与捞回优先于任何 agent 判定；agent 不改判捞回项。
 - 呈现与收敛对话里，结论由用户说出或在用户要求「说说你的判断」后给出。

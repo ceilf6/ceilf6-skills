@@ -8,7 +8,7 @@
 
 以上是本任务的范围边界,与第 4 节修法冲突时以本节为准。
 
-## 1. 线上事实(Slardar,bid={{bid}},env=online,{{window_start}}–{{window_end}})
+## 1. 线上事实(Slardar,bid={{bid}},env={{env}},{{window_start}}–{{window_end}})
 
 - Issue `{{issue_id}}`,错误信息 `{{message}}`,上报文件 `{{filename}}`,状态 {{status}}。
 - Slardar 告警链接(评审看上下文用,MR 描述须原样带上):{{slardar_url}}
