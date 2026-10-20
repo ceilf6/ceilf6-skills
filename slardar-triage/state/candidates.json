@@ -3246,12 +3246,12 @@
     "first_seen": 1792370608884,
     "first_seen_at": "2026-10-19T11:59:16.691Z",
     "refreshed_at": "2026-10-19T11:59:16.691Z",
-    "status": "pending",
+    "status": "rejected",
     "verdict": {
-      "fixable": true,
-      "reason": "vc-ai/src/deprecated/components/fish-bone/index.tsx: 当前自动移入视口与 400ms 截图通知并行，线上样本在位移动画完成前仍把完全位于视口外的 rect 传给 Native；Web 可改为位移完成后再计算并通知截图区域。",
-      "by": "agent",
-      "at": "2026-10-19T12:24:12.792Z"
+      "fixable": false,
+      "reason": "宙哥 2026-10-20 裁定不修：ROI 低、QA 验证成本高。只影响飞书 PC 7.50.2 以下客户端走的旧布局，近 24h 告警 144 用户全是 7.50.0/7.50.1、同一租户（渠道 salgjx554）。根因已定：deprecated/components/fish-bone/index.tsx onViewMove 的 if/else-if 对高于窗口的鱼鳍逐次交替上下位移，下挪那拍截图矩形出界上报。",
+      "by": "user",
+      "at": "2026-10-20T07:25:53.583Z"
     },
     "verdicts": [
       {
@@ -3265,8 +3265,17 @@
         "reason": "vc-ai/src/deprecated/components/fish-bone/index.tsx: 当前自动移入视口与 400ms 截图通知并行，线上样本在位移动画完成前仍把完全位于视口外的 rect 传给 Native；Web 可改为位移完成后再计算并通知截图区域。",
         "by": "agent",
         "at": "2026-10-19T12:24:12.792Z"
+      },
+      {
+        "fixable": false,
+        "reason": "宙哥 2026-10-20 裁定不修：ROI 低、QA 验证成本高。只影响飞书 PC 7.50.2 以下客户端走的旧布局，近 24h 告警 144 用户全是 7.50.0/7.50.1、同一租户（渠道 salgjx554）。根因已定：deprecated/components/fish-bone/index.tsx onViewMove 的 if/else-if 对高于窗口的鱼鳍逐次交替上下位移，下挪那拍截图矩形出界上报。",
+        "by": "user",
+        "at": "2026-10-20T07:25:53.583Z"
       }
     ],
-    "decision": null
+    "decision": {
+      "reason": "宙哥 2026-10-20 裁定不修：ROI 低、QA 验证成本高。只影响飞书 PC 7.50.2 以下客户端走的旧布局，近 24h 告警 144 用户全是 7.50.0/7.50.1、同一租户（渠道 salgjx554）。根因已定：deprecated/components/fish-bone/index.tsx onViewMove 的 if/else-if 对高于窗口的鱼鳍逐次交替上下位移，下挪那拍截图矩形出界上报。",
+      "at": "2026-10-20T07:25:53.583Z"
+    }
   }
 }
