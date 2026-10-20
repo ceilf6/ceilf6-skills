@@ -2001,10 +2001,14 @@
     "first_seen": 1791536270851,
     "first_seen_at": "2026-10-10T08:57:26.449Z",
     "refreshed_at": "2026-10-10T08:57:26.449Z",
-    "status": "pending",
+    "status": "dispatched",
     "verdict": null,
     "verdicts": [],
-    "decision": null
+    "decision": {
+      "task_id": "task_20261019T132127Z_9e1b2b79",
+      "supplement": "【技术方案】849eb2ff（用户修正并确认的最小范围）\n\n复现条件：飞书 Mobile 会议尾窗中，用户处于无 AI 额度/待解锁状态；Native `common.getEndSummary` 返回 `isLock=true`，但 `content` 字段缺失。\n\n缺陷点位：`vc-ai/src/services/transport-layer/mobile/end-summary-transport.ts` 将 `res.content` 直接传给 `EndSummaryStore.setSummaryText`；`vc-ai/src/stores/end-summary.ts` 读取 `text.length`，因此 `content=undefined` 时抛错并跳过后续锁定态与现有补拉逻辑。\n\n根因：Web 类型将线上实际可能缺失的 `NativeEndSummary.content` 错写为必填字符串，调用点也没有在进入既有业务链路前归一化。该问题 Web 可独立修复，不要求 Native 或服务端改协议。\n\n改动范围：只做两项产品代码改动：一是把 `NativeEndSummary.content` 改为可选字段；二是在移动端尾窗调用 `setSummaryText` 前使用 `res.content ?? ''`。补一条真实模块链路回归测试，模拟 `isLock=true` 且 `content` 缺失，验证修复前抛错并跳过现有兜底，修复后继续执行既有 `isLock && !content && !showTime` 补拉逻辑。不要带入初始化顺序重排、双空 UI 新分支、额外日志、PC/Minutes/Doubao 改造。\n\n验收：缺失 `content` 不再产生 `Cannot read properties of undefined (reading 'length')`；现有锁定态、`getAIUnLockInfo(type=6)` 待解锁预览补拉与展示链路继续执行；正常有正文路径行为不变。\n\n以上是本任务的范围边界,与第 4 节修法冲突时以本节为准。",
+      "at": "2026-10-19T13:23:01.044Z"
+    }
   },
   "c0929d699401080bae2e099dae0a560b": {
     "issue_id": "c0929d699401080bae2e099dae0a560b",
