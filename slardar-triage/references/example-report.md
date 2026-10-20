@@ -6,21 +6,34 @@
 现象：PC 端会中 AI 视图（ai-layout）拉取会议 AI 总结时等了 10 秒没有结果，错误以 unhandledrejection 上报
 报错：[native-api] command=94003 timed out after 10000ms
 Issue：https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1789637699&end_time=1789724099&site_type=web&region=cn&layout=normal&issue_id=f49170ba664fefd93aede453eb5dc3ba&release=7.77.0.21
+同文案另 2 条 issue，合计 4.1k 用户。
 
 待处理（你捞回过、还没派也没拒）：
 - common.getAvatarBase64 timeout after 60s（2.1k 用户）— 捞回 09-27
 排在它前面、判为不能修的：
-1. APINotProvided（71k 用户）— agent 09-29：调用点在宿主内置脚本，vc-ai 无调用点
-2. [warn] FishBoneError: fishBone out of screen（29k 用户）— 你拒过 09-29：只是加日志，没必要
-3. [InvokeServierPBFast error]: logId=…（13k 用户）— 已派单 09-28
-要捞回哪条直接说「捞回 2」。
+1. [warn] FishBoneError: fishBone out of screen（29k 用户）— 你拒过 09-29：只是加日志，没必要
+2. [InvokeServierPBFast error]: logId=…（13k 用户）— 已派单 09-28
+整桶跳过（没逐条读代码）：
+- 宿主与 Native 桥：9 条 / 101k 用户，最大 3 条：
+  3. APINotProvided（71k 用户）
+  4. Error invoking invokeNative: Java bridge method invocation error（6.7k 用户）
+  5. [native-api] common.getAvatarBase64 timed out after 60000ms（6.4k 用户）
+- 服务端错误码：7 条 / 58k 用户，最大 3 条：
+  6. rate limit（27k 用户）
+  7. invalid user（18k 用户）
+  8. 业务错误，ErrorInfo: code: 220301…（15k 用户）
+- 网络：5 条 / 20k 用户，最大 3 条：
+  9. Failed to fetch（5.4k 用户）
+  10. [warn] CommonError: Load failed（3.5k 用户）
+  11. [warn] ServiceWorkerError: sw_fetch_manifest_error network Failed to fetch（3.7k 用户）
+要捞回哪条直接说「捞回 2」；要看某桶全部条目说「展开 网络」。
 
 先定复现条件。这条既出现在会中 AI 视图（ai-layout），也出现在妙记 PC（minutes-ai-layout-pc）。你想先按哪个场景看？
 
 ## 捞回
 
-用户：捞回 1
-（agent 先前判它不能修；用户捞回后 agent 不再拦截，这正是跳过清单要兜住的假阴性。）
+用户：捞回 3
+（APINotProvided 在宿主桶里整桶跳过、从未判定；用户捞回后它就是普通候选，这正是整桶跳过要靠捞回兜住的假阴性。）
 
 agent（`revive` 后切到这条，第一问围绕「vc-ai 能怎么缓解」）：
 

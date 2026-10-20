@@ -341,22 +341,70 @@ test('walk 按用户数降序归类：已派单 / 同缺陷 > 已拒 > 用户捞
 
 test('walk 的 message 与帧信息取本次扫描快照；--skip 只把非 skip 项记为 session 且不落盘', () => {
   const scan = [
-    snap({ message: '[native-api] command=94003 timed out after 10000ms', users: 50 }),
+    snap({ message: '[warn] ErrorBoundary: n.map is not a function', users: 50 }),
     snap({ issue_id: 'i2', users: 40 }),
   ];
   const { state } = mergeScan(empty(), scan, T0);
-  state.candidates.i1.message = '[native-api] command=94003 timed out after 3000ms';
+  state.candidates.i1.message = '[warn] ErrorBoundary: o.map is not a function';
   reject(state, 'i2', '不修', T0);
   const out = walk(state, scan, { skip: ['i1', 'i2'] });
   assert.deepEqual(out.items[0], {
-    issue_id: 'i1', users: 50, count: 5000, message: '[native-api] command=94003 timed out after 10000ms', message_core: '[native-api] command=94003 timed out after 10000ms', bid: 'vc_ai', issue_url: 'u1',
+    issue_id: 'i1', users: 50, count: 5000, message: '[warn] ErrorBoundary: n.map is not a function', message_core: '[warn] ErrorBoundary: n.map is not a function', bid: 'vc_ai', issue_url: 'u1',
     class: 'skip', source: 'session', reason: '', at: null,
+    category: 'business', family_key: '[warn] ErrorBoundary: *.map is not a function', family_users: 50, family_count: 5000, family_size: 1,
     detail_error: null, mapped_path: 'vc-ai/src/services/ai-layout.ts', line: 271, function: 'getMeetingAISummary', page: '/webview/ai-layout', release: '7.77.0.21',
     sourcemap_missing: false, chunk_files: [],
   });
   assert.equal(out.items[1].source, 'rejected');
   assert.equal(out.exhausted, true);
+  assert.deepEqual(out.buckets, {});
   assert.equal(state.candidates.i1.verdict, null);
+});
+
+test('walk 整桶跳过：环境桶里未判过的条目记 skip/bucket 且不落盘；用户捞回、agent 判定与派单不受桶影响', () => {
+  const scan = [
+    snap({ issue_id: 'api', message: 'APINotProvided', users: 900 }),
+    snap({ issue_id: 'net', message: '[warn] CommonError: Failed to fetch', users: 800 }),
+    snap({ issue_id: 'srv', message: '[InvokeServierPBFast error]: logId=1, rate limit', users: 700 }),
+    snap({ issue_id: 'rev', message: '[native-api] common.getAvatarBase64 timed out after 60000ms', users: 600 }),
+    snap({ issue_id: 'yes', message: '[native-api] command=2312 timed out after 10000ms', users: 500 }),
+    snap({ issue_id: 'disp', message: '[native-api] command=94003 timed out after 10000ms', users: 400 }),
+    snap({ issue_id: 'biz', message: "[warn] CommonError: Cannot read properties of undefined (reading 'length')", users: 300 }),
+  ];
+  const { state } = mergeScan(empty(), scan, T0);
+  revive(state, 'rev', T1);
+  judge(state, 'yes', { fixable: true, reason: '调用方可加 catch', at: T1 });
+  markDispatched(state, 'disp', { task_id: 't', supplement: 'x', at: T1 });
+  const before = JSON.stringify(state);
+  const out = walk(state, scan, { skip: ['api'] });
+  assert.deepEqual(out.items.map((i) => [i.issue_id, i.class, i.source, i.reason]), [
+    ['api', 'skip', 'bucket', '宿主与 Native 桥'],
+    ['net', 'skip', 'bucket', '网络'],
+    ['srv', 'skip', 'bucket', '服务端错误码'],
+    ['rev', 'fixable', 'user', '捞回'],
+    ['yes', 'fixable', 'agent', '调用方可加 catch'],
+    ['disp', 'skip', 'dispatched', ''],
+    ['biz', 'unjudged', null, ''],
+  ]);
+  assert.deepEqual(out.buckets, {
+    server: { label: '服务端错误码', issues: 1, families: 1, users: 700 },
+    network: { label: '网络', issues: 1, families: 1, users: 800 },
+    host: { label: '宿主与 Native 桥', issues: 1, families: 1, users: 900 },
+  });
+  assert.equal(out.exhausted, false);
+  assert.equal(JSON.stringify(state), before);
+});
+
+test('walk 按同文案聚合的合计用户数排序，同族相邻、族内按单条用户数', () => {
+  const scan = [
+    snap({ issue_id: 'lone', message: "[warn] CommonError: Cannot read properties of undefined (reading 'length')", users: 500 }),
+    snap({ issue_id: 'f-small', message: "[warn] ErrorBoundary: o.map is not a function. (In 'o.map((e,t)=>n.createElement', 'o.map' is undefined)", users: 200 }),
+    snap({ issue_id: 'f-big', message: '[warn] ErrorBoundary: n.map is not a function', users: 400 }),
+  ];
+  const { state } = mergeScan(empty(), scan, T0);
+  const out = walk(state, scan);
+  assert.deepEqual(out.items.map((i) => [i.issue_id, i.family_users, i.family_size]), [['f-big', 600, 2], ['f-small', 600, 2], ['lone', 500, 1]]);
+  assert.equal(out.items[0].family_key, out.items[1].family_key);
 });
 
 test('walk 以 issue 为单位：文案相同的 issue 各自归类，不继承彼此的派单或判定', () => {
@@ -371,7 +419,7 @@ test('walk 以 issue 为单位：文案相同的 issue 各自归类，不继承�
   assert.deepEqual(walk(state, scan).items.map((i) => [i.issue_id, i.class, i.source]), [
     ['a', 'skip', 'dispatched'],
     ['b', 'skip', 'agent'],
-    ['c', 'unjudged', null],
+    ['c', 'skip', 'bucket'],
   ]);
 });
 

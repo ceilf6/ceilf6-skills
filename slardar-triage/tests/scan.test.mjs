@@ -54,6 +54,8 @@ test('scan 用注入 runner 以 issue 为单位产出候选，按用户数降序
   assert.ok(calls.some((c) => c.includes('--page-size 300')));
   assert.ok(calls.some((c) => c.startsWith('js-error list --bid vc_ai') && c.includes('--order-by user_descend --page-num 1 --page-size 3')));
   assert.deepEqual(r.candidates.map((c) => c.users), [21740, 11391, 8441]);
+  assert.deepEqual(r.candidates.map((c) => [c.category, c.family_size, c.family_users]), [['host', 1, 21740], ['server', 1, 11391], ['server', 1, 8441]]);
+  assert.equal(byId['938f8ba377ac6484ba8918b19f247350'].family_key, 'common.getAvatarBase64_* timeout after 60s');
   assert.equal(r.page, 1);
   assert.equal(r.page_size, 3);
 });
@@ -119,7 +121,8 @@ test('scan 不合并文案相同的 issue：Slardar 按堆栈拆开的各自成�
   };
   const r = await scan({ bids: ['vc_ai'], hours: 24, now: 1788853929000, runner });
   assert.deepEqual(r.candidates.map((c) => [c.issue_id, c.users, c.count]), [['b', 20, 30], ['a', 9, 10]]);
-  assert.equal('family_key' in r.candidates[0], false);
+  // 同文案只共享族合计用于排序，候选本身仍一条一个 issue。
+  assert.deepEqual(r.candidates.map((c) => [c.family_key, c.family_users, c.family_size]), [['APINotProvided', 29, 2], ['APINotProvided', 29, 2]]);
 });
 
 const recordDetail = {

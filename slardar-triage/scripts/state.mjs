@@ -5,6 +5,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { BUCKETS, bucketSummary, enrich, isBucketed } from './lib/category.mjs';
 
 const FILES = { candidates: 'candidates.json', dispatched: 'dispatched.json' };
 // 候选池里的 count / users 会被后续扫描覆盖，事后要取「修复前 → 修复后」量级只能靠这份只追加的台账。
@@ -143,14 +144,22 @@ function classify(state, owner) {
   return { class: v.fixable ? 'fixable' : 'skip', source: v.by, reason: v.reason, at: v.at };
 }
 
-// 纯函数：以 issue 为单位按用户数降序给出每条的归类。agent 遇到 unjudged 判定落档后重跑，直到第一条非 skip 的是 fixable；
+// 环境桶（服务端 / 网络 / 宿主）里还没判过的条目整桶跳过，不逐条读代码；这不是判定、不落盘，
+// 用户捞回或 agent 判过的条目不受桶影响，所以派过单的超时类告警仍按它自己的状态归类。
+function bucketed(c, verdict) {
+  if (verdict.class !== 'unjudged' || !isBucketed(c.category)) return verdict;
+  return { class: 'skip', source: 'bucket', reason: BUCKETS[c.category], at: null };
+}
+
+// 纯函数：以 issue 为单位给出每条的归类，顺序按同文案聚合的合计用户数、同族内按单条用户数。
+// agent 遇到 unjudged 判定落档后重跑，直到第一条非 skip 的是 fixable；
 // 排在它前面的 skip 项就是呈现给用户的跳过清单，不存在不可见的剔除。同文案的 issue 各自归类，不互相继承。
 export function walk(state, scanned, { skip = [] } = {}) {
   const items = [];
-  for (const c of [...scanned].sort((a, b) => (b.users ?? 0) - (a.users ?? 0))) {
+  for (const c of enrich(scanned)) {
     const id = c.issue_id;
     const owner = state.candidates[id] ?? null;
-    const verdict = classify(state, owner);
+    const verdict = bucketed(c, classify(state, owner));
     const e = c.latest_event ?? {};
     items.push({
       issue_id: id,
@@ -162,6 +171,11 @@ export function walk(state, scanned, { skip = [] } = {}) {
       bid: c.bid ?? owner?.bid ?? null,
       issue_url: c.issue_url ?? owner?.issue_url ?? null,
       ...(verdict.class !== 'skip' && skip.includes(id) ? { class: 'skip', source: 'session', reason: '', at: null } : verdict),
+      category: c.category,
+      family_key: c.family_key,
+      family_users: c.family_users,
+      family_count: c.family_count,
+      family_size: c.family_size,
       detail_error: c.detail_error ?? null,
       mapped_path: e.mapped_path ?? null,
       line: e.line ?? null,
@@ -176,7 +190,7 @@ export function walk(state, scanned, { skip = [] } = {}) {
     .filter((p) => p.status === 'pending' && p.verdict?.by === 'user' && p.verdict.fixable)
     .sort((a, b) => (b.users ?? 0) - (a.users ?? 0))
     .map((p) => ({ issue_id: p.issue_id, users: p.users ?? 0, message: p.message, issue_url: p.issue_url, at: p.verdict.at }));
-  return { items, todo, exhausted: !items.some((i) => i.class !== 'skip') };
+  return { items, todo, buckets: bucketSummary(items), exhausted: !items.some((i) => i.class !== 'skip') };
 }
 
 function topOf(dist) {

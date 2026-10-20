@@ -1,6 +1,6 @@
 ---
 name: slardar-triage
-description: 扫描 Slardar 近 24h 线上 JS 错误（并行扫 vc_ai 与 minutes_record 两个 bid，后者是录音页里挂载的 vc-ai 视图，一律只判 vc-ai 能否修），按影响用户数从高到低逐条判定 vc-ai 能否修，呈现第一条能修的告警（现象、报错、Issue 链接），并附上排在它前面、判为不能修的全部条目与理由供用户捞回；随后一次一问引导用户收敛技术方案；用户说「派这条」才建 Meego、转交 byteview-web-harness 任务链修复、登记看板。判定、拒绝与派单都持久化并在跳过清单里可见，每次扫描记台账。当用户说「扫一下线上告警」「看看 Slardar」「挑一个告警看看」「换一条」「捞回 N」「派这条」「这条不修」时使用。
+description: 扫描 Slardar 近 24h 线上 JS 错误（并行扫 vc_ai 与 minutes_record 两个 bid，后者是录音页里挂载的 vc-ai 视图，一律只判 vc-ai 能否修），服务端 / 网络 / 宿主三类整桶跳过不逐条读，其余按同文案聚合的合计用户数从高到低逐条判定 vc-ai 能否修，呈现第一条能修的告警（现象、报错、Issue 链接），并附上排在它前面、判为不能修的全部条目、整桶跳过的摘要与理由供用户捞回；随后一次一问引导用户收敛技术方案；用户说「派这条」才建 Meego、转交 byteview-web-harness 任务链修复、登记看板。判定、拒绝与派单都持久化并在跳过清单里可见，每次扫描记台账。当用户说「扫一下线上告警」「看看 Slardar」「挑一个告警看看」「换一条」「捞回 N」「派这条」「这条不修」时使用。
 ---
 
 # slardar-triage
@@ -9,7 +9,7 @@ description: 扫描 Slardar 近 24h 线上 JS 错误（并行扫 vc_ai 与 minut
 
 **默认唤醒不建 Meego、不建 harness 任务、不登记看板、无任何外发动作**，只写 `<state>/`。agent 读代码得出的判断只用来选取和安排提问顺序；技术方案由用户在对话里逐项拍板。
 
-**本技能只管「vc-ai 能修且还没派过单」的告警，任何判定都不静默丢弃。** 按影响用户数降序逐条走查，第一条能修即停；排在它前面的每一条（agent 判不能修、用户拒过、已派单）都带理由出现在跳过清单里，用户一句「捞回 N」即可推翻。派出去的单不再跟踪去向：不查 omh 阶段、不查 MR 是否合入、不看修复是否见效。
+**本技能只管「vc-ai 能修且还没派过单」的告警，任何判定都不静默丢弃。** 服务端错误码、网络、宿主与 Native 桥三类告警整桶跳过、不逐条读代码；其余按同文案聚合的合计用户数降序逐条走查，第一条能修即停。排在它前面的每一条（整桶跳过、agent 判不能修、用户拒过、已派单）都带理由出现在跳过清单里，用户一句「捞回 N」即可推翻。派出去的单不再跟踪去向：不查 omh 阶段、不查 MR 是否合入、不看修复是否见效。
 
 ## 入口
 
@@ -18,6 +18,7 @@ description: 扫描 Slardar 近 24h 线上 JS 错误（并行扫 vc_ai 与 minut
 | 默认（「扫一下线上告警」「看看 Slardar」「挑一个告警看看」） | 主流程第 1–5 步，随后进入「引导式收敛」 |
 | 「换一条」 | 用同一份 scan 重跑第 4 步的 `walk`，`--skip` 带上本会话已呈现过的 issue；当前这条不落档 |
 | 「捞回 N」 | 按上次呈现的跳过清单编号取 issue_id，`node <skill>/scripts/state.mjs revive --dir <state> --issue-id <id>`，切到这条按第 5 步格式呈现（标题加「（你捞回的）」，不再附清单），随后进入「引导式收敛」；用户点名待处理清单里的条目时，它已是捞回项，直接切过去，不再 revive；编号对应的是真实派单（`source=dispatched` 且 `reason` 为空）时 `revive` 会拒绝，回话题说明这条已派单、后续归 harness 任务链 |
+| 「展开 <桶名>」 | 用同一份 `walk` 把该桶（`source=bucket` 且 `category` 对应）的条目按用户数全部列出，编号接着上次呈现的清单往下排；之后「捞回 N」按这个编号 |
 | 「先记录 / 下次继续 <摘要或 issue_id>」 | 候选尚未派单时，用 `state.mjs revive` 把它记成用户待处理项；本轮停止收敛、不派单。若已经是用户待处理项则不重复写。后续扫描在「待处理」中持续展示，用户再次点名时直接续上 |
 | 「说说你的判断」 | 直接给出对当前这条的初步判断（点位、根因、改法），之后回到一次一问 |
 | 「派这条」 | 「派单」一节 |
@@ -45,7 +46,7 @@ git -C <repo> fetch origin master
 ```bash
 node <skill>/scripts/scan.mjs --bid <bids> --hours <hours> --page <N> --page-size 20 --repo <repo> --out <state>/scans/scan-$(date -u +%Y%m%dT%H%M%SZ)-p<N>.json
 ```
-首轮 `N=1`。每个 bid 按影响用户数（`user_descend`）各取一页、并行拉取，合并后再按用户数重排；以 Slardar issue 为单位、不合并：同文案的 issue 是 Slardar 按堆栈拆开的，各自判定；两个 bid 里出现同一文案也各算一条，是否同缺陷要读过调用链再归（`--same-as`）。stdout 的 `bids` 是各 bid 的候选数。`skipped_bids` 里有 vc_ai：回话题说明原因并停在这一步；只有 minutes_record 没扫成：继续走，但呈现时带一句「录音页本次未扫到：<reason>」。
+首轮 `N=1`。每个 bid 按影响用户数（`user_descend`）各取一页、并行拉取，合并后按**同文案聚合的合计用户数**重排（`family_key` 是抹掉 logId、meeting_id、JSON 位置、压缩标识符等易变量后的文案，`family_users` / `family_size` 是同族合计），同族相邻、族内按单条用户数。判定仍以 Slardar issue 为单位、不合并：同文案的 issue 是 Slardar 按堆栈拆开的，各自判定；两个 bid 里出现同一文案也各算一条，是否同缺陷要读过调用链再归（`--same-as`）。每条还带 `category`：`server`（错误码、限流、invalid user）/ `network`（Failed to fetch、Load failed、NetError、网络代理失败）/ `host`（APINotProvided、native-api 超时、Java bridge、WKWebView 释放）/ `business`（其余），规则在 `<skill>/scripts/lib/category.mjs`。stdout 的 `bids` 是各 bid 的候选数。`skipped_bids` 里有 vc_ai：回话题说明原因并停在这一步；只有 minutes_record 没扫成：继续走，但呈现时带一句「录音页本次未扫到：<reason>」。
 
 ### 3. 合并候选池并记台账
 
@@ -59,12 +60,14 @@ node <skill>/scripts/state.mjs merge --dir <state> --scan <scan.json>
 ```bash
 node <skill>/scripts/state.mjs walk --dir <state> --scan <scan.json> [--skip <id,id>]
 ```
-`items` 按用户数降序，每条带 `class`：
-- `skip`：`source` 为 `dispatched`（已派单或同缺陷已派单）/ `rejected`（用户拒过）/ `agent`（agent 判不能修）/ `session`（本会话看过），带 `reason`、`at`
+`items` 按族合计用户数降序（同第 2 步的顺序），每条带 `category`、`family_key`、`family_users`、`family_size` 与 `class`：
+- `skip`：`source` 为 `dispatched`（已派单或同缺陷已派单）/ `rejected`（用户拒过）/ `agent`（agent 判不能修）/ `session`（本会话看过）/ `bucket`（环境桶整桶跳过，`reason` 是桶名），带 `reason`、`at`
 - `fixable`：`source` 为 `user`（用户捞回）或 `agent`
 - `unjudged`：还没判过
 
-从头往下看：第一条非 `skip` 的是 `fixable` 就停，进第 5 步；是 `unjudged` 就按 `<skill>/references/judging.md` 读代码判定、`judge` 落档，然后重跑 `walk`。`items[].issue_id` 就是 `judge` / `revive` 要用的池内键。
+`bucket` 只落在 `category` 为 `server` / `network` / `host` 且还没判过的条目上：它是走查的捷径，不是判定，不写进候选池；用户捞回、agent 判过或已派单的条目按自己的状态归类，不受桶影响。`buckets` 是各桶的条数、族数与合计用户数，呈现时用。
+
+从头往下看：第一条非 `skip` 的是 `fixable` 就停，进第 5 步；是 `unjudged` 就按 `<skill>/references/judging.md` 读代码判定、`judge` 落档，然后重跑 `walk`。`items[].issue_id` 就是 `judge` / `revive` 要用的池内键。同族的其他 issue（`family_key` 相同）不用各自再读一遍代码：调用链相同就跟着当前这条的结论一起 `judge`（理由注明「同文案族，调用链同 <issue_id>」），派单后再用 `--same-as` 归到那张单。
 
 读代码：`git -C <repo> show origin/master:<mapped_path> | sed -n '<line-30>,<line+30>p'`，位置已变时 `git -C <repo> log --oneline -5 origin/master -- <mapped_path>`、`git -C <repo> grep -n '<函数名>' origin/master -- <project_dir>`。完整堆栈：`<repo>/node_modules/.bin/slardar-web-cli --raw log detail --bid <bid> --env <vc_ai→online / minutes_record→production> --site-type web --start-time <window.start> --end-time <window.end> --ev-type js_error --dh-key <dh_key>`（`dh_key` 取 `log query --filter issue_id` 的样本）。线上 release 对应 commit：`bytedcli --json scm repo version list <scm_repo> --type online --version <release> --page-size 10` 取 `data.versions[].base_commit_hash`（vc_ai 同时试 `ee/lark/vc_ai` 与 `ee/lark/vc_ai_doubao`，type 再试 test）。
 
@@ -84,18 +87,28 @@ node <skill>/scripts/state.mjs walk --dir <state> --scan <scan.json> [--skip <id
 报错：<原始 message>
 Issue：<issue_url>
 
+同文案另 <family_size-1> 条 issue，合计 <family_users> 用户。
+
 待处理（你捞回过、还没派也没拒）：
 - <message 摘要>（<users> 用户）— 捞回 <MM-DD>
 排在它前面、判为不能修的：
 1. <message 摘要>（<users> 用户）— <来源> <MM-DD>：<理由>
-要捞回哪条直接说「捞回 2」。
+整桶跳过（没逐条读代码）：
+- 服务端错误码：<issues> 条 / <users> 用户，最大 3 条：
+  2. <message 摘要>（<users> 用户）
+  3. …
+- 网络：…
+- 宿主与 Native 桥：…
+要捞回哪条直接说「捞回 2」；要看某桶全部条目说「展开 网络」。
 
 <第一个引导问题>
 ```
 - 标题里的 `<bid>` 写当前这条的 bid（`vc_ai` 或 `minutes_record`）；minutes_record 的「现象」要点明是录音页里的 AI 视图。
 - 当前条 `source=user` 时标题后加「（你捞回的）」。
 - 待处理 = `walk.todo` 去掉当前这条；为空省略该节。
-- 跳过清单 = 当前这条之前的全部 `skip` 项（跨页累积），全部列出、不折叠，从 1 编号，「捞回 N」按这个编号。来源措辞：`agent` → `agent`，`rejected` → `你拒过`，`dispatched` → `已派单`，`session` → `本会话看过`（不带理由）。为空省略该节。
+- 「同文案另 k 条」一行只在 `family_size>1` 时写；`family_size=1` 省略。
+- 跳过清单 = 当前这条之前的非 `bucket` 的 `skip` 项（跨页累积），全部列出、不折叠，从 1 编号，「捞回 N」按这个编号。来源措辞：`agent` → `agent`，`rejected` → `你拒过`，`dispatched` → `已派单`，`session` → `本会话看过`（不带理由）。为空省略该节。
+- 整桶跳过 = 当前这条之前的 `bucket` 项按 `category` 分桶（跨页累积），每桶一行写条数与合计用户数，桶内按用户数列出最大 3 条，编号接着跳过清单往下排；「展开 <桶名>」把该桶全部条目列出并接着编号。两个清单都为空时省略。
 - 「现象」只写可观察事实，不写代码路径、函数名、根因、改法。
 - 翻到第 5 页仍没有 `fixable`：回「前 100 条没有判为能修的」，照样附跳过清单与待处理清单。这句不带「新」字：候选池不看告警首次出现的时间。
 
@@ -157,7 +170,8 @@ bash <skill>/scripts/board.sh --state <state> --issue-id <id>
 - 任何情况下不自动派单，包括只有一条能修的、用户上次说过「以后都派」——每次都要本会话的技术方案与显式「派这条」。
 - 误报不是「无需处理」的同义词。只要 vc-ai 能识别允许状态并停止错误上报，消除告警噪音本身就是修复目标；没有崩溃、没有用户可见影响、错误已被拦截或上报文案是 `[warn]`，都不能单独作为跳过理由。具体边界与反例按 `references/judging.md` 的「误报本身就是待修问题」执行。
 - 两个 bid 合在一个候选池、一个走查顺序里，不分开各挑一条；minutes_record 的告警不因为 `[warn]` 前缀或 `source_type=manual` 而降权。
-- 走查顺序只看 issue 用户数，列表已按它降序，第一条能修即全局影响最大；判定只有能修 / 不能修两档，拿不准判能修（见 `references/judging.md`）。
+- 走查顺序按同文案聚合的合计用户数、族内按单条用户数，列表已按它排好，第一条能修即全局影响最大；判定仍以 issue 为单位，只有能修 / 不能修两档，拿不准判能修（见 `references/judging.md`）。
+- 环境桶（服务端 / 网络 / 宿主）整桶跳过是走查捷径，不是判定：不落盘、不写理由到候选池；桶内条目用户捞回后与普通候选一样走收敛与派单。
 - 用户的拒绝与捞回优先于任何 agent 判定；agent 不改判捞回项。
 - 呈现与收敛对话里，结论由用户说出或在用户要求「说说你的判断」后给出。
 - 写答辩或复盘材料要某条告警的量级时间线：`node <skill>/scripts/state.mjs history --dir <state> --issue-id <id>`，基线取派单时那一行。没派过单的候选没有「派单前」参照，`recovery.ratio` 为 null；`latest_present` 为 false 时 `ratio` 按那次扫描的最小次数算，是上界而不是实测值。技能不判定修复是否见效，这个数只是给人看的原始材料。

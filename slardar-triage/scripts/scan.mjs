@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { DEFAULT_BIDS, PROJECTS, UNRESOLVED_FILTER, coreMessage, makeRunner, makeTextRunner, normalizeSourcePath, parseShareLink, resolveBin, resolveRepo } from './lib/cli.mjs';
 import { flattenRows, summarize } from './lib/stats.mjs';
+import { enrich } from './lib/category.mjs';
 
 const SAMPLE_SIZE = 300;
 
@@ -141,8 +142,8 @@ export async function scan({ bids, hours, page = 1, pageSize = 20, repo, now = D
     }
   }));
   // 候选以 Slardar issue 为单位、不合并：同文案的 issue 是 Slardar 按堆栈拆开的，合并会让一个判定盖住多条调用链。
-  // 列表已按用户数降序，贪心走查的第一条能修即全局影响最大；多个 BID 拼接时重排一次。
-  const candidates = perBid.flat().sort((a, b) => b.users - a.users);
+  // 排序按同文案聚合后的合计用户数：单条按堆栈拆开后量级被摊薄，聚合后贪心走查的第一条能修才是全局影响最大。
+  const candidates = enrich(perBid.flat());
   return { scanned_at: new Date(now).toISOString(), window, page, page_size: pageSize, bids: bidCounts, skipped_bids: skipped, candidates };
 }
 
