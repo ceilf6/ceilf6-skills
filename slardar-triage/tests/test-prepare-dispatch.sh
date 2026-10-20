@@ -31,6 +31,12 @@ grep -q "Meego:$MEEGO" "$STATE/task-books/avatar-2026-09-08.md" && ok "任务书
 grep -qv '^meego.sh ' "$STUB_STATE/calls" && bad "调用了 meego.sh 以外的命令: $(grep -v '^meego.sh ' "$STUB_STATE/calls")" || ok "只调用 meego.sh"
 node -e "const d=require('$STATE/dispatched.json').i1; process.exit(d.steps.meego==='done' && d.steps.task_book==='done' && d.slug==='avatar-2026-09-08' && d.meego_id==='7374348254' && d.slardar_url.includes('filter_id=f1') && d.task_id===undefined && d.workspace===undefined ? 0 : 1)" && ok "处置账只记准备产物" || bad "处置账不符: $(cat "$STATE/dispatched.json")"
 
+echo "case 1b: --meego-repo 指定建到 byteview-pc 的 Meego 映射"
+fixture
+out=$(run_prepare --meego-repo ee/byteview-pc); rc=$?
+[ $rc -eq 0 ] && ok "退出 0" || bad "退出 $rc: $out"
+grep -q "meego.sh create --repo ee/byteview-pc --title n" "$STUB_STATE/calls" && ok "meego.sh 用 ee/byteview-pc" || bad "meego.sh 调用不符: $(cat "$STUB_STATE/calls")"
+
 echo "case 2: 幂等——再跑一次不重复建 Meego，reused=true"
 n_before=$(grep -c "meego.sh create" "$STUB_STATE/calls")
 out=$(run_prepare); rc=$?

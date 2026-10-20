@@ -170,6 +170,7 @@ export function walk(state, scanned, { skip = [] } = {}) {
       message: c.message ?? owner?.message ?? '',
       message_core: c.message_core ?? c.message ?? owner?.message ?? '',
       bid: c.bid ?? owner?.bid ?? null,
+      repo: c.repo ?? null,
       issue_url: c.issue_url ?? owner?.issue_url ?? null,
       ...(verdict.class !== 'skip' && skip.includes(id) ? { class: 'skip', source: 'session', reason: '', at: null } : verdict),
       category: c.category,

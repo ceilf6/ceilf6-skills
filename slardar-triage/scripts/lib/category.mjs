@@ -11,9 +11,10 @@ export const BUCKETS = {
 
 // 顺序即优先级：一条文案同时命中多条规则时取先匹配的桶。
 const RULES = [
-  ['server', /rate limit|invalid user|业务错误，ErrorInfo|InvokeServierPBFast|invokeAsyncWithServerPBFast|糟糕\.\.\.发生了一些错误|request over limit|larkErrorCode/],
+  ['server', /rate limit|invalid user|业务错误，ErrorInfo|InvokeServierPBFast|invokeAsyncWithServerPBFast|糟糕\.\.\.发生了一些错误|request over limit|larkErrorCode|call kite service fail|ClientError\(LarkError|请重新登录|EOF while parsing a value/],
   ['network', /Failed to fetch|Load failed|NetError \{|Request failed|network proxy failed|sw_fetch_manifest_error|fetchGlobalKAConfig:|Cache match timeout|sendHttp failed|Network Error|net::ERR_/],
-  ['host', /APINotProvided|\[native-api\]|invokeNative|Java bridge method invocation error|Java object is gone|WKWebView was deallocated|ShellAPI\.|No such method|\[MeetingManager\] meeting_id=|timeout after \d+s\b|timed out after \d+ms/],
+  // PC 的 rust-sdk 本地库错误（磁盘满、数据库锁、用户容器未就绪、连接池超时）与宿主内置脚本一并归宿主。
+  ['host', /APINotProvided|\[native-api\]|invokeNative|Java bridge method invocation error|Java object is gone|WKWebView was deallocated|ShellAPI\.|No such method|\[MeetingManager\] meeting_id=|timeout after \d+s\b|timed out after \d+ms|StorageFull|database or disk is full|database is locked|db closed or not init|user container not ready|FrameworkError:|message channel not ready|Loading chunk \d+ failed/],
 ];
 
 export function categorize(messageCore) {

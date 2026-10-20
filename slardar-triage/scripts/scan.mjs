@@ -2,7 +2,7 @@
 import { mkdirSync, writeFileSync, realpathSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { DEFAULT_BIDS, PROJECTS, UNRESOLVED_FILTER, coreMessage, makeRunner, makeTextRunner, normalizeSourcePath, parseShareLink, resolveBin, resolveRepo } from './lib/cli.mjs';
+import { DEFAULT_BIDS, PROJECTS, UNRESOLVED_FILTER, coreMessage, makeRunner, makeTextRunner, normalizeSourcePath, parseShareLink, resolveBin, resolveProjectRepo, resolveRepo } from './lib/cli.mjs';
 import { flattenRows, summarize } from './lib/stats.mjs';
 import { enrich } from './lib/category.mjs';
 
@@ -18,7 +18,6 @@ function chunkName(filename) {
 }
 
 function latestFrame(logDetail, project) {
-  const projectDir = project.directory;
   let event = null;
   try {
     event = typeof logDetail?.data?.json === 'string' ? JSON.parse(logDetail.data.json) : logDetail?.data?.json;
@@ -27,8 +26,8 @@ function latestFrame(logDetail, project) {
   }
   const values = event?.stack?.values ?? [];
   const frames = values.flatMap((v) => v?.raw_stacktrace?.frames ?? []);
-  const inProject = (f) => Boolean(normalizeSourcePath(f.filename, projectDir)) || (project.cdnMarker ? String(f.filename ?? '').includes(project.cdnMarker) : false);
-  const frame = frames.find((f) => normalizeSourcePath(f.filename, projectDir)) ?? frames.find(inProject) ?? frames[0] ?? null;
+  const inProject = (f) => Boolean(normalizeSourcePath(f.filename, project)) || (project.cdnMarker ? String(f.filename ?? '').includes(project.cdnMarker) : false);
+  const frame = frames.find((f) => normalizeSourcePath(f.filename, project)) ?? frames.find(inProject) ?? frames[0] ?? null;
   const metric = logDetail?.data?.metric_map ?? {};
   const mv = (k) => (metric[k] && typeof metric[k] === 'object' ? metric[k].value : metric[k]) ?? '';
   return {
@@ -36,7 +35,7 @@ function latestFrame(logDetail, project) {
     release: event?.release ?? mv('release'),
     source_type: mv('source_type'),
     raw_filename: frame?.filename ?? null,
-    mapped_path: frame ? normalizeSourcePath(frame.filename, projectDir) : null,
+    mapped_path: frame ? normalizeSourcePath(frame.filename, project) : null,
     line: frame?.lineno ?? null,
     function: frame?.function ?? null,
     // 帧停在 CDN chunk 上时（sourcemap 未绑在这个 bid），靠这两项判断栈是否落在本项目、以及要去哪个 bundle 对位。
@@ -85,7 +84,7 @@ function issueDetailUrl(bid, window, issueId, release) {
   return `https://slardar.bytedance.net/node/web/js/detail?${params.toString()}`;
 }
 
-async function scanBid(bid, window, page, pageSize, runner, textRunner) {
+async function scanBid(bid, window, page, pageSize, runner, textRunner, repoDir) {
   const project = PROJECTS[bid];
   const list = await runner(['js-error', 'list', ...commonArgs(bid, window), '--filter', UNRESOLVED_FILTER, '--order-by', 'user_descend', '--page-num', String(page), '--page-size', String(pageSize)]);
   const issues = list?.data?.result ?? [];
@@ -100,6 +99,8 @@ async function scanBid(bid, window, page, pageSize, runner, textRunner) {
       issue_url: issueDetailUrl(bid, window, issue.issue_id, latest.release),
       issue_id: issue.issue_id,
       bid,
+      repo: project.repo,
+      repo_dir: repoDir,
       project_dir: project.directory,
       scm_repos: project.scmRepos,
       message: issue.message,
@@ -133,7 +134,7 @@ export async function scan({ bids, hours, page = 1, pageSize = 20, repo, now = D
       return [];
     }
     try {
-      const found = await scanBid(bid, window, page, pageSize, run, runText);
+      const found = await scanBid(bid, window, page, pageSize, run, runText, resolveProjectRepo(bid, repo));
       bidCounts[bid] = found.length;
       return found;
     } catch (error) {

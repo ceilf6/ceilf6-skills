@@ -1,15 +1,17 @@
 ---
 name: slardar-triage
-description: 扫描 Slardar 近 24h 线上 JS 错误（并行扫 vc_ai 与 minutes_record 两个 bid，后者是录音页里挂载的 vc-ai 视图，一律只判 vc-ai 能否修），服务端 / 网络 / 宿主三类整桶跳过不逐条读，其余按同文案聚合的合计用户数从高到低逐条判定 vc-ai 能否修，呈现第一条能修的告警（现象、报错、Issue 链接），并附上排在它前面、判为不能修的全部条目、整桶跳过的摘要与理由供用户捞回；随后一次一问引导用户收敛技术方案；用户说「派这条」才建 Meego、转交 byteview-web-harness 任务链修复、登记看板。判定、拒绝与派单都持久化并在跳过清单里可见，每次扫描记台账。当用户说「扫一下线上告警」「看看 Slardar」「挑一个告警看看」「换一条」「捞回 N」「派这条」「这条不修」时使用。
+description: 扫描 Slardar 近 24h 线上 JS 错误（并行扫 vc_ai、minutes_record、lark_vc_pc 三个 bid：前两个判 vc-ai 能否修，minutes_record 是录音页里挂载的 vc-ai 视图；lark_vc_pc 是会议 PC 客户端前端 byteview-pc，判它能否修），服务端 / 网络 / 宿主三类整桶跳过不逐条读，其余按同文案聚合的合计用户数从高到低逐条判定 vc-ai 能否修，呈现第一条能修的告警（现象、报错、Issue 链接），并附上排在它前面、判为不能修的全部条目、整桶跳过的摘要与理由供用户捞回；随后一次一问引导用户收敛技术方案；用户说「派这条」才建 Meego、转交 byteview-web-harness 任务链修复、登记看板。判定、拒绝与派单都持久化并在跳过清单里可见，每次扫描记台账。当用户说「扫一下线上告警」「看看 Slardar」「挑一个告警看看」「换一条」「捞回 N」「派这条」「这条不修」时使用。
 ---
 
 # slardar-triage
 
-技能目录 `<skill>` = 本文件所在目录；状态目录 `<state>` = `<skill>/state`；byteview-web 仓 `<repo>` = 当前 cwd 的 `../byteview-web`（`--repo` 可改）。所有脚本 stdout 只有一行 JSON。派单在 byteview-web-harness 仓内进行，`<harness>` = 当前 cwd。
+技能目录 `<skill>` = 本文件所在目录；状态目录 `<state>` = `<skill>/state`；byteview-web 仓 `<repo>` = 当前 cwd 的 `../byteview-web`（`--repo` 可改）；byteview-pc 仓 `<repo-pc>` = `<repo>` 的同级目录 `byteview-pc`（环境变量 `SLARDAR_TRIAGE_REPO_BYTEVIEW_PC` 可改）。每条候选带 `repo`（`byteview-web` / `byteview-pc`）与 `repo_dir`，读代码、建 Meego、派单都按它选仓。所有脚本 stdout 只有一行 JSON。派单在 byteview-web-harness 仓内进行，`<harness>` = 当前 cwd。
 
 **默认唤醒不建 Meego、不建 harness 任务、不登记看板、无任何外发动作**，只写 `<state>/`。agent 读代码得出的判断只用来选取和安排提问顺序；技术方案由用户在对话里逐项拍板。
 
-**本技能只管「vc-ai 能修且还没派过单」的告警，任何判定都不静默丢弃。** 服务端错误码、网络、宿主与 Native 桥三类告警整桶跳过、不逐条读代码；其余按同文案聚合的合计用户数降序逐条走查，第一条能修即停。排在它前面的每一条（整桶跳过、agent 判不能修、用户拒过、已派单）都带理由出现在跳过清单里，用户一句「捞回 N」即可推翻。派出去的单不再跟踪去向：不查 omh 阶段、不查 MR 是否合入、不看修复是否见效。
+**Slardar 平台只读。** 判定、拒绝、捞回、派单的全部状态都在 `<state>/` 本地文件里，Slardar 上的 issue 状态、处理人、评论等一律不改：平台状态是团队共享视图，本技能的台账是个人工作流，两者互不同步。用户说「不修」「标一下」「关掉」指的都是本地台账。
+
+**本技能只管「vc-ai / byteview-pc 能修且还没派过单」的告警，任何判定都不静默丢弃。** 服务端错误码、网络、宿主与 Native 桥三类告警整桶跳过、不逐条读代码；其余按同文案聚合的合计用户数降序逐条走查，第一条能修即停。排在它前面的每一条（整桶跳过、agent 判不能修、用户拒过、已派单）都带理由出现在跳过清单里，用户一句「捞回 N」即可推翻。派出去的单不再跟踪去向：不查 omh 阶段、不查 MR 是否合入、不看修复是否见效。
 
 ## 入口
 
@@ -22,13 +24,14 @@ description: 扫描 Slardar 近 24h 线上 JS 错误（并行扫 vc_ai 与 minut
 | 「先记录 / 下次继续 <摘要或 issue_id>」 | 候选尚未派单时，用 `state.mjs revive` 把它记成用户待处理项；本轮停止收敛、不派单。若已经是用户待处理项则不重复写。后续扫描在「待处理」中持续展示，用户再次点名时直接续上 |
 | 「说说你的判断」 | 直接给出对当前这条的初步判断（点位、根因、改法），之后回到一次一问 |
 | 「派这条」 | 「派单」一节 |
-| 「这条不修 <摘要或 issue_id>，原因：<文本>」 | `node <skill>/scripts/state.mjs reject --dir <state> --issue-id <id> --reason "<原话>"`，回话题确认 |
+| 「这条不修 <摘要或 issue_id>，原因：<文本>」 | `node <skill>/scripts/state.mjs reject --dir <state> --issue-id <id> --reason "<原话>"`，回话题确认。只写本地台账，不调用 Slardar 的 set_status 等写接口 |
 
-参数：`--bid`（默认 `vc_ai,minutes_record`，两个 bid 并行扫、按用户数合并排序；本技能只看 vc-ai 方向，不加 vc_web / vc_pages）、`--hours`（24）、`--page-size`（20，每个 bid 按影响用户数各取一页；最多翻到第 5 页）。
+参数：`--bid`（默认 `vc_ai,minutes_record,lark_vc_pc`，三个 bid 并行扫、合并成一个顺序；不加 vc_web / vc_pages）、`--hours`（24）、`--page-size`（20，每个 bid 按影响用户数各取一页；最多翻到第 5 页）。
 
-两个 bid 的差别（脚本已处理，判定时要知道）：
+三个 bid 的差别（脚本已处理，判定时要知道）：
 - `vc_ai`：会中 / 妙记 / 豆包里的 AI 视图自己上报，环境名 `online`，sourcemap 已绑定，`mapped_path` 直接指到源码。
 - `minutes_record`：录音页（`pid=record-page`）的 bid，环境名 `production`。录音 SDK（byteview-mm-web `apps/record/record-sdk`）把页内挂载的 vc-ai bundle 抛出的错误统一加 `[RECORD_SDK] [warn|error]` 前缀后上报，`message_core` 是剥掉前缀的原文。vc-ai 的 sourcemap 只绑在 vc_ai bid，所以这里的帧停在 `feishu-static/byteview/vc-ai/static/js/*-ai.js` 这类 CDN chunk 上：`latest_event.sourcemap_missing=true`、`mapped_path=null`、`project_frames` 是落在 vc-ai bundle 的帧数、`chunk_files` 是涉及的 chunk 文件名。`release` 与 `release_dist` 在这个 bid 里是飞书客户端版本（如 8.2.14），不是 vc-ai 的 web 发布版本，不能拿去查 SCM；vc-ai 侧版本信息事件里没有。
+- `lark_vc_pc`：会议 PC 客户端前端（byteview-pc，Electron webcontent 里的页面），环境名 `production`。`pid` 是扩展名加 hash 路由：`video-conference-page` 是会中与导航页，`video-conference-native` 是原生弹窗类页。`release` 形如 `8.2.3_2026_9_23_16_51_41_288`，首段是 lerna 版本，对应 byteview-pc 的 tag `v<版本>`（`git -C <repo-pc> rev-parse v8.2.3`），不查 SCM。帧 `webpack://@byteview/<包>/./src/…` 已映射为 `packages/byteview-<包>/src/…`；`…/../../node_modules/@lark/services/…` 是 rust-sdk 的 JS 封装、不算项目帧；`native-resource://…/lark-api-core.js` 是宿主内置脚本；老版本的 `file:///…/webcontent/…` 帧 sourcemap 缺失，`project_frames` 按 `/webcontent/video-conference-` 计数。判定口径同 vc-ai，只是看 byteview-pc 的 `packages/` 能否修。
 
 ## 主流程
 
@@ -38,6 +41,7 @@ description: 扫描 Slardar 近 24h 线上 JS 错误（并行扫 vc_ai 与 minut
 ls <repo>/node_modules/.bin/slardar-web-cli
 <repo>/node_modules/.bin/slardar-web-cli --raw js-error list --bid vc_ai --env online --site-type web --start-time $(( $(date +%s) - 600 )) --end-time $(date +%s) --page-size 1
 git -C <repo> fetch origin master
+git -C <repo-pc> fetch origin master
 ```
 失败对应的补法：JWT → 让用户在本机执行 `npx -y agentbuddy get-jwt`；fetch 失败 → 报网络/权限。默认路径不需要 Meego，它只在派单前校验。minutes_record 不单独探活：它和 vc_ai 共用 JWT，扫不成会落在第 2 步的 `skipped_bids` 里。
 
@@ -71,7 +75,7 @@ node <skill>/scripts/state.mjs walk --dir <state> --scan <scan.json> [--skip <id
 
 从头往下看：第一条非 `skip` 的是 `fixable` 就停，进第 5 步；是 `unjudged` 就按 `<skill>/references/judging.md` 读代码判定、`judge` 落档，然后重跑 `walk`。`items[].issue_id` 就是 `judge` / `revive` 要用的池内键。同族的其他 issue（`family_key` 相同）不用各自再读一遍代码：调用链相同就跟着当前这条的结论一起 `judge`（理由注明「同文案族，调用链同 <issue_id>」），派单后再用 `--same-as` 归到那张单。
 
-读代码：`git -C <repo> show origin/master:<mapped_path> | sed -n '<line-30>,<line+30>p'`，位置已变时 `git -C <repo> log --oneline -5 origin/master -- <mapped_path>`、`git -C <repo> grep -n '<函数名>' origin/master -- <project_dir>`。完整堆栈：`<repo>/node_modules/.bin/slardar-web-cli --raw log detail --bid <bid> --env <vc_ai→online / minutes_record→production> --site-type web --start-time <window.start> --end-time <window.end> --ev-type js_error --dh-key <dh_key>`（`dh_key` 取 `log query --filter issue_id` 的样本）。线上 release 对应 commit：`bytedcli --json scm repo version list <scm_repo> --type online --version <release> --page-size 10` 取 `data.versions[].base_commit_hash`（vc_ai 同时试 `ee/lark/vc_ai` 与 `ee/lark/vc_ai_doubao`，type 再试 test）。
+读代码（`<repo>` 按候选的 `repo` 取：byteview-web 或 byteview-pc）：`git -C <repo> show origin/master:<mapped_path> | sed -n '<line-30>,<line+30>p'`，位置已变时 `git -C <repo> log --oneline -5 origin/master -- <mapped_path>`、`git -C <repo> grep -n '<函数名>' origin/master -- <project_dir>`。完整堆栈：`<repo>/node_modules/.bin/slardar-web-cli --raw log detail --bid <bid> --env <vc_ai→online / minutes_record→production> --site-type web --start-time <window.start> --end-time <window.end> --ev-type js_error --dh-key <dh_key>`（`dh_key` 取 `log query --filter issue_id` 的样本）。线上 release 对应 commit：`bytedcli --json scm repo version list <scm_repo> --type online --version <release> --page-size 10` 取 `data.versions[].base_commit_hash`（vc_ai 同时试 `ee/lark/vc_ai` 与 `ee/lark/vc_ai_doubao`，type 再试 test）。
 
 `minutes_record` 候选（`walk` 项带 `bid`、`message_core`、`sourcemap_missing`、`chunk_files`）的定位方法：`mapped_path` 为空是常态，用文案定位——`git -C <repo> grep -n -F '<message_core 里的关键片段>' origin/master -- vc-ai packages`，错误名（`FishBoneError`、`ParseDiagramError`、`CommonError` 等）再 grep 一次收窄到抛出点；堆栈里的函数名是压缩后的单字母，不用它。`project_frames=0` 且文案在 vc-ai / packages 里 grep 不到，才看它是不是录音 SDK 自身（byteview-mm-web）的代码。线上版本对位：`release` 是飞书客户端版本，不查 SCM；要判「master 已修」用 `git log -S` 加提交日期与告警的 `min_crash_time` / 最近事件时间对照，并说明线上 vc-ai 版本未知。
 
@@ -147,17 +151,17 @@ Issue：<issue_url>
 
 1. 本会话没有回显过【技术方案】：不派，回话题说明要先走收敛对话。「补充」= 回显的技术方案原文（含用户之后的修改）。
 2. 核对：`node <skill>/scripts/state.mjs pending --dir <state>` 里存在该 issue 且 status=pending；否则回话题说明（已派 / 已拒 / 不在池中）。
-3. 派单前校验，缺则停：`test -f skills/task-schedule/scripts/task-schedule.js`（不成立说明 cwd 不是 byteview-web-harness 仓，回话题说明派单须在该仓内进行）；`bash ~/.claude/skills/bytedcli-meego/scripts/meego.sh map get --repo lark/byteview-web`（应答须含 `template_id` / `dev_owner_key`，回 `{"skipped":true}` 说明仓库没进配置）；`command -v omh-cli orchestrator`。
+3. 派单前校验，缺则停：`test -f skills/task-schedule/scripts/task-schedule.js`（不成立说明 cwd 不是 byteview-web-harness 仓，回话题说明派单须在该仓内进行）；`bash ~/.claude/skills/bytedcli-meego/scripts/meego.sh map get --repo <meego-repo>`（`<meego-repo>` 按候选 `repo`：byteview-web → `lark/byteview-web`，byteview-pc → `ee/byteview-pc`；应答须含 `template_id` / `dev_owner_key`，回 `{"skipped":true}` 说明仓库没进配置）；`command -v omh-cli orchestrator`。
 4. 写任务书：按 `<skill>/references/task-book-template.md`，第 0 节原样收录技术方案；第 1 节的量级与分布取自 `<scan.json>`（按 `issue_id` 在各页 scan 里找这条；捞回项不在本次扫描里时，量级取 `pending` 里这条的 `users` / `count`，分布写「本次扫描未覆盖」）；第 2 节线上代码用主流程第 4 步查到的 commit；第 3、4 节按方案的缺陷点位、根因、改动范围写；第 5 节首条 AC 写方案的验收方式（复现步骤、改动前实际表现、期望表现）。`{{meego_url}}` 保留占位。
 5. 写 Meego 描述文件：现象 / 根因 / 修法 / Slardar 链接（`issue_url`，用 `[]` 包裹），末尾「【人工确认】<技术方案原文>」。标题带「线上告警修复」前缀，这批单日后靠它在需求里捞得出来。
 6. 准备：
 ```bash
-bash <skill>/scripts/prepare-dispatch.sh --state <state> --issue-id <id> --slug <kebab-摘要>-$(date +%F) --task-book <任务书路径> --meego-desc <描述文件> --meego-name "<Meego 标题>" --slardar-url "<issue_url>"
+bash <skill>/scripts/prepare-dispatch.sh --state <state> --issue-id <id> --slug <kebab-摘要>-$(date +%F) --task-book <任务书路径> --meego-desc <描述文件> --meego-name "<Meego 标题>" --slardar-url "<issue_url>" --meego-repo <meego-repo>
 ```
 输出 `meego_url` 与渲染后的 `task_book`。退出 3：已有未到终态的 omh Task，错误信息里带它的 phase 与工作区，原样转述；退出 1：写停在哪一步，下次「派这条」会续做。
 7. 锚定：按 `<harness>/skills/harness-context/SKILL.md` 把 Slardar issue 链接、Meego 链接与【技术方案】原文存入 context store。`--task-name` 用第 6 步的 slug，与第 8 步一致——`task-schedule create` 按同名 staging 把上下文落进正式任务目录，名字对不上会被静默跳过。
-8. 建任务：按 `<harness>/skills/task-schedule/SKILL.md`「创建任务」执行——`--task-name` 用第 6 步的 slug，`--branch-prefix feat`，`--repos byteview-web`，`--approved-plan-file` 用第 6 步输出的 `task_book`，`--goal-summary` 用呈现时的「现象」一句话；thread 参数按该 skill 的规则取。
-9. 执行：按 `<harness>/skills/task-execute/SKILL.md` 执行。runtime 与模型由 harness 与 omh 配置决定（`task-schedule` 以 traecli 宿主准备项目），本技能不加前缀、不校验。渲染 omh-loop handoff 时 `<stage_goal>` 写明：workflow 用 `pc-web-bugfix`；任务书即已批准方案，无需再 plan；Meego 已提供（见任务书首行）。
+8. 建任务：按 `<harness>/skills/task-schedule/SKILL.md`「创建任务」执行——`--task-name` 用第 6 步的 slug，`--branch-prefix feat`，`--repos <候选 repo：byteview-web 或 byteview-pc>`，`--approved-plan-file` 用第 6 步输出的 `task_book`，`--goal-summary` 用呈现时的「现象」一句话；thread 参数按该 skill 的规则取。
+9. 执行：按 `<harness>/skills/task-execute/SKILL.md` 执行。runtime 与模型由 harness 与 omh 配置决定（`task-schedule` 以 traecli 宿主准备项目），本技能不加前缀、不校验。渲染 omh-loop handoff 时 `<stage_goal>` 写明：workflow 用 `pc-web-bugfix`（byteview-pc 候选用该仓 task-schedule 配置里的 bugfix workflow）；任务书即已批准方案，无需再 plan；Meego 已提供（见任务书首行）。
 10. omh-loop 建单成功后立即落账并登记个人看板——在调用 stage-monitor 之前，不等终态：处置账里的这条记录是拦住并发第二单的依据。`--task-id` 用 omh-loop 建单返回的 `task_id`（不是 monitor 用的 session id，可在 `<worktree>/.omh/tasks/` 下确认）；`--workspace` 是 byteview-web worktree 的绝对路径，即 `<harness>/` 接上 `task-schedule create` 输出的 `repos[].path`：
 ```bash
 node <skill>/scripts/state.mjs dispatched --dir <state> --issue-id <id> --task-id <task_id> --task-slug <taskSlug> --workspace <worktree 绝对路径> --supplement "<技术方案原文>"
@@ -170,8 +174,9 @@ bash <skill>/scripts/board.sh --state <state> --issue-id <id>
 ## 纪律
 
 - 任何情况下不自动派单，包括只有一条能修的、用户上次说过「以后都派」——每次都要本会话的技术方案与显式「派这条」。
+- 对 Slardar 平台只读：只用查询类接口（issue 列表、详情、堆栈、日志明细），不碰 `api_web/js/issue/set_status`、`add_managers`、评论等任何写接口。拒绝、捞回、派单的记号全部落在 `<state>/`。
 - 误报不是「无需处理」的同义词。只要 vc-ai 能识别允许状态并停止错误上报，消除告警噪音本身就是修复目标；没有崩溃、没有用户可见影响、错误已被拦截或上报文案是 `[warn]`，都不能单独作为跳过理由。具体边界与反例按 `references/judging.md` 的「误报本身就是待修问题」执行。
-- 两个 bid 合在一个候选池、一个走查顺序里，不分开各挑一条；minutes_record 的告警不因为 `[warn]` 前缀或 `source_type=manual` 而降权。
+- 三个 bid 合在一个候选池、一个走查顺序里，不分开各挑一条；minutes_record 的告警不因为 `[warn]` 前缀或 `source_type=manual` 而降权，lark_vc_pc 的不因为归另一个仓而降权。
 - 走查顺序按同文案聚合的合计用户数、族内按单条用户数，列表已按它排好，第一条能修即全局影响最大；判定仍以 issue 为单位，只有能修 / 不能修两档，拿不准判能修（见 `references/judging.md`）。
 - 环境桶（服务端 / 网络 / 宿主）整桶跳过是走查捷径，不是判定：不落盘、不写理由到候选池；桶内条目用户捞回后与普通候选一样走收敛与派单。
 - 用户的拒绝与捞回优先于任何 agent 判定；agent 不改判捞回项。

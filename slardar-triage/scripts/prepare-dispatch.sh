@@ -5,12 +5,14 @@
 set -uo pipefail
 # 建单走 bytedcli-meego 的机械层单点（恒 story / 模板 498109），本脚本不自持 Meego 字段配方。
 MEEGO_SH=${MEEGO_SH:-$HOME/.claude/skills/bytedcli-meego/scripts/meego.sh}
+# 候选归哪个仓就建到哪个仓的 Meego 映射：byteview-web 为 lark/byteview-web，byteview-pc 为 ee/byteview-pc（--meego-repo 指定）。
 MEEGO_REPO=${MEEGO_REPO:-lark/byteview-web}
 
 state=""; issue=""; slug=""; book=""; desc=""; name=""; slardar_url=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --slardar-url) slardar_url=$2; shift 2;;
+    --meego-repo) MEEGO_REPO=$2; shift 2;;
     --state) state=$2; shift 2;; --issue-id) issue=$2; shift 2;; --slug) slug=$2; shift 2;;
     --task-book) book=$2; shift 2;; --meego-desc) desc=$2; shift 2;; --meego-name) name=$2; shift 2;;
     *) jq -cn --arg e "未知参数 $1" '{ok:false, error:$e}'; exit 1;;

@@ -6,7 +6,7 @@
 
 ## 能修
 
-`vc-ai/` 或 `packages/` 内存在某处改动，能减少这条上报或改善用户侧表现。下列任一都算，不要求单一缺陷点位：
+候选所属仓（`repo`）的业务目录内存在某处改动，能减少这条上报或改善用户侧表现：byteview-web 候选看 `vc-ai/` 或 `packages/`，byteview-pc 候选（lark_vc_pc）看 `packages/byteview-*/src`。下列任一都算，不要求单一缺陷点位：
 
 - 修缺陷（空值、竞态、读写 key 不一致等）
 - 在调用点 catch，走既有错误处理，不再逃逸为 unhandledrejection
@@ -42,7 +42,7 @@ node <skill>/scripts/state.mjs judge --dir <state> --issue-id <id> --fixable yes
 
 ## 判不能修之前
 
-1. 沿**完整堆栈**找出 vc-ai 调用点，不只看最新帧。最新帧在宿主、CDN、`[native code]` 时，往上找第一个 `vc-ai/` 或 `packages/` 帧；整条栈都没有，再取同 issue 的其他事件看。
+1. 沿**完整堆栈**找出项目调用点，不只看最新帧。最新帧在宿主、CDN、`[native code]`、`native-resource://`、rust-sdk 封装（`node_modules/@lark/services`）时，往上找第一个 `vc-ai/` 或 `packages/` 帧；整条栈都没有，再取同 issue 的其他事件看。
 2. 对上面每种手段说明为什么不成立。
 3. 理由写一句话、点名责任层：
    - `master 已修（<commit>），线上 <release> 未带上`：`git -C <repo> log -S'<关键片段>' origin/master --oneline` 查到提交，且线上 `release_dist` 主版本早于该提交进入的 builds 分支版本。

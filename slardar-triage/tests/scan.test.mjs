@@ -5,7 +5,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { summarize, flattenRows } from '../scripts/lib/stats.mjs';
 import { scan } from '../scripts/scan.mjs';
-import { coreMessage, normalizeSourcePath } from '../scripts/lib/cli.mjs';
+import { coreMessage, normalizeSourcePath, resolveProjectRepo, PROJECTS } from '../scripts/lib/cli.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = (name) => JSON.parse(readFileSync(join(here, 'fixtures', name), 'utf8'));
@@ -205,6 +205,74 @@ test('normalizeSourcePath 对 <anonymous> 与 CDN / blob 地址返回 null，web
   assert.equal(normalizeSourcePath('<anonymous>', 'vc-ai'), null);
   assert.equal(normalizeSourcePath('https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/1-a-ai.js', 'vc-ai'), null);
   assert.equal(normalizeSourcePath('webpack://@byteview-web/vc-ai/./src/utils/native.ts', 'vc-ai'), 'vc-ai/src/utils/native.ts');
+});
+
+test('normalizeSourcePath 对 byteview-pc 的 webpack 作用域帧映射到 packages/byteview-<包>，node_modules / file / native-resource 帧为 null', () => {
+  const pc = PROJECTS.lark_vc_pc;
+  assert.equal(normalizeSourcePath('webpack://@byteview/calls-and-meetings/./src/hooks/settings.ts', pc), 'packages/byteview-calls-and-meetings/src/hooks/settings.ts');
+  assert.equal(normalizeSourcePath('webpack://@byteview/page/./src/index.tsx', pc), 'packages/byteview-page/src/index.tsx');
+  assert.equal(normalizeSourcePath('webpack://@byteview/calls-and-meetings/../../node_modules/@lark/services/index.js', pc), null);
+  assert.equal(normalizeSourcePath('file:///Applications/Lark.app/Contents/Resources/webcontent/video-conference-native/extensions-page/static/js/native-invite.js', pc), null);
+  assert.equal(normalizeSourcePath('native-resource://sandbox_fs/neotix/lark-api-core.js', pc), null);
+  assert.equal(normalizeSourcePath('index 216', pc), null);
+  assert.equal(normalizeSourcePath('webpack://@byteview-web/vc-ai/./src/utils/native.ts', PROJECTS.vc_ai), 'vc-ai/src/utils/native.ts');
+});
+
+test('resolveProjectRepo：byteview-web 系 bid 用 --repo，byteview-pc 取同级目录，环境变量可覆盖', () => {
+  assert.equal(resolveProjectRepo('vc_ai', '/ws/byteview-web'), '/ws/byteview-web');
+  assert.equal(resolveProjectRepo('minutes_record', '/ws/byteview-web'), '/ws/byteview-web');
+  assert.equal(resolveProjectRepo('lark_vc_pc', '/ws/byteview-web'), '/ws/byteview-pc');
+  process.env.SLARDAR_TRIAGE_REPO_BYTEVIEW_PC = '/elsewhere/pc';
+  try {
+    assert.equal(resolveProjectRepo('lark_vc_pc', '/ws/byteview-web'), '/elsewhere/pc');
+  } finally {
+    delete process.env.SLARDAR_TRIAGE_REPO_BYTEVIEW_PC;
+  }
+});
+
+const pcDetail = {
+  data: {
+    metric_map: { pid: { value: 'video-conference-page' }, release: { value: '8.2.3_2026_9_23_16_51_41_288' }, source_type: { value: 'manual' } },
+    json: JSON.stringify({
+      pid: 'video-conference-page',
+      release: '8.2.3_2026_9_23_16_51_41_288',
+      stack: { values: [{ raw_stacktrace: { frames: [
+        { filename: 'native-resource://sandbox_fs/neotix/lark-api-core.js', lineno: 1, colno: 10, function: 'invoke' },
+        { filename: 'webpack://@byteview/calls-and-meetings/../../node_modules/@lark/services/index.js', lineno: 3, colno: 4, function: 'call' },
+        { filename: 'webpack://@byteview/calls-and-meetings/./src/hooks/settings.ts', lineno: 12, colno: 7, function: 'key' },
+      ] } }] },
+    }),
+  },
+};
+
+test('scan lark_vc_pc 走 production、归 byteview-pc 仓，帧映射到 packages/byteview-<包>/src', async () => {
+  const calls = [];
+  const runner = (args) => {
+    calls.push(args.join(' '));
+    if (args[0] === 'js-error') {
+      return { data: { result: [
+        { issue_id: 'p1', message: "Cannot read properties of undefined (reading 'vc_tab_usage_config')", name: 'TypeError', filename: 'webpack://@byteview/calls-and-meetings/./src/hooks/settings.ts', count: 3, user: 2, min_crash_time: 0, issue_status: 'unassigned' },
+      ] } };
+    }
+    if (args[0] === 'log' && args[1] === 'query') return { data: { table_list: [{ metric_map: { dh_key: { value: 'k1' }, pid: { value: 'video-conference-page' }, release: { value: '8.2.3_2026_9_23_16_51_41_288' }, os: { value: 'Windows' }, session_id: { value: 's1' }, user_agent: { value: 'Mozilla/5.0 (Windows NT 10.0)' } } }] } };
+    if (args[0] === 'log' && args[1] === 'detail') return pcDetail;
+    throw new Error(`unexpected ${args.join(' ')}`);
+  };
+  const r = await scan({ bids: ['lark_vc_pc'], hours: 24, now: 1788853929000, repo: '/ws/byteview-web', runner });
+  assert.deepEqual(r.skipped_bids, []);
+  assert.ok(calls.every((c) => c.includes('--bid lark_vc_pc --env production')), calls.join('\n'));
+  const c = r.candidates[0];
+  assert.equal(c.repo, 'byteview-pc');
+  assert.equal(c.repo_dir, '/ws/byteview-pc');
+  assert.equal(c.project_dir, 'packages');
+  assert.deepEqual(c.scm_repos, []);
+  assert.equal(c.category, 'business');
+  assert.equal(c.latest_event.mapped_path, 'packages/byteview-calls-and-meetings/src/hooks/settings.ts');
+  assert.equal(c.latest_event.line, 12);
+  assert.equal(c.latest_event.sourcemap_missing, false);
+  assert.equal(c.latest_event.project_frames, 1);
+  assert.equal(c.latest_event.page, 'video-conference-page');
+  assert.match(c.issue_url, /env=production&bid=lark_vc_pc&/);
 });
 
 test('coreMessage 只剥录音 SDK 前缀，其他文案原样', () => {
