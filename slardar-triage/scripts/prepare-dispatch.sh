@@ -26,7 +26,10 @@ DJ="$state/dispatched.json"; [ -f "$DJ" ] || echo '{}' > "$DJ"
 get()  { jq -r --arg i "$issue" ".[\$i]$1 // empty" "$DJ"; }
 set_() { local tmp; tmp=$(mktemp); jq --arg i "$issue" "(.[\$i] //= {}) | .[\$i]$1 = $2" "$DJ" > "$tmp" && mv "$tmp" "$DJ"; }
 step_done() { [ "$(get ".steps.$1")" = done ]; }
-fail() { set_ ".error" "$(jq -Rn --arg e "$2" '$e')"; jq -cn --arg i "$issue" --arg s "$1" --arg e "$2" '{ok:false, issue_id:$i, step:$s, error:$e}'; exit "${3:-1}"; }
+COMMIT_STATE="$(cd "$(dirname "$0")" && pwd)/commit-state.sh"
+# 处置账与任务书落盘后记 chore；成功失败都记，断点续跑靠的就是账本里的半成品。
+commit_state() { bash "$COMMIT_STATE" --state "$state" >&2; }
+fail() { set_ ".error" "$(jq -Rn --arg e "$2" '$e')"; commit_state; jq -cn --arg i "$issue" --arg s "$1" --arg e "$2" '{ok:false, issue_id:$i, step:$s, error:$e}'; exit "${3:-1}"; }
 done_json() { jq -cn --arg i "$issue" --arg m "$(get .meego_url)" --arg b "$(get .task_book)" --argjson r "$1" '{ok:true, issue_id:$i, step:"task_book", meego_url:$m, task_book:$b, reused:$r}'; }
 
 # --- 步骤 0：幂等与并发检查 ---
@@ -62,5 +65,6 @@ head -1 "$final_book" | grep -q "目标分支为 master" || fail task_book "任�
 head -1 "$final_book" | grep -q "Meego:$meego_url" || fail task_book "任务书首行 Meego URL 未填入"
 head -1 "$final_book" | grep -q "MR 类型 feature" || fail task_book "任务书首行缺「MR 类型 feature」"
 set_ ".task_book" "\"$final_book\""; set_ ".steps.task_book" '"done"'; set_ ".error" 'null'
+commit_state
 
 done_json false

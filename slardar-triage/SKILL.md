@@ -55,6 +55,8 @@ node <skill>/scripts/state.mjs merge --dir <state> --scan <scan.json>
 ```
 候选池只增不删：没扫到的页里的候选及其判定都保留。每次扫描的每个 issue 在 `<state>/ledger.jsonl` 留一行（次数、用户、session、各分布主项、状态）。
 
+状态目录在 git 仓内时，`merge` / `judge` / `revive` / `reject` / `dispatched` 与 `prepare-dispatch.sh` / `board.sh` 每次落盘都经 `<skill>/scripts/commit-state.sh` 记一笔 `chore(slardar-triage): 记录 <日期> 扫描状态（N 个文件）`：只暂存 state 目录；同一天且未推送的 chore 用 amend 合并；只提交不推送。输出里的 `commit` 字段是这次提交的结果（无变更或不在仓内时省略）。设 `SLARDAR_TRIAGE_NO_COMMIT=1` 可关掉。推送由用户说了算，技能不自动 push。
+
 ### 4. 走查与判定
 
 ```bash

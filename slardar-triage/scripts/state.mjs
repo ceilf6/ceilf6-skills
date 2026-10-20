@@ -4,7 +4,8 @@
 // ledger.jsonl 是每次扫描每个 issue 一行的量级台账。
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import { BUCKETS, bucketSummary, enrich, isBucketed } from './lib/category.mjs';
 
 const FILES = { candidates: 'candidates.json', dispatched: 'dispatched.json' };
@@ -330,6 +331,18 @@ function listArg(name) {
 }
 
 const NEEDS_ISSUE_ID = new Set(['judge', 'revive', 'reject', 'dispatched', 'history']);
+const COMMIT_STATE = fileURLToPath(new URL('./commit-state.sh', import.meta.url));
+
+// 状态目录在 git 仓内时，每次落盘后由 commit-state.sh 记一笔 chore；不在仓内或无变更时静默，不影响输出形状。
+function commitState(dir) {
+  try {
+    const out = JSON.parse(execFileSync('bash', [COMMIT_STATE, '--state', dir], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
+    if (out.skipped) return {};
+    return { commit: out };
+  } catch (error) {
+    return { commit: { ok: false, committed: null, error: String(error.message ?? error).slice(0, 200) } };
+  }
+}
 
 const USAGE = '用法: state.mjs merge|walk|pending|judge|revive|reject|dispatched|history --dir <state> [--scan <scan.json>] [--skip <id,id>] [--issue-id <id>] [--fixable yes|no] [--reason <text>] [--same-as <id>] [--task-id <id>] [--task-slug <slug>] [--workspace <abs>] [--supplement <text>]\n';
 
@@ -358,28 +371,28 @@ if (isMain()) {
   try {
     if (cmd === 'merge') {
       const scan = JSON.parse(readFileSync(arg('--scan'), 'utf8'));
-      process.stdout.write(`${JSON.stringify({ ok: true, ...mergeFromScan(dir, scan) })}\n`);
+      process.stdout.write(`${JSON.stringify({ ok: true, ...mergeFromScan(dir, scan), ...commitState(dir) })}\n`);
     } else if (cmd === 'pending') {
       process.stdout.write(`${JSON.stringify(pendingSorted(state))}\n`);
     } else if (cmd === 'judge') {
       judge(state, id, { fixable: fixableArg(), reason: arg('--reason'), sameAs: arg('--same-as'), at: now });
       saveState(dir, state);
       const c = state.candidates[id];
-      process.stdout.write(`${JSON.stringify({ ok: true, issue_id: id, fixable: c.verdict.fixable, covered_by: c.covered_by ?? null })}\n`);
+      process.stdout.write(`${JSON.stringify({ ok: true, issue_id: id, fixable: c.verdict.fixable, covered_by: c.covered_by ?? null, ...commitState(dir) })}\n`);
     } else if (cmd === 'revive') {
       revive(state, id, now);
       saveState(dir, state);
-      process.stdout.write(`${JSON.stringify({ ok: true, revived: id })}\n`);
+      process.stdout.write(`${JSON.stringify({ ok: true, revived: id, ...commitState(dir) })}\n`);
     } else if (cmd === 'reject') {
       reject(state, id, arg('--reason') ?? '', now);
       saveState(dir, state);
-      process.stdout.write(`${JSON.stringify({ ok: true, rejected: id })}\n`);
+      process.stdout.write(`${JSON.stringify({ ok: true, rejected: id, ...commitState(dir) })}\n`);
     } else if (cmd === 'dispatched') {
       // 在途检查与 board.sh 都按 task_id + workspace 定位 omh Task，缺一条这单就查不到。
       for (const k of ['--task-id', '--workspace']) if (!arg(k)) throw new Error(`缺 ${k}`);
       markDispatched(state, id, { task_id: arg('--task-id'), task_slug: arg('--task-slug'), workspace: arg('--workspace'), supplement: arg('--supplement') ?? '', at: now });
       saveState(dir, state);
-      process.stdout.write(`${JSON.stringify({ ok: true, dispatched: id })}\n`);
+      process.stdout.write(`${JSON.stringify({ ok: true, dispatched: id, ...commitState(dir) })}\n`);
     } else if (cmd === 'walk') {
       const scan = JSON.parse(readFileSync(arg('--scan'), 'utf8'));
       process.stdout.write(`${JSON.stringify({ ok: true, ...walk(state, scan.candidates, { skip: listArg('--skip') }) })}\n`);

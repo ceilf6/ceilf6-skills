@@ -59,4 +59,5 @@ else
   board_json=$(jq -cn --arg c "$ctx" --arg e "$(printf '%s' "$err" | head -c 300)" '{ok:false, ctx_dir:$c, error:$e}')
 fi
 set_ ".board" "$board_json"
+bash "$(cd "$(dirname "$0")" && pwd)/commit-state.sh" --state "$state" >&2
 echo "$board_json"
