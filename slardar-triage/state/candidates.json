@@ -3636,7 +3636,7 @@
     "first_seen": 1792395680794,
     "first_seen_at": "2026-10-20T07:29:52.527Z",
     "refreshed_at": "2026-10-21T08:36:23.757Z",
-    "status": "pending",
+    "status": "dispatched",
     "verdict": {
       "fixable": true,
       "reason": "packages/byteview-calls-and-meetings/src/services/parseSuiteUrl.ts 把 parseSuiteUrl 返回的 not suite url 作为异常 captureError；可将非 Suite 链接视为无自定义图标并正常降级",
@@ -3651,7 +3651,11 @@
         "at": "2026-10-21T09:38:48.734Z"
       }
     ],
-    "decision": null
+    "decision": {
+      "task_id": "task_20261021T132804Z_6029b11e",
+      "supplement": "【技术方案】f9d869d6\n复现条件：PC 会议列表或会议详情展示普通非飞书文档链接，自定义文档图标能力开启后，Suite URL 解析器返回 not suite url。\n缺陷点位：packages/byteview-calls-and-meetings/src/services/parseSuiteUrl.ts:17-18。\n根因：普通非 Suite 链接是合法输入，但当前代码把所有 parseSuiteUrl(...).success=false 都转成异常并上报 Slardar，导致正常降级路径产生告警噪音；不依赖 native 或服务端修复。\n改动范围：仅在解析结果的 msg 精确等于 not suite url 时返回 null，不上报 Slardar、也不记录 error 日志；其它解析失败、文档元信息为空、图标信息为空仍按现有逻辑上报。上层继续沿用默认图标，不改 UI、解析器依赖或网络逻辑。\n验收：新增服务层单测，真实执行 parseCCMUrlInfo；只 mock Suite URL 解析器返回。验证 not suite url 返回 null 且不触发 captureError / error log；其它 success=false 仍触发既有上报；上层拿到 null 后继续使用默认图标。",
+      "at": "2026-10-21T13:28:18.623Z"
+    }
   },
   "badfebffa0cd0452848a770754e29b61": {
     "issue_id": "badfebffa0cd0452848a770754e29b61",
