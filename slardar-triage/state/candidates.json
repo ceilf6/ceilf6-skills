@@ -2053,12 +2053,12 @@
     "first_seen": 1791536253164,
     "first_seen_at": "2026-10-10T08:57:26.449Z",
     "refreshed_at": "2026-10-10T08:57:26.449Z",
-    "status": "pending",
+    "status": "rejected",
     "verdict": {
-      "fixable": true,
-      "reason": "截图逻辑只在 document.hidden 且鱼骨图位于视口外时主动上报；隐藏态离屏是允许状态，应停掉错误上报并只保留可见态真实截图异常",
-      "by": "agent",
-      "at": "2026-10-10T09:00:45.584Z"
+      "fixable": false,
+      "reason": "只在飞书宿主 7.50-7.55 低版本出现；这类仅低版本存在、当前维护版本不再出现的 issue 不处理",
+      "by": "user",
+      "at": "2026-10-21T03:05:25.505Z"
     },
     "verdicts": [
       {
@@ -2066,9 +2066,18 @@
         "reason": "截图逻辑只在 document.hidden 且鱼骨图位于视口外时主动上报；隐藏态离屏是允许状态，应停掉错误上报并只保留可见态真实截图异常",
         "by": "agent",
         "at": "2026-10-10T09:00:45.584Z"
+      },
+      {
+        "fixable": false,
+        "reason": "只在飞书宿主 7.50-7.55 低版本出现；这类仅低版本存在、当前维护版本不再出现的 issue 不处理",
+        "by": "user",
+        "at": "2026-10-21T03:05:25.505Z"
       }
     ],
-    "decision": null
+    "decision": {
+      "reason": "只在飞书宿主 7.50-7.55 低版本出现；这类仅低版本存在、当前维护版本不再出现的 issue 不处理",
+      "at": "2026-10-21T03:05:25.505Z"
+    }
   },
   "6d79b73dcff3cd415b4c7a74f498f6c6": {
     "issue_id": "6d79b73dcff3cd415b4c7a74f498f6c6",
