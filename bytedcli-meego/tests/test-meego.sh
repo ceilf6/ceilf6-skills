@@ -517,15 +517,12 @@ grep -q 'state transition' "$STUB_STATE/calls.log" && bad "空转仍流转" || o
 jq -n '{state_key:"OPEN", state_name:"OPEN",
         transition:[{id:112, state_key:"RESOLVED", state_name:"RESOLVED",
                      confirm_form:[{key:"f1", name:"QA确认结果"}]}]}' > "$STUB_STATE/states.json"
+echo '{"f1":"QA确认结果"}' > "$STUB_STATE/required_fields.json"
 rc=0; err=$(bash "$MG" advance --ctx-dir "$ctx" 2>&1 >/dev/null) || rc=$?
-[ "$rc" = 1 ] && ok "必填表单 die 转人工" || bad "表单 exit $rc"
-printf '%s' "$err" | grep -q "QA确认结果" && ok "报错列出表单字段" || bad "报错: $err"
-jq -n '{state_key:"OPEN", state_name:"OPEN",
-        transition:[{id:113, state_key:"RESOLVED", state_name:"RESOLVED",
-                     confirm_form:[{key:"f9"}]}]}' > "$STUB_STATE/states.json"
-rc=0; err=$(bash "$MG" advance --ctx-dir "$ctx" 2>&1 >/dev/null) || rc=$?
-[ "$rc" = 1 ] && ok "表单字段缺 name 仍拦截" || bad "缺名表单 exit $rc"
-printf '%s' "$err" | grep -q "未命名字段" && ok "缺名字段有文案回退" || bad "报错: $err"
+[ "$rc" = 1 ] && ok "服务端报必填 die 转人工" || bad "表单 exit $rc"
+printf '%s' "$err" | grep -q "QA确认结果(f1)" && ok "报错点名必填字段与 key" || bad "报错: $err"
+printf '%s' "$err" | grep -q "{field_name}" && bad "文案模板混进点名" || ok "文案模板不混进点名"
+rm -f "$STUB_STATE/required_fields.json"
 jq -n '{state_key:"OPEN", state_name:"OPEN", transition:[]}' > "$STUB_STATE/states.json"
 rc=0; bash "$MG" advance --ctx-dir "$ctx" >/dev/null 2>&1 || rc=$?
 [ "$rc" = 1 ] && ok "无合法转移 die" || bad "exit $rc"
@@ -590,14 +587,33 @@ grep -q -- '--transition-id 201' "$STUB_STATE/calls.log" && bad "不该再走 20
 grep -q '"field_key":"field_67beed"' "$STUB_STATE/calls.log" && bad "已有值被重写" || ok "已有值不重写（只补空值）"
 jq -e '[.work_item_fields[] | select(.key=="field_67beed")] | .[0].value == "option_4"' "$STUB_STATE/workitem.json" >/dev/null && ok "人工填的值保留" || bad "人工值被覆盖"
 
-echo "-- 确认表单含配置未覆盖的字段：转人工并列出字段名"
+echo "-- confirm_form 是联动字段全集：配置未覆盖但非必填的字段不拦截"
 make_fixture; issue_cfg
-jq '.meego_id="7374348254" | .meego_type="issue"' "$ctx/meta.json" > "$ctx/tmp" && mv "$ctx/tmp" "$ctx/meta.json"
-jq -n '{state_key:"OPEN", state_name:"OPEN", transition:[{id:201, state_key:"IN PROGRESS", state_name:"IN PROGRESS", confirm_form:[{key:"field_ea8af0", name:"是否Harness模式修复"},{key:"field_zzz", name:"QA确认结果"}]}]}' > "$STUB_STATE/states.json"
-rc=0; err=$(bash "$MG" advance --ctx-dir "$ctx" 2>&1 >/dev/null) || rc=$?
-[ "$rc" = 1 ] && printf '%s' "$err" | grep -q "QA确认结果" && ok "未配置字段转人工并点名" || bad "exit $rc: $err"
-printf '%s' "$err" | grep -q "是否Harness模式修复" && bad "已配置字段被误列" || ok "已配置字段不列入转人工"
-grep -q 'state transition --' "$STUB_STATE/calls.log" 2>/dev/null && bad "转人工仍流转" || ok "转人工零流转"
+jq '.meego_id="7374348254" | .meego_type="issue" | .mr_id="8440685"' "$ctx/meta.json" > "$ctx/tmp" && mv "$ctx/tmp" "$ctx/meta.json"
+jq -n '{state_key:"IN PROGRESS", state_name:"IN PROGRESS", transition:[{id:202, state_key:"RESOLVED", state_name:"RESOLVED",
+        confirm_form:[{key:"field_67beed", name:"RD解决结果"},{key:"field_cf77df", name:"转需求的需求链接"},{key:"field_703deb", name:"缺陷引入版本"}]}]}' > "$STUB_STATE/states.json"
+jq -n '{work_item_attribute:{role_members:[{key:"operator",members:[{key:"'"$ME"'"}]}]}, work_item_fields:[{key:"field_ac79fe",value:"null"}]}' > "$STUB_STATE/workitem.json"
+: > "$STUB_STATE/calls.log"
+rc=0; out=$(MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" 2>&1) || rc=$?
+[ "$rc" = 0 ] && ok "非必填的联动字段不拦截 exit 0" || bad "exit $rc: $out"
+jq -e '[.work_item_fields[] | select(.key=="field_ac79fe")] | .[0].value == "4"' "$STUB_STATE/workitem.json" >/dev/null && ok "字符串 null 视为空并补写" || bad "field_ac79fe: $(cat "$STUB_STATE/workitem.json")"
+
+echo "-- 服务端报配置外必填：点名转人工；--field 逐单补上后推到底"
+make_fixture; issue_cfg
+jq '.meego_id="7374348254" | .meego_type="issue" | .mr_id="8440685"' "$ctx/meta.json" > "$ctx/tmp" && mv "$ctx/tmp" "$ctx/meta.json"
+jq -n '{state_key:"IN PROGRESS", state_name:"IN PROGRESS", transition:[{id:202, state_key:"RESOLVED", state_name:"RESOLVED",
+        confirm_form:[{key:"field_67beed", name:"RD解决结果"},{key:"field_703deb", name:"缺陷引入版本"}]}]}' > "$STUB_STATE/states.json"
+jq -n '{work_item_attribute:{role_members:[{key:"operator",members:[{key:"'"$ME"'"}]}]}, work_item_fields:[]}' > "$STUB_STATE/workitem.json"
+echo '{"field_703deb":"缺陷引入版本"}' > "$STUB_STATE/required_fields.json"
+rc=0; err=$(MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" 2>&1 >/dev/null) || rc=$?
+[ "$rc" = 1 ] && printf '%s' "$err" | grep -q "缺陷引入版本(field_703deb)" && ok "配置外必填点名转人工" || bad "exit $rc: $err"
+printf '%s' "$err" | grep -q -- "--field" && ok "转人工提示 --field 补法" || bad "提示: $err"
+[ "$(jq -r .state_key "$STUB_STATE/states.json")" = "IN PROGRESS" ] && ok "必填未补不流转" || bad "状态: $(cat "$STUB_STATE/states.json")"
+: > "$STUB_STATE/calls.log"
+rc=0; out=$(MEEGO_RETRY_SLEEP=0 bash "$MG" advance --ctx-dir "$ctx" --field 'field_703deb=[{"option_id":"a776opt01"}]' 2>&1) || rc=$?
+[ "$rc" = 0 ] && ok "--field 补必填后 exit 0" || bad "exit $rc: $out"
+[ "$(jq -r .state_key "$STUB_STATE/states.json")" = RESOLVED ] && ok "--field 补上后到 RESOLVED" || bad "状态: $(cat "$STUB_STATE/states.json")"
+grep -q 'workitem update.*"field_key":"field_703deb","field_value":"\[{\\"option_id\\":\\"a776opt01\\"}\]"' "$STUB_STATE/calls.log" && ok "--field 值原样当字符串写入" || bad "update: $(grep field_703deb "$STUB_STATE/calls.log" | head -1)"
 
 echo "== done：组合输出恒 exit 0、无 meego skipped =="
 make_fixture

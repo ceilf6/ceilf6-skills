@@ -101,7 +101,7 @@ Meego 全生命周期管理的机械层单点。运行期动作（关联 / 创�
 | `create` | 走底层 `workitem create --fields` 建条目，`--type story|issue`（缺省 story；Bug 类型 MR 只能绑 issue）：template / name / description + `role_owners`（按 `<type>.dev_roles`）+ `<type>.create_fields`，再按 `--field <key>=<value>`（可重复）覆盖同名字段或追加新字段。ctx 模式落 meta（meego_type 随 --type）；`--repo` 模式只建单、输出 id/type/url（harness 之外给存量 MR 补建，随后 `bits mr update --meego <url>` 绑 MR） | ctx 模式 meta 已有 meego_id 防重 die；field_value 一律字符串（`--field` 的值原样当字符串，multi-select 传字符串化数组）；`--dry-run` 只回显归一化载荷，不建单、不写 meta |
 | `comment` | 进度评论（`--message-file` 或 `--preset qa`，qa 文案带 meta.mr_id） | 【bot】前缀机械层强制 |
 | `schedule` | 回填 schedule_node 节点排期/估分/负责人 | 仅 story；issue 输出 skipped；`--points` 只收纯数字 |
-| `advance` | done 流转。story：先按 dev_roles 补齐角色，再按 done_transition 顺序从当前节点**推到底**——已完成空转、映射外/不存在的节点不碰、confirm 前按 node_forms 补空的必填项、confirm 后回读校验；issue：按 done_transition 从当前状态逐跳推到 done_state——每跳先按 state_forms 补空的确认表单（联动字段分轮补写，最多三轮），确认表单里配置没覆盖的字段转人工并点名，流转后回读状态核验，撞 No Permission 时用 `--role-operate` 把经办人换成本人再试一次 | owner 守卫：owner 为空或含本人才推，别人的节点撞上即停下如实报（后续串行节点不再空试）；撞 `ErrOwnerRequired` 时给空 owner 的节点补本人再试一次；未到达重取一次再试；回读非 finished 隔一拍再读一次才判死；任一步失败退出 1，幂等可重跑；`--repo` 模式可带 `--mr-id` 供 `{{mr_url}}` |
+| `advance` | done 流转。story：先按 dev_roles 补齐角色，再按 done_transition 顺序从当前节点**推到底**——已完成空转、映射外/不存在的节点不碰、confirm 前按 node_forms 补空的必填项、confirm 后回读校验；issue：按 done_transition 从当前状态逐跳推到 done_state——每跳先按 state_forms 与 `--field` 补空的确认表单（联动字段分轮补写，最多三轮），服务端报 `ErrFieldRequired` 的配置外必填项转人工并点名，流转后回读状态核验，撞 No Permission 时用 `--role-operate` 把经办人换成本人再试一次 | owner 守卫：owner 为空或含本人才推，别人的节点撞上即停下如实报（后续串行节点不再空试）；撞 `ErrOwnerRequired` 时给空 owner 的节点补本人再试一次；未到达重取一次再试；回读非 finished 隔一拍再读一次才判死；任一步失败退出 1，幂等可重跑；`--repo` 模式可带 `--mr-id` 供 `{{mr_url}}`；`--field <key>=<value>`（可重复）补逐单取值的表单项，同名覆盖配置、同样只补空值 |
 | `done` | advance + 收束评论组合（看板钩子入口） | 恒 exit 0，输出 `{advance:…, comment:…}` 或 `{"skipped":true}`，失败详情在 JSON |
 | `map get/set` | 映射配置读写单点 | set 收 JSON、原子替换 |
 
@@ -131,7 +131,9 @@ Meego 全生命周期管理的机械层单点。运行期动作（关联 / 创�
 - **节点负责人必填（2026-08-19 真机）**：设了「负责人必填」的节点 owner 空着 confirm 会被拒，报 `ErrOwnerRequired，{node_name}负责人必填`。这与角色授权是两笔账：角色管谁能编辑表单字段，节点负责人管谁为这一站签字。498109 上「需求开发」属此类，而它的 owner 只有 `schedule` 会写，没跑过排期的条目（含 meego 接入前建的存量条目）到 done 时必撞。advance 撞上即用 `node update --node-owners` 补本人后重试一次；他人 owner 的节点在此之前已被 owner 守卫拦下，不存在替别人签字。
 - **相关错误码（退出码可信，均 exit 1）**：`ErrAPIOperateNotArrivedNode`（目标节点未到达，等价旧文案 `Node Is Not Arrived` / `code=20016`）、`ErrAPIReCompleteNode`（节点已完成，再 confirm 报错——**confirm 不幂等**，幂等性靠调用方先判 `status=finished` 跳过）、`ErrEditFieldNoPermission`（角色空缺或非本人角色）、`ErrFieldRequired`（必填未填，文案点名字段）。
 - **节点流的到达规则**：节点只有前序都 confirm 了才「到达」，未到达 confirm 回 `code=20016 Node Is Not Arrived`。advance 按 done_transition 顺序推，所以正常情况下每个节点轮到时都已到达；仍撞 20016 只有两种可能——上一节点刚 confirm、服务端还没推进（advance 重取节点流再试一次即可），或映射漏了某个前序节点 / 前序是别人的节点（如实报「停在 X」转人工）。498109 上「技术评审」（owner = tech_owner）带三项必填表单，由 node_forms 补；安全技术评审（owner liujiahao.winnie）与需求开发并行、不在映射里、永远不碰——它汇入终点前的哪一站决定 advance 最远能推到哪，被它挡住时报「停在安全技术评审」等安全 BP。他人 owner 的节点一律不代 confirm，那等于替别人声称评审完成。
-- issue 确认表单只填 `issue.state_forms` 配置过的字段，配置没覆盖的必填字段转人工并点名；当前状态无到下一跳的合法转移同样转人工。`state transition required get --mode unfinished` 对本空间缺陷实测恒回 `{}`，不能拿它发现必填项，只能靠 state list 的 confirm_form 与配置。
+- issue 确认表单只填 `issue.state_forms` 与 `--field` 给出的字段；当前状态无到下一跳的合法转移转人工。**哪些字段必填只认服务端**：`state list` 的 `confirm_form` 是全部联动字段的并集（larksuite RESOLVED 实测 40 项，含「转需求的需求链接」「无需修复原因说明」这类只在别的解决结果下才出现的字段），不带必填标记，拿它当必填清单会把每单都拦下（2026-10-26 实测）；`state transition required get --mode unfinished` 对本空间缺陷恒回 `{}`，也用不上。所以 advance 补完配置项直接流转，服务端回 `ErrFieldRequired,…,缺陷引入版本(field_703deb) 必填` 时点名转人工，未补齐不会流转。
+- **缺陷引入版本 `field_703deb` 是 RESOLVED 必填、逐单取值**（multi-select，版本号是事实判断，不进默认配置）：advance 撞上即点名停下，问清版本后用 `--field 'field_703deb=[{"option_id":"<id>"}]'` 重跑。选项按 `--field-keys '["field_703deb"]'` 现查，与「缺陷发现版本」是两套 option_id：`a776opt01` 8.0 / `a777opt01` 8.1 / `a778opt01` 8.2 / `a779opt01` 8.3 / `a780opt01` 8.4，没有「不涉及」项。
+- 表单字段的空值判定含字符串 `"null"`：真机见过数字字段「解决bug实际耗时」存成 `"null"`，按非空处理会跳过补写，流转时再撞必填。
 - 检索能力弱：`workitem get` 不支持按标题查（报 invalid param）；`story --title` 相似检索有索引延迟且范围有限（刚建的条目查不到）。获取靠链接/ID；create 应答须完整捕获新 id，丢了用 `meego todo list` 找回（新建条目会进本人待办）。
 - **排期字段形状（2026-08-11 真机核对完成，脚本已按此实现）**：`node_schedule.estimate_start_date` / `estimate_end_date` 为**按时区 00:00:00 的毫秒级时间戳（number）**，传 "YYYY-MM-DD" 字符串会被 thrift 拒收；`points` 单位为天；未传估分时服务端 `is_auto` 默认按工期自动补（实测 10 天工期自动补 10 分）。
 - **create 载荷纪律（脚本已按此实现）**：快捷 `bytedcli meego create` 传不了模板必填自定义字段，绑定空间的仓库必报 `{field} 必填`，所以 create 走 `bytedcli --json meego workitem create --project-key <pk> --work-item-type story|issue --fields '<json>'`。fields 为 `[{field_key, field_value}]`，**field_value 一律字符串**——裸数字会被序列化成 float64 遭 thrift 拒收；对象 / 数组（multi-select、role_owners）按 `tojson` 字符串化；模板以 `{"field_key":"template","field_value":"<id>"}` 传入。真机建单前先 `create --dry-run` 看归一化载荷。
@@ -157,7 +159,7 @@ advance 停下的原因：被别人的节点挡住、某个必填表单项 node_
 | `field_d40cc0` | 是否支持私有化 | select | `option_2` 支持 / `option_1` 不支持；判据是有无依赖不能私有化的服务（AI-Lab、RTC、视频云等），「不支持」要求 FG 可控并进 KA 私有化工单，仓内工具链改动选支持 |
 | `field_ca9f6b` | 是否涉及新增或变更内容信息数据实体 | radio | `123j52bhd` 否 / `s39ujltnb` 是；带业务线显隐条件，写不进（update 回 success 但值为空）也不阻塞 confirm |
 
-### issue：advance 停下（配置未覆盖的表单 / 无合法转移）
+### issue：advance 停下（配置外必填 / 无合法转移）
 
 1. `workitem get` 确认当前状态；状态只能按 `OPEN → IN PROGRESS → RESOLVED` 逐步走，不能跳。
 2. **经办人权限**：本人不是经办人时 `state transition` 报 No Permission。换经办人**必须用 `--role-operate`**（先 remove 旧人再 add 本人），改 `current_status_operator` 字段不生效：
@@ -168,7 +170,7 @@ advance 停下的原因：被别人的节点挡住、某个必填表单项 node_
    ```
 
 3. `state list --project-key <pk> --work-item-id <id> --work-item-type issue --user-key <本人 user_key>` 拿目标态的 `transition-id`。
-4. `state transition required get --state-key RESOLVED --mode unfinished` 查未填必填项——**分阶段展开**，前一阶段填了才看得到后一阶段联动字段，填一批查一次直到为空。
+4. 必填项以 `state transition` 的 `ErrFieldRequired` 点名为准（`required get` 恒回 `{}`，confirm_form 是联动并集，都不可用）——**分阶段展开**，前一阶段填了后一阶段联动字段才生效，填一批试一次直到放行。逐单取值的字段优先用 `advance --field` 补，不必手调。
 5. `state transition --transition-id <id>`，回读确认（`success` 后 `workitem get` 偶有延迟，再读一次）。
 
 larksuite 空间 issue `IN PROGRESS → RESOLVED` 的三阶段必填（来自 byteview-web-harness 同名 skill 的实测）：
@@ -182,6 +184,7 @@ larksuite 空间 issue `IN PROGRESS → RESOLVED` 的三阶段必填（来自 by
 | 2 | `field_66c195` | 缺陷引入原因 | select | `296o754r3` 研发设计考虑不全 / `fvj5raj4d` 研发编码出错 / `option_8` 修复Bug引入 / `option_4` 合码引入 / `r9uo_kvwt` FG或配置触发 / `6ulp3isss` 无法确认原因 |
 | 2 | `field_4f64b1` | 缺陷根本原因&解决方案 | multi-text | 普通字符串 |
 | 3（选了设计考虑不全后） | `field_33a56a` | 研发设计考虑不全分类 | select | `8k6zz6ls7` 边界场景 / `nsaak_8x0` 与历史模块冲突 / `4bpi_i1ay` 历史模块原有问题 / `0rip22etz` 逻辑没覆盖到 |
+| 2 | `field_703deb` | 缺陷引入版本 | multi-select | 逐单取值，`[{"option_id":"a780opt01"}]`（8.4），见「已知边界」 |
 
 ## 直调 bytedcli 的查询与写入形状
 

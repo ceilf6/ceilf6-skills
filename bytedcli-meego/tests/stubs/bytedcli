@@ -12,6 +12,7 @@
 #         文件内容为 always 时无视 owner 恒回该错（模拟补了负责人也不放行）。
 #       node transition 成功会把 nodes.json 里该节点标 finished（模拟真机的状态推进）。
 #       create_nonjson → workitem create 退 0 但吐非 JSON（网关降级形态）。
+#       required_fields.json → state transition 对其中仍为空的字段回 ErrFieldRequired（服务端必填校验）。
 set -euo pipefail
 printf '%s\n' "$*" >> "${STUB_STATE:?bytedcli stub 需要 STUB_STATE}/calls.log"
 envelope() { jq -n --arg t "$(cat "$1")" '{status:"success", data:{result:{content:[{type:"text", text:$t}]}}}'; }
@@ -102,6 +103,13 @@ case "$*" in
     echo '{"status":"success","data":{"result":{"content":[{"type":"text","text":"{}"}]}}}' ;;
   *"meego state transition"*)
     if [ -f "${STUB_STATE}/state_transition_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    # 服务端必填校验：required_fields.json（{field_key: 字段名}）里在 workitem.json 中为空的字段，按真机文案报 ErrFieldRequired
+    if [ -f "${STUB_STATE}/required_fields.json" ]; then
+      _w='{}'; [ -f "${STUB_STATE}/workitem.json" ] && _w=$(cat "${STUB_STATE}/workitem.json")
+      _miss=$(jq -r --argjson w "$_w" 'to_entries | map(select(.key as $k | ([$w.work_item_fields[]? | select(.key == $k) | .value | select(. != null and . != "" and . != "null")] | length) == 0)) | map("\(.value)(\(.key)) 必填") | join(",")' "${STUB_STATE}/required_fields.json")
+      if [ -n "$_miss" ]; then
+        jq -n --arg m "error=ErrFieldRequired,message={field_name}({field_key}) 必填,${_miss},retriable=false" '{status:"error", error:{message:$m}}'; exit 5; fi
+    fi
     # 只拒一次 No Permission：模拟经办人不是本人，调用方换经办人后重试应成功
     if [ -f "${STUB_STATE}/state_transition_permission_once" ]; then
       rm -f "${STUB_STATE}/state_transition_permission_once"

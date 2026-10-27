@@ -21,6 +21,7 @@ usage() {
       meego.sh comment  (--ctx-dir <路径> | --repo <slug> --id <id>) (--message-file <文件> | --preset qa)
       meego.sh schedule (--ctx-dir <路径> | --repo <slug> --id <id> --type story|issue) --start <YYYY-MM-DD> --due <YYYY-MM-DD> [--points <数>]
       meego.sh advance  (--ctx-dir <路径> | --repo <slug> --id <id> --type story|issue) [--mr-id <MR id>]
+                        [--field <field_key>=<field_value>]…
       meego.sh done     --ctx-dir <路径>
       meego.sh map      get|set --repo <slug> [--json-file <文件>]
 EOF
@@ -306,11 +307,13 @@ case "$sub" in
         # 「节点名称或节点id」的 CLI help 文案不成立，别照抄。
         nk=$(printf '%s' "$node" | jq -r '.basic.node_key // empty')
         if [ -z "$nk" ]; then echo "meego: 节点「${n}」应答缺 node_key，跳过"; continue; fi
-        # 必填表单按 node_forms[节点] 补，只补空值：用户在页面改过的以页面为准，不覆盖
-        forms=$(printf '%s' "$rc_cfg" | jq -c --arg n "$n" '.story.node_forms[$n] // []')
+        # 必填表单按 node_forms[节点] 补（--field 同名覆盖配置、只写进表单里有该字段的节点），
+        # 只补空值：用户在页面改过的以页面为准，不覆盖
+        forms=$(printf '%s' "$rc_cfg" | jq -c --arg n "$n" --argjson o "$field_overrides" \
+          '(.story.node_forms[$n] // []) | [ .[] | select(.field_key as $k | ($o | map(.field_key) | index($k)) == null) ] + $o')
         if [ "$forms" != "[]" ]; then
           fill=$(printf '%s' "$node" | jq -c --argjson f "$forms" --arg mr "$mr_url" '
-            [ .form_items[]? | select(.value == null or .value == "" or .value == [] or .value == {}) | .field_key ] as $empty
+            [ .form_items[]? | select(.value == null or .value == "" or .value == "null" or .value == [] or .value == {}) | .field_key ] as $empty
             | [ $f[] | select(.field_key as $k | ($empty | index($k)) != null)
                 | .field_value |= (if type == "string" then gsub("\\{\\{mr_url\\}\\}"; $mr) else tostring end)
                 | select(.field_value != "") ]') \
@@ -381,19 +384,21 @@ EOF
         [ -n "$states" ] || die "state list 应答形状不符（条目 ${id}）：$(snippet "$out")"
         cur=$(printf '%s' "$states" | jq -r '.state_key // empty')
       }
-      # 只补空值：先读当前值，配置里有而条目为空的才写。分阶段联动的字段（如「研发设计考虑不全分类」
+      # 只补空值：先读当前值，配置里有而条目为空的才写（字符串 "null" 也算空：真机见过数字字段存成它）。
+      # --field 是逐单取值（如缺陷引入版本），与配置同名时以它为准，每一跳都参与补写。分阶段联动的字段（如「研发设计考虑不全分类」
       # 只在引入原因选定后才可见）第一轮写不进——服务端按显隐静默丢弃——故最多三轮，直到没有可补的为止。
       fill_state_forms() {
         local target="$1" forms keys round=0 gout curvals missing
-        forms=$(printf '%s' "$forms_all" | jq -c --arg s "$target" --arg mr "$mr_url" \
-          '(.[$s] // []) | map(.field_value |= (if type == "string" then gsub("\\{\\{mr_url\\}\\}"; $mr) else tostring end))')
+        forms=$(printf '%s' "$forms_all" | jq -c --arg s "$target" --arg mr "$mr_url" --argjson o "$field_overrides" \
+          '(.[$s] // []) | map(.field_value |= (if type == "string" then gsub("\\{\\{mr_url\\}\\}"; $mr) else tostring end))
+           | [ .[] | select(.field_key as $k | ($o | map(.field_key) | index($k)) == null) ] + $o')
         [ "$(printf '%s' "$forms" | jq 'length')" = 0 ] && return 0
         keys=$(printf '%s' "$forms" | jq -c 'map(.field_key)')
         while [ "$round" -lt 3 ]; do
           round=$((round+1))
           gout=$(bytedcli --json meego workitem get --project-key "$PK" --work-item-id "$id" --fields "$keys" 2>"$ERRF" </dev/null) \
             || die "workitem get 失败（条目 ${id}）：$(err_tail)"
-          curvals=$(printf '%s' "$gout" | mcp_text | jq -c '[.work_item_fields[]? | select((.value != null) and (.value != "") and (.value != []) and (.value != {})) | .key]')
+          curvals=$(printf '%s' "$gout" | mcp_text | jq -c '[.work_item_fields[]? | select((.value != null) and (.value != "") and (.value != "null") and (.value != []) and (.value != {})) | .key]')
           [ -n "$curvals" ] || curvals='[]'
           missing=$(printf '%s' "$forms" | jq -c --argjson have "$curvals" '[.[] | select((.field_key | IN($have[])) | not)]')
           [ "$(printf '%s' "$missing" | jq 'length')" = 0 ] && return 0
@@ -419,14 +424,13 @@ EOF
         if [ "$skip" = 1 ]; then [ "$target" = "$cur" ] && skip=0; continue; fi
         tid=$(printf '%s' "$states" | jq -r --arg s "$target" 'first(.transition[]? | select(.state_key == $s) | .id) // empty')
         [ -n "$tid" ] || die "当前状态 ${cur} 无到 ${target} 的合法转移，转人工在 meego 上处理"
-        # 确认表单里配置没覆盖的字段不猜值：列出字段名转人工，配好 issue.state_forms 后可重跑
-        cfg_keys=$(printf '%s' "$forms_all" | jq -c --arg s "$target" '(.[$s] // []) | map(.field_key)')
-        unknown=$(printf '%s' "$states" | jq -r --arg s "$target" --argjson f "$cfg_keys" \
-          '[first(.transition[]? | select(.state_key == $s)) | .confirm_form[]? | select((.key // "") | IN($f[]) | not) | (.name // "（未命名字段）")] | join("、")')
-        [ -z "$unknown" ] || die "转移 ${cur} → ${target} 带必填确认表单（${unknown}），配置未覆盖，不代填，转人工"
         fill_state_forms "$target"
         if ! tout=$(bytedcli --json meego state transition --project-key "$PK" --work-item-id "$id" --transition-id "$tid" 2>&1 </dev/null); then
           case "$tout" in
+            *ErrFieldRequired*)
+              # 配置与 --field 都没覆盖的必填项不猜值：点名字段转人工，逐单补上后可重跑
+              req=$(printf '%s' "$tout" | grep -oE '[^,"{}]+\([A-Za-z0-9_]+\) 必填' | sed 's/ 必填$//' | sort -u | paste -sd '、' -)
+              die "转移 ${cur} → ${target} 服务端报必填：${req:-$(snippet "$tout")}，配置未覆盖，不代填，转人工（逐单取值用 advance --field <field_key>=<field_value> 补上后重跑）" ;;
             *ermission*)
               echo "meego: 流转 → ${target} 无权限，改经办人为本人后重试" >&2
               take_operator || die "换经办人失败（条目 ${id}）：$(err_tail)"
