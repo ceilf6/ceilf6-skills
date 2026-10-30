@@ -109,6 +109,28 @@ test('judge 拒绝：缺理由、fixable 非布尔、池里没有、非 pending�
   assert.throws(() => judge(state, 'i1', { fixable: false, reason: 'r', at: T1 }), /已由用户捞回/);
 });
 
+test('CLI rejudge 只清空 pending 候选的 agent 缓存结论，保留判定历史和用户拒绝', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'st-'));
+  const scanFile = join(dir, 'scan.json');
+  writeFileSync(scanFile, JSON.stringify({ scanned_at: T0, candidates: [snap(), snap({ issue_id: 'i2' })] }));
+  cli('merge', '--dir', dir, '--scan', scanFile);
+  cli('judge', '--dir', dir, '--issue-id', 'i1', '--fixable', 'no', '--reason', '仅低版本出现');
+  cli('reject', '--dir', dir, '--issue-id', 'i2', '--reason', '用户不修');
+
+  const reopened = cliStatus('rejudge', '--dir', dir, '--issue-id', 'i1');
+  assert.equal(reopened.status, 0);
+  assert.deepEqual(JSON.parse(reopened.stdout), { ok: true, rejudge: 'i1' });
+  const state = loadState(dir);
+  assert.equal(state.candidates.i1.verdict, null);
+  assert.equal(state.candidates.i1.verdicts.length, 1);
+  assert.deepEqual(walk(state, [snap()]).items.map((item) => [item.issue_id, item.class, item.source]), [['i1', 'unjudged', null]]);
+
+  const rejected = cliStatus('rejudge', '--dir', dir, '--issue-id', 'i2');
+  assert.equal(rejected.status, 1);
+  assert.match(JSON.parse(rejected.stdout).error, /用户判定/);
+  assert.equal(loadState(dir).candidates.i2.status, 'rejected');
+});
+
 test('judge --same-as 写 covered_by 并判不能修，目标须是已派单且不能是自己', () => {
   const { state } = mergeScan(empty(), [scanned({ issue_id: 'old' }), scanned({ issue_id: 'shared' })], T0);
   assert.throws(() => judge(state, 'shared', { sameAs: 'old', reason: '同缺陷', at: T0 }), /不是已派单候选/);
@@ -263,7 +285,7 @@ test('CLI merge / walk 缺 --scan 按用法错误退出 2', () => {
 
 test('CLI 认 issue 的子命令缺 --issue-id 按用法错误退出 2', () => {
   const dir = mkdtempSync(join(tmpdir(), 'st-'));
-  for (const cmd of ['judge', 'revive', 'reject', 'dispatched', 'history']) {
+  for (const cmd of ['judge', 'rejudge', 'revive', 'reject', 'dispatched', 'history']) {
     const { status, stderr } = cliStatus(cmd, '--dir', dir);
     assert.equal(status, 2, cmd);
     assert.match(stderr, /用法/);

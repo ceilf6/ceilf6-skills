@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 from zoneinfo import ZoneInfo
 
+from report_html import ReportHtmlError, parse_document, verify_document as verify_html_document
+
 from notifications import (
     NotificationEvent,
     configuration_event,
@@ -357,7 +359,9 @@ def parse_lark_json(label: str, raw: str) -> dict:
     return payload
 
 
-def verify_wiki(target_date: str, env: Dict[str, str]) -> Dict[str, str]:
+def verify_wiki(
+    target_date: str, env: Dict[str, str], require_html: bool = False
+) -> Dict[str, str]:
     title = target_title(target_date)
     listed = run_checked(
         "Wiki node list",
@@ -393,9 +397,9 @@ def verify_wiki(target_date: str, env: Dict[str, str]) -> Dict[str, str]:
             "--doc",
             node["node_token"],
             "--doc-format",
-            "markdown",
+            "xml",
             "--detail",
-            "simple",
+            "full",
             "--format",
             "json",
         ],
@@ -403,8 +407,15 @@ def verify_wiki(target_date: str, env: Dict[str, str]) -> Dict[str, str]:
         env,
     )
     fetch_payload = parse_lark_json("report document fetch", fetched.stdout)
-    content = fetch_payload.get("data", {}).get("document", {}).get("content", "")
-    verify_document_content(content)
+    document = fetch_payload.get("data", {}).get("document", {})
+    try:
+        root = parse_document(document, target_date)
+        if require_html or root.find("html5-block") is not None:
+            verify_html_document(document, target_date, Path.cwd())
+        else:
+            verify_document_content("\n".join("# " + "".join(item.itertext()) for item in root.findall("h1")))
+    except (ReportHtmlError, OSError, UnicodeError) as error:
+        raise VerificationError("report verification failed: {}".format(error)) from error
     return {"title": title, "node_token": node["node_token"]}
 
 
@@ -683,7 +694,7 @@ def run_full(target_date: str, env: Dict[str, str]) -> int:
                 )
             if outcome == "success":
                 stage = "wiki_verification"
-                verified = verify_wiki(target_date, env)
+                verified = verify_wiki(target_date, env, require_html=True)
                 log_line(
                     handle,
                     "daily report verified title={} node_token={}".format(

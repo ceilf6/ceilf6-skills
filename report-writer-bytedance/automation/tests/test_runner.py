@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 RUNNER_PATH = Path(__file__).resolve().parents[1] / "runner.py"
 sys.path.insert(0, str(RUNNER_PATH.parent))
+import report_html
 SPEC = importlib.util.spec_from_file_location("daily_report_runner", RUNNER_PATH)
 runner = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = runner
@@ -310,7 +311,7 @@ class SubprocessTests(unittest.TestCase):
                     "ok": True,
                     "data": {
                         "document": {
-                            "content": "# 今日重点\nA\n# 今日完成\nB\n# 明日展望\nC"
+                            "content": "<title>26.07.20</title><p>2026-07-20</p><h1>今日重点</h1><p>A</p><h1>今日完成</h1><p>B</p><h1>明日展望</h1><p>C</p>"
                         }
                     },
                 }
@@ -321,6 +322,44 @@ class SubprocessTests(unittest.TestCase):
             verified = runner.verify_wiki("2026-07-20", {})
         self.assertEqual(verified["title"], "26.07.20")
         self.assertEqual(verified["node_token"], "node-20")
+
+    def test_scheduled_run_rejects_legacy_headings_without_html(self):
+        nodes = subprocess.CompletedProcess([], 0, json.dumps({"ok": True, "data": {"nodes": [{"title": "26.07.20", "node_token": "node-20"}]}}), "")
+        document = subprocess.CompletedProcess([], 0, json.dumps({"ok": True, "data": {"document": {"content": "<title>26.07.20</title><p>2026-07-20</p><h1>今日完成</h1><h1>明日展望</h1>"}}}), "")
+        with mock.patch.object(runner, "run_checked", side_effect=[nodes, document]) as checked:
+            with self.assertRaises(runner.VerificationError):
+                runner.verify_wiki("2026-07-20", {}, require_html=True)
+        argv = checked.call_args.args[1]
+        self.assertEqual(argv[argv.index("--doc-format") + 1], "xml")
+        self.assertEqual(argv[argv.index("--detail") + 1], "full")
+
+    def test_verify_wiki_resolves_html_for_scheduled_and_manual_checks(self):
+        with tempfile.TemporaryDirectory() as folder:
+            package = Path(folder)
+            example = {
+                "date": "2026-07-20", "summary": "修复进展。",
+                "events": [{"title": "修复问题", "status": "in_progress", "summary": "修复待验收。",
+                            "evidence": [{"label": "记录", "url": "https://example.com/change"}]}],
+                "next_actions": ["完成验收。"],
+            }
+            manifest = report_html.build_report(example, package)
+            content = (package / "report.xml").read_text()
+            refs = {}
+            for index, item in enumerate(manifest["sections"].values()):
+                key = "html_{}".format(index)
+                content = content.replace('path="@./{}"'.format(item["filename"]), 'data-ref="{}"'.format(key))
+                refs[key] = {"data": (package / item["filename"]).read_text()}
+            nodes = subprocess.CompletedProcess([], 0, json.dumps({"ok": True, "data": {"nodes": [{"title": "26.07.20", "node_token": "node-20"}]}}), "")
+            document = {"content": content, "reference_map": {"html5-block": refs}}
+            for require_html in (False, True):
+                fetched = subprocess.CompletedProcess([], 0, json.dumps({"ok": True, "data": {"document": document}}), "")
+                with self.subTest(require_html=require_html), mock.patch.object(runner, "run_checked", side_effect=[nodes, fetched]):
+                    self.assertEqual(runner.verify_wiki("2026-07-20", {}, require_html)["node_token"], "node-20")
+            document["reference_map"] = {}
+            fetched = subprocess.CompletedProcess([], 0, json.dumps({"ok": True, "data": {"document": document}}), "")
+            with mock.patch.object(runner, "run_checked", side_effect=[nodes, fetched]):
+                with self.assertRaises(runner.VerificationError):
+                    runner.verify_wiki("2026-07-20", {})
 
 
 class CodexExecutionTests(unittest.TestCase):

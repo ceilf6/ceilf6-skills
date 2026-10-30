@@ -46,7 +46,7 @@ Resolve relative paths from this skill directory. Do not silently substitute ano
 
 Before collecting, verify:
 
-- The execution CLI (`claude`, run with the Opus model by the wrapper script) is installed and logged in (`claude auth status --json` shows `loggedIn: true`).
+- The fixed Codex CLI at `~/.local/lib/trae-daily-report-executor/codex` and its `codex-code-mode-host` are executable. `codex login status` succeeds. The wrapper uses `codex exec --model gpt-6.1-sol --ignore-user-config --ephemeral`; execute with Codex only.
 - `python3`, `lark-cli`, and `bytedcli` are callable.
 - `lark-cli auth status --json --verify` succeeds.
 - `bytedcli auth status`, `bytedcli auth userinfo`, `bytedcli bits auth status`, and `bytedcli meego status` succeed.

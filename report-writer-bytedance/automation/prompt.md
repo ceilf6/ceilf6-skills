@@ -15,7 +15,7 @@
 7. Meego 必需覆盖以技能列出的 OAuth 状态和 `todo list` 等普通接口为准；`workitem get --rich` 属于可选补充证据。若它返回 `MEEGO_GOAPI_AUTH_REQUIRED`，记录为“Meego 富文本详情跳过（缺 GoAPI Web session）”，改用普通 Meego 结果、MR 与飞书文档交叉核验，不得仅因此停止日报。
 8. 先检查日结父 Wiki 的同名子页面；存在则更新，不存在才创建，确保同一天重复执行不会创建重复页面。
 9. 完成证据归一化后，先把本任务或上一轮自动生成的日结页面标记为 `self_generated_report_artifact`，仅计入覆盖，不得映射为 WorkEvent。若其余证据中不存在任何具有目标日活动的 `completed`、`in_progress` 或 `blocked` WorkEvent，则不得创建或更新日报、不得追加 SOP/成长沉淀库；在覆盖摘要后直接输出 `no_reportable_activity` 的 skipped sentinel。存在可报告 WorkEvent 时，严格执行 mentor → 主管 → HR 的串行评审与最多两轮修订；两轮后仍有 blocking finding 时停止发布。
-10. 写入后必须重新获取文档并验证标题、日期和预期章节；按技能规则处理 SOP/成长沉淀库。
+10. 默认使用原生标题与摘要配合 HTML 卡片。按 `references/html-report.md` 将审查后的 WorkEvent 写成 `report.json`，用 `automation/report_html.py build` 生成完整包，以 `--doc-format xml` 写入 `report.xml`。写入后以 XML、`--detail full` 保存完整回读 JSON，执行 `automation/report_html.py verify` 对照本地 manifest 核对 HTML 引用、日期、章节、非空正文及哈希；Markdown 回读和空标题不能证明 HTML 发布成功。内容回读不代表实际飞书渲染已验收，实际未查看时如实标明。按技能规则处理 SOP/成长沉淀库。
 11. 本 agent 不得发送任何 IM、邮件、群消息、机器人或 webhook 通知。
 12. Oncall 是可选来源。Oncall 未登录、令牌过期或查询失败时，记录 skipped 并继续生成日报，不得仅因此停止发布。`not logged in` 时，在最终 sentinel 前输出：
     `<daily-report-warning kind="configuration_required" source="oncall" code="not_logged_in" />`

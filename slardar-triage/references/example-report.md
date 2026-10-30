@@ -11,28 +11,27 @@ Issue：https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&la
 待处理（你捞回过、还没派也没拒）：
 - common.getAvatarBase64 timeout after 60s（2.1k 用户）— 捞回 09-27
 排在它前面、判为不能修的：
-1. [warn] FishBoneError: fishBone out of screen（29k 用户）— 你拒过 09-29：只是加日志，没必要
-2. [InvokeServierPBFast error]: logId=…（13k 用户）— 已派单 09-28
+1. [InvokeServierPBFast error]: logId=…（13k 用户）— 已派单 09-28
 整桶跳过（没逐条读代码）：
 - 宿主与 Native 桥：9 条 / 101k 用户，最大 3 条：
-  3. APINotProvided（71k 用户）
-  4. Error invoking invokeNative: Java bridge method invocation error（6.7k 用户）
-  5. [native-api] common.getAvatarBase64 timed out after 60000ms（6.4k 用户）
+  2. APINotProvided（71k 用户）
+  3. Error invoking invokeNative: Java bridge method invocation error（6.7k 用户）
+  4. [native-api] common.getAvatarBase64 timed out after 60000ms（6.4k 用户）
 - 服务端错误码：7 条 / 58k 用户，最大 3 条：
-  6. rate limit（27k 用户）
-  7. invalid user（18k 用户）
-  8. 业务错误，ErrorInfo: code: 220301…（15k 用户）
+  5. rate limit（27k 用户）
+  6. invalid user（18k 用户）
+  7. 业务错误，ErrorInfo: code: 220301…（15k 用户）
 - 网络：5 条 / 20k 用户，最大 3 条：
-  9. Failed to fetch（5.4k 用户）
-  10. [warn] CommonError: Load failed（3.5k 用户）
-  11. [warn] ServiceWorkerError: sw_fetch_manifest_error network Failed to fetch（3.7k 用户）
+  8. Failed to fetch（5.4k 用户）
+  9. [warn] CommonError: Load failed（3.5k 用户）
+  10. [warn] ServiceWorkerError: sw_fetch_manifest_error network Failed to fetch（3.7k 用户）
 要捞回哪条直接说「捞回 2」；要看某桶全部条目说「展开 网络」。
 
 先定复现条件。这条既出现在会中 AI 视图（ai-layout），也出现在妙记 PC（minutes-ai-layout-pc）。你想先按哪个场景看？
 
 ## 捞回
 
-用户：捞回 3
+用户：捞回 2
 （APINotProvided 在宿主桶里整桶跳过、从未判定；用户捞回后它就是普通候选，这正是整桶跳过要靠捞回兜住的假阴性。）
 
 agent（`revive` 后切到这条，第一问围绕「vc-ai 能怎么缓解」）：

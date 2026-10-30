@@ -1,4 +1,4 @@
 interface:
   display_name: "ByteDance Report Writer"
-  short_description: "Create evidence-backed ByteDance daily reports"
-  default_prompt: "Use $report-writer-bytedance to create today’s ByteDance daily report under the configured Feishu wiki."
+  short_description: "Create ByteDance daily reports with HTML cards"
+  default_prompt: "Use $report-writer-bytedance to create today’s evidence-backed ByteDance daily report with HTML cards under the configured Feishu wiki."

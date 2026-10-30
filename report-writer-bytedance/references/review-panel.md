@@ -36,7 +36,7 @@ Only these are blocking; everything else is a suggestion:
 ## Loop Protocol
 
 1. Draft per report-template.md.
-2. Run the three reviews serially (mentor → 主管 → HR); each produces a finding list in the format above. Review input = the full draft + the day's WorkEvent records including evidence, so reviewers verify claims against evidence, not style alone.
+2. Run the three reviews serially (mentor → 主管 → HR); each produces a finding list in the format above. Review input = `report.json`, rendered HTML/native synopsis, and the day's WorkEvent records including evidence, so reviewers verify claims against evidence, not style alone. Rebuild the package after every adopted content change.
 3. No blocking findings → publish. Adopt worthwhile suggestions; list unadopted suggestions in the assistant response.
 4. Blocking findings → revise the draft, then re-review: check only that each blocking finding is resolved and that no new blocking finding was introduced.
 5. At most 2 revision rounds. If blocking findings remain after round 2, do not publish; list the unresolved findings and ask the user to decide.

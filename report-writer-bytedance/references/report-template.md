@@ -1,6 +1,9 @@
 # ByteDance Daily Report Template
 
-Use Markdown accepted by `lark-cli docs +create` and `lark-cli docs +update`.
+Use the content structure below to draft reviewed WorkEvents in `report.json`.
+Render with `automation/report_html.py` and publish the generated DocxXML with
+embedded HTML cards. See [html-report.md](html-report.md) for the file contract.
+The Markdown example below describes the information hierarchy, not the publishing format.
 
 ## Title
 
@@ -51,7 +54,7 @@ Section rules:
 - `今日重点` holds the deep blocks for events marked `highlight: true` in the event ledger (0-2 per day, selection rules in event-schema.md). When no event qualifies, omit the whole `今日重点` section — never pad it with a routine item; 空洞的反思比没有反思更减分.
 - Each deep block needs all of 发现问题 / 解决过程 / 反思沉淀 / 证据. If the evidence cannot support all three narrative lines, downgrade the event to a `今日完成` bullet instead.
 - `解决过程` lists 2-4 key nodes (decisions made and how each was verified), not an operation-by-operation log.
-- `今日完成` is required for a published report and keeps normal events to one summary line plus 1-3 nested evidence/detail lines.
+- `今日完成` is required for a published report and keeps normal events to one summary line plus 1-3 evidence/detail lines. When every event is a highlight, use a brief status recap of those same events here.
 - `明日展望` is required for a published report and contains 1-3 concrete bullets derived from unfinished events, explicit user input, and the configured plan reference.
 
 ## Writing Rules
@@ -63,7 +66,7 @@ Section rules:
 - `反思沉淀` must land on a concrete behavior change or reusable steps backed by the block's evidence.
 - Reflection cliché blacklist — never write these or close paraphrases; before publishing, scan the draft and treat any hit as a blocking finding: 学到了很多、收获满满、受益匪浅、感触很深、成长了不少.
 - SOP format: numbered steps, one action per step, include branch conditions such as 若 X 则 Y, executable as written.
-- Use Markdown links for all artifacts: `[label](https://...)`.
+- Store artifact labels and URLs in `evidence`; the renderer produces escaped HTML links. Use Markdown links for any Markdown working notes.
 - For local AI evidence without a public URL, write the evidence label as plain text, for example `证据：local_trae_session trae:<session_id>`; keep local file paths out of the document body.
 - Do not write raw URLs in the document body.
 - Do not include source diagnostics in the document body, such as `未查到任务`, `无会议`, `空结果`, or `仅参会`.

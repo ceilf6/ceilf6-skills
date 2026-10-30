@@ -28,6 +28,16 @@ class FileSpec:
 
 FILE_SPECS = [
     FileSpec(
+        AUTOMATION_DIR / "report_html.py",
+        Path(".local/lib/trae-daily-report/report_html.py"),
+        0o600,
+    ),
+    FileSpec(
+        AUTOMATION_DIR / "tests/test_report_html.py",
+        Path(".local/lib/trae-daily-report/tests/test_report_html.py"),
+        0o600,
+    ),
+    FileSpec(
         AUTOMATION_DIR / "runner.py",
         Path(".local/lib/trae-daily-report/runner.py"),
         0o600,

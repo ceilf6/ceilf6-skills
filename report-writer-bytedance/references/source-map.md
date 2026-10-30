@@ -77,20 +77,24 @@ lark-cli drive +search --as user --commented-since "<start>" --commented-until "
 lark-cli docs +fetch --doc "<doc-or-wiki-url>" --doc-format markdown --detail simple
 ```
 
+Build the reviewed JSON into the HTML/XML package per `html-report.md`.
+Run the publishing command from the generated package directory, so every
+`@./` reference resolves to that package's HTML file.
+
 Create when no target-title child exists:
 
 ```bash
-lark-cli docs +create --as user --parent-token "<parent_wiki.node_token>" --title "<title>" --doc-format markdown --content @report.md --format json
+lark-cli docs +create --as user --parent-token "<parent_wiki.node_token>" --title "<title>" --doc-format xml --content @./report.xml --format json
 ```
 
 Update when the target-title child already exists:
 
 ```bash
-lark-cli docs +update --as user --doc "<existing-wiki-or-doc-url>" --command overwrite --doc-format markdown --content @report.md --format json
+lark-cli docs +update --as user --doc "<existing-wiki-or-doc-url>" --command overwrite --doc-format xml --content @./report.xml --format json
 ```
 
 Rules:
-- Read the current `lark-doc` embedded create/update/Markdown guidance before writing.
+- Read the current `lark-doc` embedded create/update/XML and `html5-block` guidance before writing. For HTML readback, use XML with `--detail full` and retain the complete JSON response with `reference_map`.
 - Do not create duplicate pages for the same title.
 - Do not drop a target-date doc solely by title; fetch content first when it may contain work evidence.
 - Classify daily report pages created by this automation as `self_generated_report_artifact` coverage only. Do not use a current or prior automated report as evidence of target-date work.

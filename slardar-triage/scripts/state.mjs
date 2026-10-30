@@ -93,6 +93,16 @@ export function judge(state, issueId, { fixable, reason, sameAs, at }) {
   state.candidates[issueId] = withVerdict(c, { fixable, reason, by: 'agent', at });
 }
 
+// agent 判定是可失效的缓存；重审只清当前结论，verdicts 保留原始判定证据。
+export function rejudge(state, issueId) {
+  const c = state.candidates[issueId];
+  if (!c) throw new Error(`候选池里没有 ${issueId}`);
+  if (c.status !== 'pending') throw new Error(`${issueId} 不是 pending 候选，用户判定不能由 agent 重审`);
+  if (c.verdict?.by !== 'agent') throw new Error(`${issueId} 当前不是 agent 判定`);
+  const { covered_by: _coveredBy, ...rest } = c;
+  state.candidates[issueId] = { ...rest, verdict: null };
+}
+
 // 捞回覆盖 agent 的结论与用户自己之前的拒绝。已派单的续作归 harness 任务链，dispatched.json 的续做记录不能在这里重开。
 export function revive(state, issueId, at) {
   const c = state.candidates[issueId];
@@ -331,7 +341,7 @@ function listArg(name) {
   return (arg(name) ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 }
 
-const NEEDS_ISSUE_ID = new Set(['judge', 'revive', 'reject', 'dispatched', 'history']);
+const NEEDS_ISSUE_ID = new Set(['judge', 'rejudge', 'revive', 'reject', 'dispatched', 'history']);
 const COMMIT_STATE = fileURLToPath(new URL('./commit-state.sh', import.meta.url));
 
 // 状态目录在 git 仓内时，每次落盘后由 commit-state.sh 记一笔 chore；不在仓内或无变更时静默，不影响输出形状。
@@ -345,7 +355,7 @@ function commitState(dir) {
   }
 }
 
-const USAGE = '用法: state.mjs merge|walk|pending|judge|revive|reject|dispatched|history --dir <state> [--scan <scan.json>] [--skip <id,id>] [--issue-id <id>] [--fixable yes|no] [--reason <text>] [--same-as <id>] [--task-id <id>] [--task-slug <slug>] [--workspace <abs>] [--supplement <text>]\n';
+const USAGE = '用法: state.mjs merge|walk|pending|judge|rejudge|revive|reject|dispatched|history --dir <state> [--scan <scan.json>] [--skip <id,id>] [--issue-id <id>] [--fixable yes|no] [--reason <text>] [--same-as <id>] [--task-id <id>] [--task-slug <slug>] [--workspace <abs>] [--supplement <text>]\n';
 
 function usageExit() {
   process.stderr.write(USAGE);
@@ -380,6 +390,10 @@ if (isMain()) {
       saveState(dir, state);
       const c = state.candidates[id];
       process.stdout.write(`${JSON.stringify({ ok: true, issue_id: id, fixable: c.verdict.fixable, covered_by: c.covered_by ?? null, ...commitState(dir) })}\n`);
+    } else if (cmd === 'rejudge') {
+      rejudge(state, id);
+      saveState(dir, state);
+      process.stdout.write(`${JSON.stringify({ ok: true, rejudge: id, ...commitState(dir) })}\n`);
     } else if (cmd === 'revive') {
       revive(state, id, now);
       saveState(dir, state);

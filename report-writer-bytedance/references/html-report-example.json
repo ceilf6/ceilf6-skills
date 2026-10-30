@@ -1,0 +1,28 @@
+{
+  "date": "2026-01-01",
+  "summary": "示例日报：完成问题定位与修复验证，跟进评审和下一步验收。内容仅用于模板演示。",
+  "events": [
+    {
+      "title": "示例：定位并修复状态同步问题",
+      "status": "in_progress",
+      "summary": "补齐状态切换时的清理逻辑，避免旧状态影响后续请求；提交评审，等待验收。",
+      "process": ["已完成定向测试；真实客户端验收待完成。"],
+      "evidence": [{"label": "示例修复记录", "url": "https://example.com/change", "type": "feishu_doc"}],
+      "next_actions": ["处理评审意见并完成客户端验收。"],
+      "highlight": true,
+      "highlight_rationale": "示例：技术深度与问题闭环；真实报告需由证据支撑。",
+      "problem": "状态切换后旧队列仍可能继续处理请求，产生重复工作。",
+      "resolution_steps": ["用最小场景复现旧队列仍在运行的条件。", "按状态切换处理清理，并用定向测试验证。"],
+      "reflection": "排查状态问题时，同时核对订阅建立、状态转换与资源释放的顺序。"
+    },
+    {
+      "title": "示例：整理评审材料",
+      "status": "completed",
+      "summary": "将已有验证结果和剩余问题整理成评审说明，便于后续确认。",
+      "process": ["补入证据链接，并明确尚未完成的客户端验收。"],
+      "evidence": [{"label": "示例评审材料", "url": "https://example.com/review", "type": "feishu_doc"}],
+      "highlight": false
+    }
+  ],
+  "next_actions": ["处理修复评审意见，确认未解决的问题。", "补齐真实客户端验收结果并更新材料。"]
+}

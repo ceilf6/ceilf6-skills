@@ -10,7 +10,11 @@ export TZ="Asia/Shanghai"
 export LANG="en_US.UTF-8"
 export PATH="/Users/bytedance/.local/bin:/Users/bytedance/.nvm/versions/node/v24.18.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-readonly TRAE="/Users/bytedance/.local/bin/trae-cli"
+export BYTEDCLI_NO_AUTO_UPGRADE=1
+
+readonly CODEX="/Users/bytedance/.local/lib/trae-daily-report-executor/codex"
+readonly CODEX_HOST="/Users/bytedance/.local/lib/trae-daily-report-executor/codex-code-mode-host"
+readonly CODEX_MODEL="gpt-6.1-sol"
 readonly SKILL_DIR="/Users/bytedance/Desktop/ceilf/ceilf6-skills/one-on-one-prep-bytedance"
 readonly SKILL_FILE="$SKILL_DIR/SKILL.md"
 readonly PROMPT_FILE="/Users/bytedance/.config/trae-one-on-one-prep/prompt.md"
@@ -41,7 +45,8 @@ check_command() {
 }
 
 preflight() {
-  test -x "$TRAE" || { echo "[preflight] Trae executable: failed" >&2; return 1; }
+  test -x "$CODEX" || { echo "[preflight] Codex executable: failed" >&2; return 1; }
+  test -x "$CODEX_HOST" || { echo "[preflight] Codex tool host: failed" >&2; return 1; }
   test -r "$PROMPT_FILE" || { echo "[preflight] prompt: failed" >&2; return 1; }
   test -r "$SKILL_FILE" || { echo "[preflight] skill: failed" >&2; return 1; }
   test -r "$WINDOW_SCRIPT" || { echo "[preflight] window script: failed" >&2; return 1; }
@@ -50,7 +55,7 @@ preflight() {
   command -v bytedcli >/dev/null || { echo "[preflight] bytedcli: failed" >&2; return 1; }
   command -v python3 >/dev/null || { echo "[preflight] python3: failed" >&2; return 1; }
 
-  check_command "Trae login" "$TRAE" login status || return 1
+  check_command "Codex login" "$CODEX" login status || return 1
   check_command "Lark auth" lark-cli auth status --json --verify || return 1
   check_command "ByteDance auth" bytedcli auth status || return 1
   check_command "ByteDance user" bytedcli auth userinfo || return 1
@@ -131,10 +136,13 @@ status=1
 {
   echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] one-on-one prep started title=$week_title mode=$mode"
   if preflight; then
-    "$TRAE" \
+    "$CODEX" exec \
+      --model "$CODEX_MODEL" \
       --dangerously-bypass-approvals-and-sandbox \
+      --dangerously-bypass-hook-trust \
+      --ignore-user-config \
+      --ephemeral \
       -c shell_environment_policy.inherit=all \
-      exec \
       --cd "$HOME" \
       --add-dir "$SKILL_DIR" \
       --skip-git-repo-check \

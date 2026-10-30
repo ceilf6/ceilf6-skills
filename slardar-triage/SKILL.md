@@ -1,6 +1,6 @@
 ---
 name: slardar-triage
-description: 扫描 Slardar 近 24h 线上 JS 错误（并行扫 vc_ai、minutes_record、lark_vc_pc 三个 bid：前两个判 vc-ai 能否修，minutes_record 是录音页里挂载的 vc-ai 视图；lark_vc_pc 是会议 PC 客户端前端 byteview-pc，判它能否修），服务端 / 网络 / 宿主三类整桶跳过不逐条读，其余按同文案聚合的合计用户数从高到低逐条判定 vc-ai 能否修，呈现第一条能修的告警（现象、报错、Issue 链接），并附上排在它前面、判为不能修的全部条目、整桶跳过的摘要与理由供用户捞回；随后一次一问引导用户收敛技术方案；用户说「派这条」才建 Meego、转交 byteview-web-harness 任务链修复、登记看板。判定、拒绝与派单都持久化并在跳过清单里可见，每次扫描记台账。当用户说「扫一下线上告警」「看看 Slardar」「挑一个告警看看」「换一条」「捞回 N」「派这条」「这条不修」时使用。
+description: 扫描 Slardar 近 24h 线上 JS 错误（并行扫 vc_ai、minutes_record、lark_vc_pc 三个 bid：前两个判 vc-ai 能否修，minutes_record 是录音页里挂载的 vc-ai 视图；lark_vc_pc 是会议 PC 客户端前端 byteview-pc，判它能否修），服务端 / 网络 / 宿主三类整桶跳过不逐条读，其余按同文案聚合的合计用户数从高到低逐条判定 vc-ai 能否修，呈现第一条能修的告警（现象、报错、Issue 链接），并附上排在它前面、判为不能修的全部条目、整桶跳过的摘要与理由供用户捞回；随后一次一问引导用户收敛技术方案；用户说「派这条」才建 Meego、转交 byteview-web-harness 任务链修复、登记看板。判定、拒绝与派单都持久化，已拒绝条目不再呈现，每次扫描记台账。当用户说「扫一下线上告警」「看看 Slardar」「挑一个告警看看」「换一条」「捞回 N」「派这条」「这条不修」时使用。
 ---
 
 # slardar-triage
@@ -11,7 +11,7 @@ description: 扫描 Slardar 近 24h 线上 JS 错误（并行扫 vc_ai、minutes
 
 **Slardar 平台只读。** 判定、拒绝、捞回、派单的全部状态都在 `<state>/` 本地文件里，Slardar 上的 issue 状态、处理人、评论等一律不改：平台状态是团队共享视图，本技能的台账是个人工作流，两者互不同步。用户说「不修」「标一下」「关掉」指的都是本地台账。
 
-**本技能只管「vc-ai / byteview-pc 能修且还没派过单」的告警，任何判定都不静默丢弃。** 服务端错误码、网络、宿主与 Native 桥三类告警整桶跳过、不逐条读代码；其余按同文案聚合的合计用户数降序逐条走查，第一条能修即停。排在它前面的每一条（整桶跳过、agent 判不能修、用户拒过、已派单）都带理由出现在跳过清单里，用户一句「捞回 N」即可推翻。派出去的单不再跟踪去向：不查 omh 阶段、不查 MR 是否合入、不看修复是否见效。
+**本技能只管「vc-ai / byteview-pc 能修且还没派过单」的告警，agent 判定都不静默丢弃。** 服务端错误码、网络、宿主与 Native 桥三类告警整桶跳过、不逐条读代码；其余按同文案聚合的合计用户数降序逐条走查，第一条能修即停。排在它前面的整桶跳过、agent 判不能修和已派单条目都带理由出现在跳过清单里，用户一句「捞回 N」即可推翻；用户拒过的条目保留在台账中继续跳过，但不再呈现。派出去的单不再跟踪去向：不查 omh 阶段、不查 MR 是否合入、不看修复是否见效。
 
 ## 入口
 
@@ -59,7 +59,7 @@ node <skill>/scripts/state.mjs merge --dir <state> --scan <scan.json>
 ```
 候选池只增不删：没扫到的页里的候选及其判定都保留。每次扫描的每个 issue 在 `<state>/ledger.jsonl` 留一行（次数、用户、session、各分布主项、状态）。
 
-状态目录在 git 仓内时，`merge` / `judge` / `revive` / `reject` / `dispatched` 与 `prepare-dispatch.sh` / `board.sh` 每次落盘都经 `<skill>/scripts/commit-state.sh` 记一笔 `chore(slardar-triage): 记录 <日期> 扫描状态（N 个文件）`：只暂存 state 目录；同一天且未推送的 chore 用 amend 合并；只提交不推送。输出里的 `commit` 字段是这次提交的结果（无变更或不在仓内时省略）。设 `SLARDAR_TRIAGE_NO_COMMIT=1` 可关掉。推送由用户说了算，技能不自动 push。
+状态目录在 git 仓内时，`merge` / `judge` / `rejudge` / `revive` / `reject` / `dispatched` 与 `prepare-dispatch.sh` / `board.sh` 每次落盘都经 `<skill>/scripts/commit-state.sh` 记一笔 `chore(slardar-triage): 记录 <日期> 扫描状态（N 个文件）`：只暂存 state 目录；同一天且未推送的 chore 用 amend 合并；只提交不推送。输出里的 `commit` 字段是这次提交的结果（无变更或不在仓内时省略）。设 `SLARDAR_TRIAGE_NO_COMMIT=1` 可关掉。推送由用户说了算，技能不自动 push。
 
 ### 4. 走查与判定
 
@@ -73,7 +73,9 @@ node <skill>/scripts/state.mjs walk --dir <state> --scan <scan.json> [--skip <id
 
 `bucket` 只落在 `category` 为 `server` / `network` / `host` 且还没判过的条目上：它是走查的捷径，不是判定，不写进候选池；用户捞回、agent 判过或已派单的条目按自己的状态归类，不受桶影响。`buckets` 是各桶的条数、族数与合计用户数，呈现时用。
 
-从头往下看：第一条非 `skip` 的是 `fixable` 就停，进第 5 步；是 `unjudged` 就按 `<skill>/references/judging.md` 读代码判定、`judge` 落档，然后重跑 `walk`。`items[].issue_id` 就是 `judge` / `revive` 要用的池内键。同族的其他 issue（`family_key` 相同）不用各自再读一遍代码：调用链相同就跟着当前这条的结论一起 `judge`（理由注明「同文案族，调用链同 <issue_id>」），派单后再用 `--same-as` 归到那张单。
+已缓存的 agent 结论如果被新证据或判定口径推翻，先用 `node <skill>/scripts/state.mjs rejudge --dir <state> --issue-id <id>` 清空当前结论，再按本节重新走查。`rejudge` 只接受 pending 的 agent 判定，保留 `verdicts` 历史；用户拒绝或捞回的条目不得用它改判。
+
+从头往下看：第一条非 `skip` 的是 `fixable` 就停，进第 5 步；是 `unjudged` 就按 `<skill>/references/judging.md` 读代码判定、`judge` 落档，然后重跑 `walk`。`items[].issue_id` 就是 `judge` / `rejudge` / `revive` 要用的池内键。同族的其他 issue（`family_key` 相同）不用各自再读一遍代码：调用链相同就跟着当前这条的结论一起 `judge`（理由注明「同文案族，调用链同 <issue_id>」），派单后再用 `--same-as` 归到那张单。
 
 读代码（`<repo>` 按候选的 `repo` 取：byteview-web 或 byteview-pc）：`git -C <repo> show origin/master:<mapped_path> | sed -n '<line-30>,<line+30>p'`，位置已变时 `git -C <repo> log --oneline -5 origin/master -- <mapped_path>`、`git -C <repo> grep -n '<函数名>' origin/master -- <project_dir>`。完整堆栈：`<repo>/node_modules/.bin/slardar-web-cli --raw log detail --bid <bid> --env <vc_ai→online / minutes_record→production> --site-type web --start-time <window.start> --end-time <window.end> --ev-type js_error --dh-key <dh_key>`（`dh_key` 取 `log query --filter issue_id` 的样本）。线上 release 对应 commit：`bytedcli --json scm repo version list <scm_repo> --type online --version <release> --page-size 10` 取 `data.versions[].base_commit_hash`（vc_ai 同时试 `ee/lark/vc_ai` 与 `ee/lark/vc_ai_doubao`，type 再试 test）。
 
@@ -113,7 +115,7 @@ Issue：<issue_url>
 - 当前条 `source=user` 时标题后加「（你捞回的）」。
 - 待处理 = `walk.todo` 去掉当前这条；为空省略该节。
 - 「同文案另 k 条」一行只在 `family_size>1` 时写；`family_size=1` 省略。
-- 跳过清单 = 当前这条之前的非 `bucket` 的 `skip` 项（跨页累积），全部列出、不折叠，从 1 编号，「捞回 N」按这个编号。来源措辞：`agent` → `agent`，`rejected` → `你拒过`，`dispatched` → `已派单`，`session` → `本会话看过`（不带理由）。为空省略该节。
+- 跳过清单 = 当前这条之前、`source` 不是 `bucket` 或 `rejected` 的 `skip` 项（跨页累积），全部列出、不折叠，从 1 编号，「捞回 N」按这个编号。来源措辞：`agent` → `agent`，`dispatched` → `已派单`，`session` → `本会话看过`（不带理由）。`source=rejected` 的条目仍由 `walk` 跳过，但不进入呈现、编号或「捞回 N」清单。为空省略该节。
 - 整桶跳过 = 当前这条之前的 `bucket` 项按 `category` 分桶（跨页累积），每桶一行写条数与合计用户数，桶内按用户数列出最大 3 条，编号接着跳过清单往下排；「展开 <桶名>」把该桶全部条目列出并接着编号。两个清单都为空时省略。
 - 「现象」只写可观察事实，不写代码路径、函数名、根因、改法。
 - 翻到第 5 页仍没有 `fixable`：回「前 100 条没有判为能修的」，照样附跳过清单与待处理清单。这句不带「新」字：候选池不看告警首次出现的时间。
