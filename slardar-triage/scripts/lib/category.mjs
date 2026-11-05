@@ -11,10 +11,12 @@ export const BUCKETS = {
 
 // 顺序即优先级：一条文案同时命中多条规则时取先匹配的桶。
 const RULES = [
-  ['server', /rate limit|invalid user|业务错误，ErrorInfo|InvokeServierPBFast|invokeAsyncWithServerPBFast|糟糕\.\.\.发生了一些错误|request over limit|larkErrorCode|call kite service fail|ClientError\(LarkError|请重新登录|EOF while parsing a value/],
-  ['network', /Failed to fetch|Load failed|NetError \{|Request failed|network proxy failed|sw_fetch_manifest_error|fetchGlobalKAConfig:|Cache match timeout|sendHttp failed|Network Error|net::ERR_/],
-  // PC 的 rust-sdk 本地库错误（磁盘满、数据库锁、用户容器未就绪、连接池超时）与宿主内置脚本一并归宿主。
-  ['host', /APINotProvided|\[native-api\]|invokeNative|Java bridge method invocation error|Java object is gone|WKWebView was deallocated|ShellAPI\.|No such method|\[MeetingManager\] meeting_id=|timeout after \d+s\b|timed out after \d+ms|StorageFull|database or disk is full|database is locked|db closed or not init|user container not ready|FrameworkError:|message channel not ready|Loading chunk \d+ failed/],
+  // `CallbackData { code= … }` 是 rust-sdk 网关层把底层请求结果包成 lib-net CallbackData 后的文案：code= Normal(<HTTP 状态>) 是服务端回了错误状态，
+  // 其余（Unknown / Timeout / Offline / CronetError，含连接池超时 ConnPool*）是网络栈失败，web 侧拿不到更细的原因。
+  ['server', /rate limit|invalid user|业务错误，ErrorInfo|InvokeServierPBFast|invokeAsyncWithServerPBFast|糟糕\.\.\.发生了一些错误|request over limit|larkErrorCode|call kite service fail|ClientError\(LarkError|请重新登录|EOF while parsing a value|CallbackData \{ code= Normal\(/],
+  ['network', /Failed to fetch|Load failed|NetError \{|Request failed|network proxy failed|sw_fetch_manifest_error|fetchGlobalKAConfig:|Cache match timeout|sendHttp failed|Network Error|net::ERR_|CallbackData \{ code=|ConnPool/],
+  // PC 的 rust-sdk 本地库错误（磁盘满、数据库锁、用户容器未就绪、连接池超时）、rust-sdk 吞掉真实原因后返回的固定文案，与宿主内置脚本一并归宿主。
+  ['host', /APINotProvided|\[native-api\]|invokeNative|Java bridge method invocation error|Java object is gone|WKWebView was deallocated|ShellAPI\.|No such method|\[MeetingManager\] meeting_id=|timeout after \d+s\b|timed out after \d+ms|StorageFull|database or disk is full|database is locked|db closed or not init|user container not ready|FrameworkError:|message channel not ready|Loading chunk \d+ failed|get joined deviced info error/],
 ];
 
 export function categorize(messageCore) {
