@@ -5916,8 +5916,20 @@
     "first_seen_at": "2026-10-30T09:06:40.984Z",
     "refreshed_at": "2026-11-05T04:13:30.083Z",
     "status": "pending",
-    "verdict": null,
-    "verdicts": [],
+    "verdict": {
+      "fixable": false,
+      "reason": "完整堆栈 project_frames=0，超时由 @lark/services 内部 feature-gating makeTimeout 的派生 Promise 拒绝；byteview-pc 仅调用公开 startup，业务目录无该拒绝链的修复点",
+      "by": "agent",
+      "at": "2026-11-05T08:29:52.060Z"
+    },
+    "verdicts": [
+      {
+        "fixable": false,
+        "reason": "完整堆栈 project_frames=0，超时由 @lark/services 内部 feature-gating makeTimeout 的派生 Promise 拒绝；byteview-pc 仅调用公开 startup，业务目录无该拒绝链的修复点",
+        "by": "agent",
+        "at": "2026-11-05T08:29:52.060Z"
+      }
+    ],
     "decision": null
   },
   "f0848c47ae4b1762507d4476794dcfbc": {
@@ -5996,8 +6008,20 @@
     "first_seen_at": "2026-11-05T04:13:30.083Z",
     "refreshed_at": "2026-11-05T04:13:30.083Z",
     "status": "pending",
-    "verdict": null,
-    "verdicts": [],
+    "verdict": {
+      "fixable": false,
+      "reason": "调用点在录音 SDK（byteview-mm-web）record-page 的 reportRecordingEndError/endRecording 创建录音失败链路，byteview-web 的 vc-ai/packages 无调用点",
+      "by": "agent",
+      "at": "2026-11-05T08:26:25.611Z"
+    },
+    "verdicts": [
+      {
+        "fixable": false,
+        "reason": "调用点在录音 SDK（byteview-mm-web）record-page 的 reportRecordingEndError/endRecording 创建录音失败链路，byteview-web 的 vc-ai/packages 无调用点",
+        "by": "agent",
+        "at": "2026-11-05T08:26:25.611Z"
+      }
+    ],
     "decision": null
   },
   "f71874981d8a27320c486e5ec3663bb2": {
@@ -6012,8 +6036,20 @@
     "first_seen_at": "2026-11-05T04:13:30.083Z",
     "refreshed_at": "2026-11-05T04:13:30.083Z",
     "status": "pending",
-    "verdict": null,
-    "verdicts": [],
+    "verdict": {
+      "fixable": false,
+      "reason": "同文案族，调用链同 9162dff8e1fdd07157687faccfd67349；调用点在录音 SDK（byteview-mm-web），byteview-web 的 vc-ai/packages 无调用点",
+      "by": "agent",
+      "at": "2026-11-05T08:26:31.570Z"
+    },
+    "verdicts": [
+      {
+        "fixable": false,
+        "reason": "同文案族，调用链同 9162dff8e1fdd07157687faccfd67349；调用点在录音 SDK（byteview-mm-web），byteview-web 的 vc-ai/packages 无调用点",
+        "by": "agent",
+        "at": "2026-11-05T08:26:31.570Z"
+      }
+    ],
     "decision": null
   },
   "fc29f58859197dfc9af8b0254ad092ae": {
@@ -6028,8 +6064,20 @@
     "first_seen_at": "2026-11-05T04:13:30.083Z",
     "refreshed_at": "2026-11-05T04:13:30.083Z",
     "status": "pending",
-    "verdict": null,
-    "verdicts": [],
+    "verdict": {
+      "fixable": false,
+      "reason": "调用点在录音 SDK（byteview-mm-web）record-page 的 error-handler 文件写入失败处理链路，byteview-web 的 vc-ai/packages 无调用点",
+      "by": "agent",
+      "at": "2026-11-05T08:26:47.903Z"
+    },
+    "verdicts": [
+      {
+        "fixable": false,
+        "reason": "调用点在录音 SDK（byteview-mm-web）record-page 的 error-handler 文件写入失败处理链路，byteview-web 的 vc-ai/packages 无调用点",
+        "by": "agent",
+        "at": "2026-11-05T08:26:47.903Z"
+      }
+    ],
     "decision": null
   },
   "c475db44b36f290d4f8c1859712d8fd4": {
@@ -6124,8 +6172,20 @@
     "first_seen_at": "2026-11-05T04:13:30.083Z",
     "refreshed_at": "2026-11-05T04:13:30.083Z",
     "status": "pending",
-    "verdict": null,
-    "verdicts": [],
+    "verdict": {
+      "fixable": true,
+      "reason": "packages/byteview-calls-and-meetings/src/hooks/upcoming-list.ts 拉取即将开始的会议遇到 ConnPoolSyncTimeoutError 后由 list.ts 直接置为 failed；可在该业务调用点针对瞬时连接池超时重试并保留已有列表，改善用户侧失败状态",
+      "by": "agent",
+      "at": "2026-11-05T08:31:32.695Z"
+    },
+    "verdicts": [
+      {
+        "fixable": true,
+        "reason": "packages/byteview-calls-and-meetings/src/hooks/upcoming-list.ts 拉取即将开始的会议遇到 ConnPoolSyncTimeoutError 后由 list.ts 直接置为 failed；可在该业务调用点针对瞬时连接池超时重试并保留已有列表，改善用户侧失败状态",
+        "by": "agent",
+        "at": "2026-11-05T08:31:32.695Z"
+      }
+    ],
     "decision": null
   },
   "700eb1c0d03bfbd5c1dcb2f4101abe26": {
