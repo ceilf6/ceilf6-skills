@@ -1,0 +1,3830 @@
+{
+  "scanned_at": "2026-11-05T11:20:47.447Z",
+  "window": {
+    "start": 1793791247,
+    "end": 1793877647
+  },
+  "page": 3,
+  "page_size": 20,
+  "bids": {
+    "minutes_record": 20,
+    "lark_vc_pc": 20,
+    "vc_ai": 20
+  },
+  "skipped_bids": [],
+  "candidates": [
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=823f51bf968b2aea31dd667b4abef422&layout=normal&release=8.5.0.4",
+      "issue_id": "823f51bf968b2aea31dd667b4abef422",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[expand-times] fetch server expand times failed: online=true, cause=Error: Failed to fetch",
+      "message_core": "[expand-times] fetch server expand times failed: online=true, cause=Error: Failed to fetch",
+      "error_name": "ExpandTimesFetchError",
+      "filename": "webpack://@byteview-web/vc-ai/./src/services/expand-times-service.ts",
+      "count": 1104,
+      "users": 953,
+      "first_seen": 1793791253793,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=8787c6e5456fcacefc59e624a8662331",
+      "pid_dist": {
+        "/webview/end-summary-mobile": 17,
+        "/webview/end-summary": 221,
+        "/webview/minutes-end-summary-pc": 61,
+        "/webview/minutes-end-summary": 1
+      },
+      "os_dist": {
+        "OpenHarmony": 1,
+        "Mac": 51,
+        "Android": 14,
+        "Windows": 210,
+        "GNU/Linux": 21,
+        "iOS": 3
+      },
+      "release_dist": {
+        "8.5.0.4": 298,
+        "8.4.0.1": 2
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "unknown": 4,
+        "8.3.14": 19,
+        "8.4.9": 7,
+        "7.32.0": 40,
+        "7.33.5": 23,
+        "8.4.7": 63,
+        "8.2.14": 7,
+        "7.72.2": 2,
+        "8.0.6": 6,
+        "7.32.11": 21,
+        "8.1.17": 7,
+        "7.66.1": 1,
+        "7.31.8": 18,
+        "8.2.18": 3,
+        "7.34.6": 25,
+        "7.57.6": 1,
+        "7.32.8": 10,
+        "7.53.16": 3,
+        "8.3.21": 4,
+        "8.3.6": 5,
+        "7.62.1": 4,
+        "7.76.21": 1,
+        "7.72.15": 1,
+        "8.5.3": 2,
+        "7.74.16": 2,
+        "7.72.0": 3,
+        "7.69.15": 2,
+        "7.32.1": 5,
+        "8.1.25": 2,
+        "7.72.11": 1,
+        "7.75.18": 1,
+        "7.31.12": 1,
+        "7.62.6": 1,
+        "7.74.21": 1,
+        "8.0.3": 2,
+        "7.71.12": 1,
+        "7.73.9": 1
+      },
+      "distinct_sessions": 300,
+      "latest_event": {
+        "page": "/webview/end-summary-mobile",
+        "release": "8.5.0.4",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/services/end-summary-service.ts",
+        "mapped_path": "vc-ai/src/services/end-summary-service.ts",
+        "line": 807,
+        "function": "autoExpandFromClick",
+        "sourcemap_missing": false,
+        "project_frames": 2,
+        "chunk_files": []
+      },
+      "category": "network",
+      "family_key": "[expand-times] fetch server expand times failed: online=true, cause=Error: Failed to fetch",
+      "family_users": 1555,
+      "family_count": 1748,
+      "family_size": 2
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=6759ffe6f22d7d263e9761c4bd713e32&layout=normal&release=8.5.0.4",
+      "issue_id": "6759ffe6f22d7d263e9761c4bd713e32",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[expand-times] fetch server expand times failed: online=true, cause=Error: Failed to fetch",
+      "message_core": "[expand-times] fetch server expand times failed: online=true, cause=Error: Failed to fetch",
+      "error_name": "ExpandTimesFetchError",
+      "filename": "blob:https://vc.feishu.cn/73d53bf5-ca09-4047-b8b1-54dc097dafed",
+      "count": 644,
+      "users": 602,
+      "first_seen": 1793791260822,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=84081ecda682b03dabdba96111686639",
+      "pid_dist": {
+        "/webview/end-summary-mobile": 283,
+        "/webview/minutes-end-summary": 17
+      },
+      "os_dist": {
+        "Android": 270,
+        "OpenHarmony": 30
+      },
+      "release_dist": {
+        "8.5.0.4": 273,
+        "8.4.0.1": 27
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "8.3.6": 58,
+        "8.4.9": 129,
+        "unknown": 30,
+        "8.2.6": 18,
+        "8.1.12": 18,
+        "7.67.9": 5,
+        "8.4.8": 3,
+        "7.72.10": 6,
+        "7.62.6": 7,
+        "7.66.6": 4,
+        "7.76.14": 2,
+        "7.63.9": 2,
+        "7.75.17": 3,
+        "7.74.9": 3,
+        "8.0.2": 3,
+        "7.68.10": 1,
+        "7.70.13": 1,
+        "7.75.15": 2,
+        "7.65.6": 1,
+        "7.69.6": 1,
+        "7.75.13": 1,
+        "8.3.5": 1,
+        "7.73.11": 1
+      },
+      "distinct_sessions": 300,
+      "latest_event": {
+        "page": "/webview/end-summary-mobile",
+        "release": "8.5.0.4",
+        "source_type": "manual",
+        "raw_filename": "blob:https://vc.feishu.cn/3f1f6231-90a3-41c3-9c49-afb92f4e86c0",
+        "mapped_path": null,
+        "line": 1,
+        "function": "async x.initShouldAutoExpand",
+        "sourcemap_missing": true,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "network",
+      "family_key": "[expand-times] fetch server expand times failed: online=true, cause=Error: Failed to fetch",
+      "family_users": 1555,
+      "family_count": 1748,
+      "family_size": 2
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=84216a70c9160e6ffb7bb6bd5a4a1b55&layout=normal&release=8.5.0.4",
+      "issue_id": "84216a70c9160e6ffb7bb6bd5a4a1b55",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[InvokeServierPBFast error]: logId=, 糟糕...发生了一些错误，请稍后重试",
+      "message_core": "[InvokeServierPBFast error]: logId=, 糟糕...发生了一些错误，请稍后重试",
+      "error_name": "InvokeServerPbError",
+      "filename": "webpack://@byteview-web/vc-ai/./src/services/transport-layer/webview/utils/server-pb.ts",
+      "count": 888,
+      "users": 859,
+      "first_seen": 1793791431971,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=7f053e48db9f0890135a26aaf2846626",
+      "pid_dist": {
+        "/webview/end-summary": 240,
+        "/webview/ai-layout": 2,
+        "/webview/minutes-end-summary-pc": 58
+      },
+      "os_dist": {
+        "Windows": 175,
+        "Mac": 124,
+        "OpenHarmony": 1
+      },
+      "release_dist": {
+        "8.5.0.4": 295,
+        "8.2.0.0": 3,
+        "8.6.0.12": 1,
+        "8.4.0.1": 1
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 203,
+        "manual": 97
+      },
+      "host_version_dist": {
+        "8.4.7": 131,
+        "8.3.14": 56,
+        "7.62.0": 6,
+        "7.72.2": 6,
+        "8.2.6": 1,
+        "8.0.6": 7,
+        "7.72.0": 4,
+        "8.5.3": 6,
+        "8.1.17": 14,
+        "8.2.18": 4,
+        "8.3.21": 4,
+        "8.1.25": 2,
+        "7.69.15": 6,
+        "7.58.0": 1,
+        "8.2.14": 13,
+        "7.76.21": 1,
+        "7.74.16": 1,
+        "7.75.15": 3,
+        "7.74.21": 2,
+        "8.5.5": 5,
+        "7.72.8": 2,
+        "7.72.11": 5,
+        "7.61.6": 1,
+        "7.75.18": 2,
+        "8.3.8": 1,
+        "8.4.5": 1,
+        "7.53.16": 4,
+        "8.4.17": 1,
+        "8.4.3": 1,
+        "7.49.9": 1,
+        "7.42.2": 1,
+        "7.72.41": 1,
+        "7.71.12": 1,
+        "7.73.9": 1,
+        "7.62.1": 1,
+        "8.0.3": 2,
+        "8.2.9": 1
+      },
+      "distinct_sessions": 298,
+      "latest_event": {
+        "page": "/webview/end-summary",
+        "release": "8.5.0.4",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/services/transport-layer/webview/utils/server-pb.ts",
+        "mapped_path": "vc-ai/src/services/transport-layer/webview/utils/server-pb.ts",
+        "line": 124,
+        "function": "data",
+        "sourcemap_missing": false,
+        "project_frames": 2,
+        "chunk_files": []
+      },
+      "category": "server",
+      "family_key": "[InvokeServierPBFast error]: logId=*, 糟糕...发生了一些错误，请稍后重试",
+      "family_users": 1538,
+      "family_count": 1586,
+      "family_size": 2
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=024014ec36c9068c990762ed133b27ea&layout=normal&release=8.5.0.4",
+      "issue_id": "024014ec36c9068c990762ed133b27ea",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[InvokeServierPBFast error]: logId=, 糟糕...发生了一些错误，请稍后重试",
+      "message_core": "[InvokeServierPBFast error]: logId=, 糟糕...发生了一些错误，请稍后重试",
+      "error_name": "InvokeServerPbError",
+      "filename": "webpack://@byteview-web/vc-ai/./src/services/transport-layer/webview/utils/server-pb.ts",
+      "count": 698,
+      "users": 679,
+      "first_seen": 1793791444272,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=7f2cfdf97a3fdc728145be1688f7c2e3",
+      "pid_dist": {
+        "/webview/ai-layout": 287,
+        "/webview/minutes-ai-layout-pc": 13
+      },
+      "os_dist": {
+        "Windows": 204,
+        "Mac": 96
+      },
+      "release_dist": {
+        "8.5.0.4": 287,
+        "8.4.0.1": 12,
+        "8.6.0.12": 1
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 273,
+        "manual": 27
+      },
+      "host_version_dist": {
+        "8.4.7": 148,
+        "7.75.18": 1,
+        "7.53.16": 6,
+        "8.3.21": 7,
+        "8.3.14": 51,
+        "7.69.15": 3,
+        "8.5.5": 6,
+        "7.76.21": 2,
+        "8.2.18": 2,
+        "8.2.14": 16,
+        "7.62.0": 5,
+        "8.0.6": 8,
+        "7.72.11": 3,
+        "8.0.3": 5,
+        "8.5.6": 3,
+        "8.1.25": 5,
+        "8.1.17": 7,
+        "7.74.21": 2,
+        "7.62.1": 2,
+        "7.72.0": 5,
+        "7.74.16": 1,
+        "7.69.9": 1,
+        "8.4.17": 1,
+        "7.66.0": 2,
+        "7.54.0": 2,
+        "7.73.9": 1,
+        "7.72.2": 4,
+        "7.66.3": 1
+      },
+      "distinct_sessions": 299,
+      "latest_event": {
+        "page": "/webview/ai-layout",
+        "release": "8.5.0.4",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/handlers/setup-pull-video-chat-in-meeting-info.ts",
+        "mapped_path": "vc-ai/src/handlers/setup-pull-video-chat-in-meeting-info.ts",
+        "line": 4,
+        "function": "participants",
+        "sourcemap_missing": false,
+        "project_frames": 3,
+        "chunk_files": []
+      },
+      "category": "server",
+      "family_key": "[InvokeServierPBFast error]: logId=*, 糟糕...发生了一些错误，请稍后重试",
+      "family_users": 1538,
+      "family_count": 1586,
+      "family_size": 2
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=17ca81c4dd11c4c5f611bc7237abe493&layout=normal&release=8.5.0.4",
+      "issue_id": "17ca81c4dd11c4c5f611bc7237abe493",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[error] CommonError: [native-api] command=94003 timed out after 60000ms",
+      "message_core": "[error] CommonError: [native-api] command=94003 timed out after 60000ms",
+      "error_name": "NativeApiRequestTimeoutError",
+      "filename": "webpack://@byteview-web/vc-ai/./src/utils/native-api/pc-bridge.ts",
+      "count": 656,
+      "users": 614,
+      "first_seen": 1793791393213,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=dedb80aac1307dab445bee5158d1d457",
+      "pid_dist": {
+        "/webview/minutes-ai-layout-pc": 55,
+        "/webview/ai-layout": 244,
+        "/webview/doubao-in-lark-ai-layout": 1
+      },
+      "os_dist": {
+        "Windows": 239,
+        "Mac": 60,
+        "GNU/Linux": 1
+      },
+      "release_dist": {
+        "8.5.0.4": 300
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "8.3.14": 80,
+        "7.62.1": 6,
+        "8.4.7": 128,
+        "7.69.9": 1,
+        "8.5.5": 4,
+        "7.74.21": 1,
+        "7.74.16": 2,
+        "8.1.17": 8,
+        "8.2.14": 11,
+        "8.1.25": 2,
+        "7.58.0": 4,
+        "7.72.2": 5,
+        "8.0.6": 4,
+        "7.73.9": 4,
+        "7.72.11": 3,
+        "8.3.21": 2,
+        "8.4.19": 3,
+        "7.65.8": 1,
+        "7.76.21": 4,
+        "7.69.15": 1,
+        "7.62.0": 3,
+        "8.2.18": 1,
+        "7.72.0": 5,
+        "7.66.0": 4,
+        "7.75.18": 1,
+        "8.5.3": 1,
+        "7.75.15": 1,
+        "7.71.12": 3,
+        "8.4.3": 1,
+        "7.66.11": 1,
+        "7.72.1": 1,
+        "7.53.16": 2,
+        "8.4.5": 1,
+        "7.56.5": 1
+      },
+      "distinct_sessions": 292,
+      "latest_event": {
+        "page": "/webview/minutes-ai-layout-pc",
+        "release": "8.5.0.4",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/../packages/vc-web-utils/fetch-queue.ts",
+        "mapped_path": "packages/vc-web-utils/fetch-queue.ts",
+        "line": 72,
+        "function": "_this_queue",
+        "sourcemap_missing": false,
+        "project_frames": 9,
+        "chunk_files": []
+      },
+      "category": "host",
+      "family_key": "[error] CommonError: [native-api] command=94003 timed out after 60000ms",
+      "family_users": 1187,
+      "family_count": 1312,
+      "family_size": 2
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=cb5f3dce972819e0f9d7c94f79d4afb5&layout=normal&release=8.5.0.4",
+      "issue_id": "cb5f3dce972819e0f9d7c94f79d4afb5",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[error] CommonError: [native-api] command=94003 timed out after 60000ms",
+      "message_core": "[error] CommonError: [native-api] command=94003 timed out after 60000ms",
+      "error_name": "NativeApiRequestTimeoutError",
+      "filename": "webpack://@byteview-web/vc-ai/./src/utils/native-api/pc-bridge.ts",
+      "count": 656,
+      "users": 573,
+      "first_seen": 1793791426326,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=facfca5399007fe8988a697774278ff6",
+      "pid_dist": {
+        "/webview/end-summary": 139,
+        "/webview/minutes-end-summary-pc": 161
+      },
+      "os_dist": {
+        "Windows": 254,
+        "Mac": 46
+      },
+      "release_dist": {
+        "8.5.0.4": 294,
+        "8.2.0.0": 3,
+        "8.4.0.1": 3
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "7.50.0": 1,
+        "7.72.4": 1,
+        "8.3.14": 57,
+        "8.4.7": 150,
+        "8.1.17": 15,
+        "7.62.0": 5,
+        "8.2.14": 13,
+        "7.76.21": 2,
+        "7.49.9": 1,
+        "7.73.9": 1,
+        "8.4.5": 2,
+        "7.62.1": 3,
+        "8.0.6": 3,
+        "7.53.16": 3,
+        "7.75.18": 3,
+        "7.72.0": 4,
+        "7.72.1": 8,
+        "8.2.18": 4,
+        "7.74.16": 2,
+        "7.50.9": 1,
+        "7.72.8": 1,
+        "7.72.11": 2,
+        "8.5.3": 3,
+        "8.2.6": 1,
+        "7.75.15": 1,
+        "7.42.5": 1,
+        "8.3.21": 4,
+        "8.5.5": 1,
+        "8.1.25": 1,
+        "8.0.3": 1,
+        "7.71.12": 1,
+        "7.74.21": 1,
+        "7.66.0": 1,
+        "7.36.0": 1,
+        "7.59.5": 1
+      },
+      "distinct_sessions": 270,
+      "latest_event": {
+        "page": "/webview/end-summary",
+        "release": "8.5.0.4",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/services/end-summary-service.ts",
+        "mapped_path": "vc-ai/src/services/end-summary-service.ts",
+        "line": 490,
+        "function": "getMeetingAISummary",
+        "sourcemap_missing": false,
+        "project_frames": 5,
+        "chunk_files": []
+      },
+      "category": "host",
+      "family_key": "[error] CommonError: [native-api] command=94003 timed out after 60000ms",
+      "family_users": 1187,
+      "family_count": 1312,
+      "family_size": 2
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=b50472455f381f68439caf0344830017&layout=normal&release=8.5.0.4",
+      "issue_id": "b50472455f381f68439caf0344830017",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[error] fetchGlobalKAConfig: Failed to fetch",
+      "message_core": "[error] fetchGlobalKAConfig: Failed to fetch",
+      "error_name": "TypeError",
+      "filename": "webpack://@byteview-web/vc-ai/../../sdk-web/esm/collector/http.js",
+      "count": 2055,
+      "users": 983,
+      "first_seen": 1793791643212,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=72f1fe392a0b6e87574355ea13c9a42a",
+      "pid_dist": {
+        "/webview/ai-layout": 300
+      },
+      "os_dist": {
+        "Windows": 288,
+        "Mac": 12
+      },
+      "release_dist": {
+        "8.5.0.4": 286,
+        "8.2.0.0": 8,
+        "7.74.0.275": 2,
+        "8.4.0.1": 4
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "8.4.7": 164,
+        "8.3.14": 58,
+        "7.72.11": 4,
+        "7.62.1": 2,
+        "8.3.21": 6,
+        "7.67.9": 4,
+        "8.0.6": 4,
+        "7.62.0": 2,
+        "8.2.14": 18,
+        "8.1.17": 6,
+        "8.5.5": 8,
+        "8.0.3": 6,
+        "7.75.18": 4,
+        "7.75.15": 4,
+        "8.5.3": 2,
+        "7.50.2": 2,
+        "7.76.21": 2,
+        "7.72.0": 2,
+        "7.69.9": 2
+      },
+      "distinct_sessions": 150,
+      "latest_event": {
+        "page": "/webview/ai-layout",
+        "release": "8.5.0.4",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/ai-layout/full-app.tsx",
+        "mapped_path": "vc-ai/src/ai-layout/full-app.tsx",
+        "line": 88,
+        "function": "",
+        "sourcemap_missing": false,
+        "project_frames": 8,
+        "chunk_files": [
+          "hook-object.js",
+          "http.js"
+        ]
+      },
+      "category": "network",
+      "family_key": "[error] fetchGlobalKAConfig: Failed to fetch",
+      "family_users": 983,
+      "family_count": 2055,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=e80f1cb596fed62717435e6bfcc16b67&layout=normal&release=8.2.0.0",
+      "issue_id": "e80f1cb596fed62717435e6bfcc16b67",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[InvokeServierPBFast error]: logId=20261105191953BFCDEDC45A6E4B46CD5E, rate limit",
+      "message_core": "[InvokeServierPBFast error]: logId=20261105191953BFCDEDC45A6E4B46CD5E, rate limit",
+      "error_name": "InvokeServerPbError",
+      "filename": "webpack://@byteview-web/vc-ai/./src/services/transport-layer/webview/utils/server-pb.ts",
+      "count": 24624,
+      "users": 956,
+      "first_seen": 1793791251130,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=79946553a0a2f0f445d096014653681b",
+      "pid_dist": {
+        "/webview/ai-layout": 300
+      },
+      "os_dist": {
+        "Windows": 288,
+        "Mac": 12
+      },
+      "release_dist": {
+        "8.2.0.0": 298,
+        "7.77.0.21": 2
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 300
+      },
+      "host_version_dist": {
+        "7.75.15": 10,
+        "8.2.18": 12,
+        "8.3.14": 21,
+        "8.4.7": 135,
+        "7.68.6": 51,
+        "8.2.14": 68,
+        "7.72.11": 3
+      },
+      "distinct_sessions": 19,
+      "latest_event": {
+        "page": "/webview/ai-layout",
+        "release": "8.2.0.0",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/services/ai-layout.ts",
+        "mapped_path": "vc-ai/src/services/ai-layout.ts",
+        "line": 271,
+        "function": "res",
+        "sourcemap_missing": false,
+        "project_frames": 3,
+        "chunk_files": []
+      },
+      "category": "server",
+      "family_key": "[InvokeServierPBFast error]: logId=*, rate limit",
+      "family_users": 956,
+      "family_count": 24624,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=b80e6b5bf7e66952eb47c550d73face6&layout=normal&release=8.5.0.4",
+      "issue_id": "b80e6b5bf7e66952eb47c550d73face6",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[error] CommonError: Load failed",
+      "message_core": "[error] CommonError: Load failed",
+      "error_name": "Error",
+      "filename": "[native code]",
+      "count": 1082,
+      "users": 879,
+      "first_seen": 1793791384210,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=99197d60effef7d955b20dd8cc16ef38",
+      "pid_dist": {
+        "/webview/ai-layout-mobile": 206,
+        "/webview/end-summary-mobile": 12,
+        "/webview/minutes-ai-layout-mobile": 77,
+        "/webview/minutes-end-summary": 5
+      },
+      "os_dist": {
+        "iOS": 300
+      },
+      "release_dist": {
+        "8.5.0.4": 296,
+        "8.4.0.1": 3,
+        "7.77.0.21": 1
+      },
+      "source_type_dist": {
+        "manual": 291,
+        "onunhandledrejection": 9
+      },
+      "host_version_dist": {
+        "unknown": 300
+      },
+      "distinct_sessions": 262,
+      "latest_event": {
+        "page": "/webview/ai-layout-mobile",
+        "release": "8.5.0.4",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/../packages/vc-web-utils/gateway/utils/constants.ts",
+        "mapped_path": "packages/vc-web-utils/gateway/utils/constants.ts",
+        "line": 29,
+        "function": "",
+        "sourcemap_missing": false,
+        "project_frames": 7,
+        "chunk_files": []
+      },
+      "category": "network",
+      "family_key": "[error] CommonError: Load failed",
+      "family_users": 879,
+      "family_count": 1082,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=5a9225976205a96e5cd247d178a45fe8&layout=normal&release=8.2.0.0",
+      "issue_id": "5a9225976205a96e5cd247d178a45fe8",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "The WKWebView was deallocated before the message was delivered",
+      "message_core": "The WKWebView was deallocated before the message was delivered",
+      "error_name": "Error",
+      "filename": "",
+      "count": 7480,
+      "users": 862,
+      "first_seen": 1793791287199,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=d7abb6326b73d0511ad5ee071cfcb481",
+      "pid_dist": {
+        "/webview/end-summary-mobile": 131,
+        "/webview/ai-layout-mobile": 169
+      },
+      "os_dist": {
+        "iOS": 300
+      },
+      "release_dist": {
+        "8.2.0.0": 9,
+        "8.5.0.4": 261,
+        "8.4.0.1": 30
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 296,
+        "manual": 4
+      },
+      "host_version_dist": {
+        "unknown": 300
+      },
+      "distinct_sessions": 59,
+      "latest_event": {
+        "page": "/webview/end-summary-mobile",
+        "release": "8.2.0.0",
+        "source_type": "onunhandledrejection",
+        "raw_filename": null,
+        "mapped_path": null,
+        "line": null,
+        "function": null,
+        "sourcemap_missing": false,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "host",
+      "family_key": "The WKWebView was deallocated before the message was delivered",
+      "family_users": 862,
+      "family_count": 7480,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=b12ef11cd801f6383bf66d4f78081308&layout=normal&release=8.4.0.39",
+      "issue_id": "b12ef11cd801f6383bf66d4f78081308",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[error] CommonError: [native-api] network proxy failed: command=94003, contextId=iphuu39ch25q",
+      "message_core": "[error] CommonError: [native-api] network proxy failed: command=94003, contextId=iphuu39ch25q",
+      "error_name": "NativeNetworkProxyError",
+      "filename": "webpack://@byteview-web/vc-ai/./src/utils/native-api/mobile-bridge.ts",
+      "count": 3399,
+      "users": 842,
+      "first_seen": 1793791249022,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=1ddaa93189ebb1c6d826f05fc26c058e",
+      "pid_dist": {
+        "/webview/doubao-ai-layout-mobile": 300
+      },
+      "os_dist": {
+        "Android": 300
+      },
+      "release_dist": {
+        "8.4.0.39": 300
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "unknown": 300
+      },
+      "distinct_sessions": 87,
+      "latest_event": {
+        "page": "/webview/doubao-ai-layout-mobile",
+        "release": "8.4.0.39",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/services/ai-layout.ts",
+        "mapped_path": "vc-ai/src/services/ai-layout.ts",
+        "line": 262,
+        "function": "res",
+        "sourcemap_missing": false,
+        "project_frames": 4,
+        "chunk_files": []
+      },
+      "category": "network",
+      "family_key": "[error] CommonError: [native-api] network proxy failed: command=94003, contextId=*",
+      "family_users": 842,
+      "family_count": 3399,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=03d9ddb2620b3620a86da8bbf5e3c95b&layout=normal&release=8.2.0-fallback",
+      "issue_id": "03d9ddb2620b3620a86da8bbf5e3c95b",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "Failed to get a ServiceWorkerRegistration: The document is in an invalid state.",
+      "message_core": "Failed to get a ServiceWorkerRegistration: The document is in an invalid state.",
+      "error_name": "InvalidStateError",
+      "filename": "",
+      "count": 11645,
+      "users": 818,
+      "first_seen": 1793791251699,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=0cb1663b89ef2fdd5081156c3b6ab498",
+      "pid_dist": {
+        "/webcontent/video-conference-native/extensions-page/vc-ai/minutes-ai-layout-pc.html": 295,
+        "/webcontent/video-conference-native/extensions-page/vc-ai/doubao-in-lark-ai-layout.html": 5
+      },
+      "os_dist": {
+        "Mac": 117,
+        "Windows": 183
+      },
+      "release_dist": {
+        "8.2.0-fallback": 106,
+        "8.4.1-fallback": 160,
+        "7.77.1-fallback": 29,
+        "7.74.4-fallback": 5
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 298,
+        "manual": 2
+      },
+      "host_version_dist": {
+        "8.3.14": 65,
+        "8.4.7": 160,
+        "8.1.17": 3,
+        "8.3.21": 23,
+        "8.1.25": 26,
+        "8.2.18": 13,
+        "7.74.21": 5,
+        "8.2.14": 5
+      },
+      "distinct_sessions": 52,
+      "latest_event": {
+        "page": "/webcontent/video-conference-native/extensions-page/vc-ai/minutes-ai-layout-pc.html",
+        "release": "8.2.0-fallback",
+        "source_type": "onunhandledrejection",
+        "raw_filename": null,
+        "mapped_path": null,
+        "line": null,
+        "function": null,
+        "sourcemap_missing": false,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "business",
+      "family_key": "Failed to get a ServiceWorkerRegistration: The document is in an invalid state.",
+      "family_users": 818,
+      "family_count": 11645,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=41351d670f40bc7564dc472dec912d0b&layout=normal&release=8.5.0.4",
+      "issue_id": "41351d670f40bc7564dc472dec912d0b",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[error] FishBoneError: fishBone out of screen",
+      "message_core": "[error] FishBoneError: fishBone out of screen",
+      "error_name": "Error",
+      "filename": "webpack://@byteview-web/vc-ai/./src/utils/track.ts",
+      "count": 976,
+      "users": 783,
+      "first_seen": 1793791384676,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=7decac86378fc4b434774a0d14c17aaf",
+      "pid_dist": {
+        "/webview/ai-layout": 296,
+        "/webview/doubao-ai-layout-mobile": 2,
+        "/webview/minutes-ai-layout-mobile": 2
+      },
+      "os_dist": {
+        "Mac": 34,
+        "Windows": 262,
+        "Android": 3,
+        "iOS": 1
+      },
+      "release_dist": {
+        "8.5.0.4": 289,
+        "8.4.0.39": 2,
+        "8.6.0.12": 1,
+        "8.4.0.1": 8
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "8.3.21": 3,
+        "8.4.7": 142,
+        "8.3.14": 77,
+        "8.0.3": 6,
+        "8.2.16": 1,
+        "unknown": 3,
+        "8.2.14": 9,
+        "7.62.0": 6,
+        "8.0.6": 1,
+        "8.5.6": 1,
+        "8.2.18": 2,
+        "8.4.19": 8,
+        "8.1.7": 1,
+        "7.72.11": 1,
+        "8.1.12": 1,
+        "8.1.17": 5,
+        "7.76.21": 1,
+        "8.1.22": 14,
+        "7.62.1": 3,
+        "7.75.15": 1,
+        "7.72.1": 1,
+        "7.61.9": 1,
+        "7.72.0": 5,
+        "8.1.25": 1,
+        "8.0.5": 1,
+        "7.74.21": 1,
+        "7.66.0": 1,
+        "7.59.15": 2,
+        "7.50.0": 1
+      },
+      "distinct_sessions": 264,
+      "latest_event": {
+        "page": "/webview/ai-layout",
+        "release": "8.5.0.4",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/handlers/setup-fish-bone-monitor-handler.ts",
+        "mapped_path": "vc-ai/src/handlers/setup-fish-bone-monitor-handler.ts",
+        "line": 40,
+        "function": "",
+        "sourcemap_missing": false,
+        "project_frames": 2,
+        "chunk_files": []
+      },
+      "category": "business",
+      "family_key": "[error] FishBoneError: fishBone out of screen",
+      "family_users": 783,
+      "family_count": 976,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=938f8ba377ac6484ba8918b19f247350&layout=normal&release=1.0.0.360",
+      "issue_id": "938f8ba377ac6484ba8918b19f247350",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "common.networkProxy_59 timeout after 60s",
+      "message_core": "common.networkProxy_59 timeout after 60s",
+      "error_name": "Error",
+      "filename": "webpack://@byteview-web/vc-ai/./src/utils/native.ts",
+      "count": 3204,
+      "users": 673,
+      "first_seen": 1793791457508,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=f4939c17bc3eacc99e5f8c2d402f5eb4",
+      "pid_dist": {
+        "/webview/doubao-ai-layout-mobile": 294,
+        "/webview/doubao-end-summary-mobile": 6
+      },
+      "os_dist": {
+        "iOS": 297,
+        "Android": 3
+      },
+      "release_dist": {
+        "1.0.0.360": 300
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 291,
+        "manual": 9
+      },
+      "host_version_dist": {
+        "unknown": 300
+      },
+      "distinct_sessions": 79,
+      "latest_event": {
+        "page": "/webview/doubao-ai-layout-mobile",
+        "release": "1.0.0.360",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/utils/native.ts",
+        "mapped_path": "vc-ai/src/utils/native.ts",
+        "line": 287,
+        "function": "",
+        "sourcemap_missing": false,
+        "project_frames": 1,
+        "chunk_files": []
+      },
+      "category": "host",
+      "family_key": "common.networkProxy_* timeout after 60s",
+      "family_users": 673,
+      "family_count": 3204,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=01aab97765e186ea011b0880a3a98b7a&layout=normal&release=8.5.0.4",
+      "issue_id": "01aab97765e186ea011b0880a3a98b7a",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[error] CommonError: Failed to execute \"webview_ShellAPI.app.iron.getAvatarWithCache_req_2892\": Failed! ",
+      "message_core": "[error] CommonError: Failed to execute \"webview_ShellAPI.app.iron.getAvatarWithCache_req_2892\": Failed! ",
+      "error_name": "ShellapiCommonError",
+      "filename": "native-resource://sandbox_fs/neotix/lark-api-core.js",
+      "count": 1326,
+      "users": 616,
+      "first_seen": 1793791288412,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=e496d2745bde7d8f920d3311b67d15b7",
+      "pid_dist": {
+        "/webview/ai-layout": 167,
+        "/webview/end-summary": 124,
+        "/webview/minutes-ai-layout-pc": 6,
+        "/webview/minutes-end-summary-pc": 3
+      },
+      "os_dist": {
+        "Mac": 14,
+        "Windows": 286
+      },
+      "release_dist": {
+        "8.5.0.4": 285,
+        "8.2.0.0": 5,
+        "8.4.0.1": 5,
+        "8.6.0.12": 4,
+        "7.77.0.21": 1
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "7.69.15": 2,
+        "8.4.7": 150,
+        "8.3.14": 48,
+        "8.2.14": 7,
+        "8.1.17": 9,
+        "8.5.5": 3,
+        "8.4.5": 1,
+        "7.62.1": 6,
+        "7.70.12": 1,
+        "7.62.0": 5,
+        "8.4.19": 2,
+        "7.72.8": 4,
+        "8.4.17": 49,
+        "8.3.8": 1,
+        "8.5.6": 1,
+        "7.54.0": 1,
+        "7.72.11": 1,
+        "7.73.9": 1,
+        "7.75.18": 1,
+        "8.0.3": 2,
+        "7.72.0": 4,
+        "7.66.1": 1
+      },
+      "distinct_sessions": 213,
+      "latest_event": {
+        "page": "/webview/ai-layout",
+        "release": "8.5.0.4",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/../packages/vc-web-utils/fetch-queue.ts",
+        "mapped_path": "packages/vc-web-utils/fetch-queue.ts",
+        "line": 68,
+        "function": "responseHandler",
+        "sourcemap_missing": false,
+        "project_frames": 6,
+        "chunk_files": []
+      },
+      "category": "host",
+      "family_key": "[error] CommonError: Failed to execute \"webview_ShellAPI.app.iron.getAvatarWithCache_req_*\": Failed!",
+      "family_users": 616,
+      "family_count": 1326,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=9792064ef1481047ac7316e989156d15&layout=normal&release=8.5.0.4",
+      "issue_id": "9792064ef1481047ac7316e989156d15",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[error] CommonError: Error invoking invokeNative: Java bridge method invocation error",
+      "message_core": "[error] CommonError: Error invoking invokeNative: Java bridge method invocation error",
+      "error_name": "Error",
+      "filename": "webpack://@byteview-web/vc-ai/../packages/vc-web-utils/log.ts",
+      "count": 633,
+      "users": 609,
+      "first_seen": 1793791370877,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=168c855269804b2c7cea1f9c2f5d588f",
+      "pid_dist": {
+        "/webview/ai-layout-mobile": 160,
+        "/webview/end-summary-mobile": 77,
+        "/webview/minutes-end-summary": 63
+      },
+      "os_dist": {
+        "Android": 300
+      },
+      "release_dist": {
+        "8.5.0.4": 300
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "8.2.6": 3,
+        "8.4.9": 69,
+        "8.1.12": 12,
+        "7.65.8": 1,
+        "7.76.14": 6,
+        "7.75.17": 1,
+        "8.4.10": 1,
+        "7.70.12": 3,
+        "8.0.2": 4,
+        "7.62.6": 29,
+        "7.59.6": 2,
+        "8.3.6": 25,
+        "7.61.8": 5,
+        "7.68.10": 10,
+        "7.67.9": 13,
+        "7.66.6": 14,
+        "7.64.5": 5,
+        "7.65.6": 7,
+        "7.52.4": 7,
+        "7.75.15": 2,
+        "7.72.10": 4,
+        "7.58.9": 3,
+        "7.50.14": 3,
+        "7.51.7": 4,
+        "7.74.9": 5,
+        "7.50.12": 1,
+        "8.5.2": 2,
+        "7.69.6": 7,
+        "7.73.11": 10,
+        "8.1.14": 3,
+        "7.74.12": 2,
+        "7.57.6": 1,
+        "7.71.8": 5,
+        "8.4.8": 1,
+        "7.63.9": 3,
+        "7.70.13": 7,
+        "7.54.8": 5,
+        "7.50.13": 2,
+        "7.74.6": 1,
+        "7.68.12": 1,
+        "7.50.11": 1,
+        "7.49.12": 2,
+        "7.58.11": 1,
+        "7.50.15": 1,
+        "7.56.10": 3,
+        "7.60.11": 1,
+        "7.59.9": 1,
+        "7.55.20": 1
+      },
+      "distinct_sessions": 297,
+      "latest_event": {
+        "page": "/webview/ai-layout-mobile",
+        "release": "8.5.0.4",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/../packages/vc-web-utils/gateway/index.ts",
+        "mapped_path": "packages/vc-web-utils/gateway/index.ts",
+        "line": 37,
+        "function": "",
+        "sourcemap_missing": false,
+        "project_frames": 8,
+        "chunk_files": []
+      },
+      "category": "host",
+      "family_key": "[error] CommonError: Error invoking invokeNative: Java bridge method invocation error",
+      "family_users": 609,
+      "family_count": 633,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=740344cb27e680e91f285cf8924e1aaf&layout=normal&release=8.5.0.4",
+      "issue_id": "740344cb27e680e91f285cf8924e1aaf",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[native-api] common.getAvatarBase64 timed out after 60000ms",
+      "message_core": "[native-api] common.getAvatarBase64 timed out after 60000ms",
+      "error_name": "NativeApiRequestTimeoutError",
+      "filename": "webpack://@byteview-web/vc-ai/./src/utils/native-api/types.ts",
+      "count": 1226,
+      "users": 599,
+      "first_seen": 1793791265378,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=d3b20f083bd6f6b0fe19d3881be7fbcb",
+      "pid_dist": {
+        "/webview/ai-layout-mobile": 246,
+        "/webview/end-summary-mobile": 54
+      },
+      "os_dist": {
+        "iOS": 300
+      },
+      "release_dist": {
+        "8.5.0.4": 300
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 300
+      },
+      "host_version_dist": {
+        "unknown": 300
+      },
+      "distinct_sessions": 236,
+      "latest_event": {
+        "page": "/webview/ai-layout-mobile",
+        "release": "8.5.0.4",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/utils/native-api/mobile-native-client.ts",
+        "mapped_path": "vc-ai/src/utils/native-api/mobile-native-client.ts",
+        "line": 117,
+        "function": "apiName",
+        "sourcemap_missing": false,
+        "project_frames": 2,
+        "chunk_files": []
+      },
+      "category": "host",
+      "family_key": "[native-api] common.getAvatarBase64 timed out after 60000ms",
+      "family_users": 599,
+      "family_count": 1226,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=592008af6300945d90df316dde970926&layout=normal&release=7.71.0-fallback",
+      "issue_id": "592008af6300945d90df316dde970926",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[MeetingManager] meeting_id=7704631769538661390 not found",
+      "message_core": "[MeetingManager] meeting_id=7704631769538661390 not found",
+      "error_name": "TransportError",
+      "filename": "native-resource://sandbox_fs/webcontent/lark-api/lark-api-injected.js",
+      "count": 647,
+      "users": 560,
+      "first_seen": 1793791431271,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=300edc001860de5e3959294b7cb71b51",
+      "pid_dist": {
+        "/webcontent/video-conference-native/extensions-page/vc-ai/end-summary.html": 160,
+        "/webview/ai-layout": 37,
+        "/webview/minutes-ai-layout-pc": 67,
+        "/webcontent/video-conference-native/extensions-page/vc-ai/minutes-end-summary-pc.html": 34,
+        "/webcontent/video-conference-native/extensions-page/vc-ai/minutes-summary.html": 1,
+        "/webview/end-summary": 1
+      },
+      "os_dist": {
+        "Windows": 270,
+        "Mac": 27,
+        "GNU/Linux": 1,
+        "OpenHarmony": 2
+      },
+      "release_dist": {
+        "7.71.0-fallback": 126,
+        "7.71.1-fallback": 70,
+        "8.5.0.4": 103,
+        "8.2.0.0": 1
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 10,
+        "manual": 290
+      },
+      "host_version_dist": {
+        "7.70.10": 53,
+        "7.71.12": 68,
+        "7.72.8": 11,
+        "7.72.0": 58,
+        "7.70.12": 78,
+        "7.72.1": 8,
+        "7.72.23": 1,
+        "7.72.2": 8,
+        "7.72.41": 2,
+        "7.72.11": 5,
+        "7.71.13": 4,
+        "7.72.6": 2,
+        "7.72.4": 1,
+        "7.72.15": 1
+      },
+      "distinct_sessions": 300,
+      "latest_event": {
+        "page": "/webcontent/video-conference-native/extensions-page/vc-ai/end-summary.html",
+        "release": "7.71.0-fallback",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "native-resource://sandbox_fs/webcontent/lark-api/lark-api-injected.js",
+        "mapped_path": null,
+        "line": 1,
+        "function": "async xk",
+        "sourcemap_missing": true,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "host",
+      "family_key": "[MeetingManager] meeting_id=* not found",
+      "family_users": 560,
+      "family_count": 647,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=599ce4105450bb43a3d5a0318849116a&layout=normal&release=8.5.0.4",
+      "issue_id": "599ce4105450bb43a3d5a0318849116a",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[error] CommonError: [InvokeServierPBFast error]: logId=, 糟糕...发生了一些错误，请稍后重试",
+      "message_core": "[error] CommonError: [InvokeServierPBFast error]: logId=, 糟糕...发生了一些错误，请稍后重试",
+      "error_name": "InvokeServerPbError",
+      "filename": "webpack://@byteview-web/vc-ai/./src/services/transport-layer/webview/utils/server-pb.ts",
+      "count": 576,
+      "users": 551,
+      "first_seen": 1793791565568,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=2a14938623df8c30c1dd412602141261",
+      "pid_dist": {
+        "/webview/minutes-end-summary-pc": 300
+      },
+      "os_dist": {
+        "Mac": 114,
+        "Windows": 185,
+        "GNU/Linux": 1
+      },
+      "release_dist": {
+        "8.5.0.4": 296,
+        "8.4.0.1": 4
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "8.4.3": 1,
+        "8.2.14": 14,
+        "8.3.14": 53,
+        "8.4.7": 132,
+        "8.0.6": 5,
+        "7.62.0": 3,
+        "8.1.17": 19,
+        "8.2.18": 8,
+        "7.75.18": 5,
+        "7.53.16": 7,
+        "7.72.15": 1,
+        "7.69.15": 4,
+        "8.0.3": 4,
+        "7.73.9": 1,
+        "7.74.21": 7,
+        "8.1.14": 1,
+        "7.72.8": 2,
+        "8.5.5": 5,
+        "8.5.3": 2,
+        "7.67.9": 3,
+        "8.3.21": 9,
+        "7.72.0": 2,
+        "7.66.0": 1,
+        "7.76.15": 1,
+        "7.72.1": 2,
+        "8.1.25": 4,
+        "7.68.6": 1,
+        "7.71.12": 1,
+        "7.66.11": 1,
+        "7.76.21": 1
+      },
+      "distinct_sessions": 297,
+      "latest_event": {
+        "page": "/webview/minutes-end-summary-pc",
+        "release": "8.5.0.4",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/./src/services/transport-layer/webview/utils/ai-end-summary.ts",
+        "mapped_path": "vc-ai/src/services/transport-layer/webview/utils/ai-end-summary.ts",
+        "line": 319,
+        "function": "res",
+        "sourcemap_missing": false,
+        "project_frames": 3,
+        "chunk_files": []
+      },
+      "category": "server",
+      "family_key": "[error] CommonError: [InvokeServierPBFast error]: logId=*, 糟糕...发生了一些错误，请稍后重试",
+      "family_users": 551,
+      "family_count": 576,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=e88b98c087a9bb24a5ca47c80f08fa08&layout=normal&release=8.5.0.4",
+      "issue_id": "e88b98c087a9bb24a5ca47c80f08fa08",
+      "bid": "vc_ai",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[warn] ErrorBoundary: Expected ',' or '}' after property value in JSON at position 257 (line 1 column 258)",
+      "message_core": "[warn] ErrorBoundary: Expected ',' or '}' after property value in JSON at position 257 (line 1 column 258)",
+      "error_name": "SyntaxError",
+      "filename": "<anonymous>",
+      "count": 3504,
+      "users": 547,
+      "first_seen": 1793791291944,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=vc_ai&ev_type=js_error&site_type=web&region=cn&lang=zh&env=online&start_time=1793272847&end_time=1793877647&filter_id=1b52f2dbf576a8750b77bea0ce6b17a7",
+      "pid_dist": {
+        "/webview/ai-layout": 223,
+        "/webview/minutes-end-summary-pc": 2,
+        "/webview/minutes-ai-layout-pc": 10,
+        "/webview/end-summary": 55,
+        "/webview/end-summary-mobile": 2,
+        "/webview/ai-layout-mobile": 5,
+        "/webview/minutes-end-summary": 2,
+        "/webview/minutes-ai-layout-mobile": 1
+      },
+      "os_dist": {
+        "Mac": 92,
+        "Windows": 186,
+        "Android": 8,
+        "OpenHarmony": 2,
+        "GNU/Linux": 12
+      },
+      "release_dist": {
+        "8.5.0.4": 300
+      },
+      "source_type_dist": {
+        "manual": 300
+      },
+      "host_version_dist": {
+        "8.3.14": 23,
+        "8.4.7": 53,
+        "8.2.14": 24,
+        "7.62.1": 19,
+        "7.75.15": 11,
+        "7.65.8": 10,
+        "8.4.9": 4,
+        "unknown": 2,
+        "8.2.18": 23,
+        "8.3.21": 40,
+        "8.1.17": 15,
+        "7.62.6": 1,
+        "7.66.10": 10,
+        "8.0.3": 18,
+        "7.76.21": 5,
+        "7.63.7": 4,
+        "8.4.17": 3,
+        "8.1.12": 1,
+        "7.72.11": 26,
+        "7.50.16": 3,
+        "7.62.0": 1,
+        "7.72.10": 1,
+        "7.72.23": 2,
+        "7.75.17": 1
+      },
+      "distinct_sessions": 171,
+      "latest_event": {
+        "page": "/webview/ai-layout",
+        "release": "8.5.0.4",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview-web/vc-ai/../src/core/reaction.ts",
+        "mapped_path": "src/core/reaction.ts",
+        "line": 174,
+        "function": "trackDerivedFunction",
+        "sourcemap_missing": false,
+        "project_frames": 7,
+        "chunk_files": []
+      },
+      "category": "business",
+      "family_key": "[warn] ErrorBoundary: Expected ',' or '}' after property value in JSON at position * (line * column *)",
+      "family_users": 547,
+      "family_count": 3504,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=8e310edc33a83872db358c453bf8df8f&layout=normal&release=8.5.3",
+      "issue_id": "8e310edc33a83872db358c453bf8df8f",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[RECORD_SDK] mic silence error: no audio frame callback within timeout",
+      "message_core": "mic silence error: no audio frame callback within timeout",
+      "error_name": "Error",
+      "filename": "/webcontent/videomm/extensions-modal/record-page/59.3b879b2c.js",
+      "count": 4,
+      "users": 4,
+      "first_seen": 1793847391436,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=dbea76c03c49aa68cf7883e3476ba1f5",
+      "pid_dist": {
+        "record-page": 4
+      },
+      "os_dist": {
+        "Windows": 4
+      },
+      "release_dist": {
+        "8.5.3": 1,
+        "8.5.5": 3
+      },
+      "source_type_dist": {
+        "manual": 4
+      },
+      "host_version_dist": {
+        "8.5.3": 1,
+        "8.5.5": 3
+      },
+      "distinct_sessions": 4,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.5.3",
+        "source_type": "manual",
+        "raw_filename": "/webcontent/videomm/extensions-modal/record-page/59.3b879b2c.js",
+        "mapped_path": "vc-ai/webcontent/videomm/extensions-modal/record-page/59.3b879b2c.js",
+        "line": 2,
+        "function": "async J.endRecordingAndNavigate",
+        "sourcemap_missing": true,
+        "project_frames": 3,
+        "chunk_files": [
+          "59.3b879b2c.js"
+        ]
+      },
+      "category": "business",
+      "family_key": "mic silence error: no audio frame callback within timeout",
+      "family_users": 11,
+      "family_count": 13,
+      "family_size": 3
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=d62057b3869df32a0d7f340d07ecd3ee&layout=normal&release=8.5.5",
+      "issue_id": "d62057b3869df32a0d7f340d07ecd3ee",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[RECORD_SDK] mic silence error: no audio frame callback within timeout",
+      "message_core": "mic silence error: no audio frame callback within timeout",
+      "error_name": "Error",
+      "filename": "file:///Applications/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/147.0.7727.149/Resources/webcontent/videomm/extensions-modal/record-page/59.3b879b2c.js",
+      "count": 6,
+      "users": 4,
+      "first_seen": 1793796700543,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=1bf7167d8c6f73564815dbae577101e3",
+      "pid_dist": {
+        "record-page": 6
+      },
+      "os_dist": {
+        "Mac": 6
+      },
+      "release_dist": {
+        "8.5.5": 5,
+        "8.5.3": 1
+      },
+      "source_type_dist": {
+        "manual": 6
+      },
+      "host_version_dist": {
+        "8.5.5": 5,
+        "8.5.3": 1
+      },
+      "distinct_sessions": 6,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.5.5",
+        "source_type": "manual",
+        "raw_filename": "file:///Applications/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/147.0.7727.149/Resources/webcontent/videomm/extensions-modal/record-page/59.3b879b2c.js",
+        "mapped_path": null,
+        "line": 2,
+        "function": "async J.endRecordingAndNavigate",
+        "sourcemap_missing": true,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "business",
+      "family_key": "mic silence error: no audio frame callback within timeout",
+      "family_users": 11,
+      "family_count": 13,
+      "family_size": 3
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=8f2468383377bbc430ab98970a944f77&layout=normal&release=8.1.17",
+      "issue_id": "8f2468383377bbc430ab98970a944f77",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[RECORD_SDK] mic silence error: no audio frame callback within timeout",
+      "message_core": "mic silence error: no audio frame callback within timeout",
+      "error_name": "Error",
+      "filename": "file:///Applications/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/147.0.7727.149/Resources/webcontent/videomm/extensions-modal/record-page/record-page.78a84c9a.js",
+      "count": 3,
+      "users": 3,
+      "first_seen": 1793847484457,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=57c84db952e5bf746ae92b57b59dc129",
+      "pid_dist": {
+        "record-page": 3
+      },
+      "os_dist": {
+        "Mac": 3
+      },
+      "release_dist": {
+        "8.1.17": 3
+      },
+      "source_type_dist": {
+        "manual": 3
+      },
+      "host_version_dist": {
+        "8.1.17": 3
+      },
+      "distinct_sessions": 3,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.1.17",
+        "source_type": "manual",
+        "raw_filename": "file:///Applications/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/147.0.7727.149/Resources/webcontent/videomm/extensions-modal/record-page/record-page.78a84c9a.js",
+        "mapped_path": null,
+        "line": 1,
+        "function": "async Re.endRecordingAndNavigate",
+        "sourcemap_missing": true,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "business",
+      "family_key": "mic silence error: no audio frame callback within timeout",
+      "family_users": 11,
+      "family_count": 13,
+      "family_size": 3
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=aa441bd689fb79db577a340e3c728520&layout=normal&release=8.4.1_2026_10_20_17_14_3_22",
+      "issue_id": "aa441bd689fb79db577a340e3c728520",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "CustomError(\"db closed or not init\")",
+      "message_core": "CustomError(\"db closed or not init\")",
+      "error_name": "Error",
+      "filename": "webpack://@byteview/calls-and-meetings/../node_modules/@lark/services/node_modules/@lark/foundation-adapter-shellapi/es/transport/utils.js",
+      "count": 9,
+      "users": 3,
+      "first_seen": 1793797996924,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=f248101ac15e84e1618397da25294dc1",
+      "pid_dist": {
+        "video-conference-page": 9
+      },
+      "os_dist": {
+        "Windows": 9
+      },
+      "release_dist": {
+        "8.4.1_2026_10_20_17_14_3_22": 9
+      },
+      "source_type_dist": {
+        "manual": 9
+      },
+      "host_version_dist": {
+        "8.4.7": 9
+      },
+      "distinct_sessions": 3,
+      "latest_event": {
+        "page": "video-conference-page",
+        "release": "8.4.1_2026_10_20_17_14_3_22",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview/calls-and-meetings/../node_modules/@lark/services/node_modules/@lark/foundation-adapter-shellapi/es/feature-gating/worker/index.js",
+        "mapped_path": null,
+        "line": 43,
+        "function": "",
+        "sourcemap_missing": false,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "host",
+      "family_key": "CustomError(\"db closed or not init\")",
+      "family_users": 9,
+      "family_count": 15,
+      "family_size": 3
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=10f0e421d15e9a9e4f142d5fe5c8d993&layout=normal&release=8.4.1_2026_10_20_17_14_3_22",
+      "issue_id": "10f0e421d15e9a9e4f142d5fe5c8d993",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "CustomError(\"db closed or not init\")",
+      "message_core": "CustomError(\"db closed or not init\")",
+      "error_name": "Error",
+      "filename": "webpack://@byteview/calls-and-meetings/../node_modules/@lark/services/node_modules/@lark/foundation-adapter-shellapi/es/transport/utils.js",
+      "count": 3,
+      "users": 3,
+      "first_seen": 1793797996925,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=0745bc1346ac59f08e3318fe2d03b800",
+      "pid_dist": {
+        "video-conference-page": 3
+      },
+      "os_dist": {
+        "Windows": 3
+      },
+      "release_dist": {
+        "8.4.1_2026_10_20_17_14_3_22": 3
+      },
+      "source_type_dist": {
+        "manual": 2,
+        "onunhandledrejection": 1
+      },
+      "host_version_dist": {
+        "8.4.7": 3
+      },
+      "distinct_sessions": 3,
+      "latest_event": {
+        "page": "video-conference-page",
+        "release": "8.4.1_2026_10_20_17_14_3_22",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview/calls-and-meetings/../node_modules/@lark/services/node_modules/@lark/foundation-adapter-shellapi/es/analytics/index.js",
+        "mapped_path": null,
+        "line": 124,
+        "function": "teaInited",
+        "sourcemap_missing": false,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "host",
+      "family_key": "CustomError(\"db closed or not init\")",
+      "family_users": 9,
+      "family_count": 15,
+      "family_size": 3
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=badfebffa0cd0452848a770754e29b61&layout=normal&release=7.77.2_2026_9_16_22_52_52_469",
+      "issue_id": "badfebffa0cd0452848a770754e29b61",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "CustomError(\"db closed or not init\")",
+      "message_core": "CustomError(\"db closed or not init\")",
+      "error_name": "Error",
+      "filename": "webpack://@byteview/calls-and-meetings/../../node_modules/@lark/services/node_modules/@lark/foundation-adapter-shellapi/es/transport/utils.js",
+      "count": 3,
+      "users": 3,
+      "first_seen": 1793840084437,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=3583ca3fa80cd8997430961b4597b372",
+      "pid_dist": {
+        "video-conference-page": 3
+      },
+      "os_dist": {
+        "Windows": 3
+      },
+      "release_dist": {
+        "7.77.2_2026_9_16_22_52_52_469": 2,
+        "7.62.1_2026_1_28_17_24_55_605": 1
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 2,
+        "manual": 1
+      },
+      "host_version_dist": {
+        "8.1.17": 2,
+        "7.62.1": 1
+      },
+      "distinct_sessions": 3,
+      "latest_event": {
+        "page": "video-conference-page",
+        "release": "7.77.2_2026_9_16_22_52_52_469",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "webpack://@byteview/calls-and-meetings/../../node_modules/@lark/services/node_modules/@lark/foundation-adapter-shellapi/es/analytics/index.js",
+        "mapped_path": null,
+        "line": 124,
+        "function": "teaInited",
+        "sourcemap_missing": false,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "host",
+      "family_key": "CustomError(\"db closed or not init\")",
+      "family_users": 9,
+      "family_count": 15,
+      "family_size": 3
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=1d5e760963fd39db5942134d2dfbce26&layout=normal&release=8.3.21",
+      "issue_id": "1d5e760963fd39db5942134d2dfbce26",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[RECORD_SDK] [warn] ErrorBoundary: Expected ',' or '}' after property value in JSON at position 277 (line 1 column 278)",
+      "message_core": "ErrorBoundary: Expected ',' or '}' after property value in JSON at position 277 (line 1 column 278)",
+      "error_name": "SyntaxError",
+      "filename": "<anonymous>",
+      "count": 21,
+      "users": 5,
+      "first_seen": 1793863776433,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=ee1fd8f627b3faccb40857e106c0f4d1",
+      "pid_dist": {
+        "record-page": 21
+      },
+      "os_dist": {
+        "Mac": 9,
+        "Windows": 12
+      },
+      "release_dist": {
+        "8.3.21": 7,
+        "8.3.14": 12,
+        "8.2.18": 2
+      },
+      "source_type_dist": {
+        "manual": 21
+      },
+      "host_version_dist": {
+        "8.3.21": 7,
+        "8.3.14": 12,
+        "8.2.18": 2
+      },
+      "distinct_sessions": 5,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.3.21",
+        "source_type": "manual",
+        "raw_filename": "https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/1502-8a673f5158b7de71c201-ai.js",
+        "mapped_path": null,
+        "line": 2,
+        "function": "t.track",
+        "sourcemap_missing": false,
+        "project_frames": 9,
+        "chunk_files": [
+          "1502-8a673f5158b7de71c201-ai.js",
+          "4315-4882b72f71a61dbfa146-ai.js",
+          "6021-8cc8d1fdab541f954fab-ai.js",
+          "9400-7347e0675c79de5f2f7c-ai.js"
+        ]
+      },
+      "category": "business",
+      "family_key": "ErrorBoundary: Expected ',' or '}' after property value in JSON at position * (line * column *)",
+      "family_users": 9,
+      "family_count": 25,
+      "family_size": 2
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=4bd256e591f17be56fb0094204dc33fa&layout=normal&release=8.3.14",
+      "issue_id": "4bd256e591f17be56fb0094204dc33fa",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[RECORD_SDK] [warn] ErrorBoundary: Expected ',' or '}' after property value in JSON at position 362 (line 1 column 363)",
+      "message_core": "ErrorBoundary: Expected ',' or '}' after property value in JSON at position 362 (line 1 column 363)",
+      "error_name": "SyntaxError",
+      "filename": "<anonymous>",
+      "count": 4,
+      "users": 4,
+      "first_seen": 1793863808179,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=cc1fc579d25b7b6f467f43d925e5d4cd",
+      "pid_dist": {
+        "record-page": 4
+      },
+      "os_dist": {
+        "Windows": 1,
+        "Mac": 3
+      },
+      "release_dist": {
+        "8.3.14": 1,
+        "8.3.21": 1,
+        "8.2.18": 2
+      },
+      "source_type_dist": {
+        "manual": 4
+      },
+      "host_version_dist": {
+        "8.3.14": 1,
+        "8.3.21": 1,
+        "8.2.18": 2
+      },
+      "distinct_sessions": 4,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.3.14",
+        "source_type": "manual",
+        "raw_filename": "https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/3057-3fb68a0fe088817178ae-ai.js",
+        "mapped_path": null,
+        "line": 2,
+        "function": "t.track",
+        "sourcemap_missing": false,
+        "project_frames": 9,
+        "chunk_files": [
+          "3057-3fb68a0fe088817178ae-ai.js",
+          "4315-4882b72f71a61dbfa146-ai.js",
+          "6021-8cc8d1fdab541f954fab-ai.js",
+          "9400-7347e0675c79de5f2f7c-ai.js"
+        ]
+      },
+      "category": "business",
+      "family_key": "ErrorBoundary: Expected ',' or '}' after property value in JSON at position * (line * column *)",
+      "family_users": 9,
+      "family_count": 25,
+      "family_size": 2
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=d95cf5d6b8ed5da25e5b65692f25e96a&layout=normal&release=8.4.7",
+      "issue_id": "d95cf5d6b8ed5da25e5b65692f25e96a",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[SUMMARY_SDK] [error] CommonError: NetError { code: -352, msg: \"\", extra: {\"code\": \"11\", \"msg\": \"\"} }",
+      "message_core": "[SUMMARY_SDK] [error] CommonError: NetError { code: -352, msg: \"\", extra: {\"code\": \"11\", \"msg\": \"\"} }",
+      "error_name": "Error",
+      "filename": "https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/2509-3ce260e1381ba28c3dcf-ai.js",
+      "count": 4,
+      "users": 3,
+      "first_seen": 1793840573066,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=43a4e918ce937402a2b5ad67de589fbf",
+      "pid_dist": {
+        "record-page": 4
+      },
+      "os_dist": {
+        "Windows": 4
+      },
+      "release_dist": {
+        "8.4.7": 4
+      },
+      "source_type_dist": {
+        "manual": 4
+      },
+      "host_version_dist": {
+        "8.4.7": 4
+      },
+      "distinct_sessions": 3,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.4.7",
+        "source_type": "manual",
+        "raw_filename": "https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/2509-3ce260e1381ba28c3dcf-ai.js",
+        "mapped_path": null,
+        "line": 1,
+        "function": "handleMessage",
+        "sourcemap_missing": true,
+        "project_frames": 2,
+        "chunk_files": [
+          "2509-3ce260e1381ba28c3dcf-ai.js"
+        ]
+      },
+      "category": "network",
+      "family_key": "[SUMMARY_SDK] [error] CommonError: NetError { code: -352, msg: \"\", extra: {\"code\": \"11\", \"msg\": \"\"} }",
+      "family_users": 6,
+      "family_count": 14,
+      "family_size": 2
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=bd5c20fde3abf3b0d4144f89846ea013&layout=normal&release=8.4.5",
+      "issue_id": "bd5c20fde3abf3b0d4144f89846ea013",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[SUMMARY_SDK] [error] CommonError: NetError { code: -352, msg: \"\", extra: {\"code\": \"11\", \"msg\": \"\"} }",
+      "message_core": "[SUMMARY_SDK] [error] CommonError: NetError { code: -352, msg: \"\", extra: {\"code\": \"11\", \"msg\": \"\"} }",
+      "error_name": "Error",
+      "filename": "https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/2001-923772d5c5f06307daf2-ai.js",
+      "count": 10,
+      "users": 3,
+      "first_seen": 1793842507609,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=d64b9e8d68afc9d832f1aa1fa88fb402",
+      "pid_dist": {
+        "record-page": 10
+      },
+      "os_dist": {
+        "Mac": 10
+      },
+      "release_dist": {
+        "8.4.5": 3,
+        "8.2.6": 4,
+        "8.5.3": 3
+      },
+      "source_type_dist": {
+        "manual": 10
+      },
+      "host_version_dist": {
+        "8.4.5": 3,
+        "8.2.6": 4,
+        "8.5.3": 3
+      },
+      "distinct_sessions": 3,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.4.5",
+        "source_type": "manual",
+        "raw_filename": "https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/2001-923772d5c5f06307daf2-ai.js",
+        "mapped_path": null,
+        "line": 1,
+        "function": "handleMessage",
+        "sourcemap_missing": true,
+        "project_frames": 2,
+        "chunk_files": [
+          "2001-923772d5c5f06307daf2-ai.js"
+        ]
+      },
+      "category": "network",
+      "family_key": "[SUMMARY_SDK] [error] CommonError: NetError { code: -352, msg: \"\", extra: {\"code\": \"11\", \"msg\": \"\"} }",
+      "family_users": 6,
+      "family_count": 14,
+      "family_size": 2
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=5742b5f18c43eb23bc1c45ff622a7e89&layout=normal&release=7.24.0_2024_7_25_11_30_32_516",
+      "issue_id": "5742b5f18c43eb23bc1c45ff622a7e89",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "NetError { code: 10003, msg: \"Offline\", extra: {} }",
+      "message_core": "NetError { code: 10003, msg: \"Offline\", extra: {} }",
+      "error_name": "Error",
+      "filename": "webpack://@byteview/calls-and-meetings/../../node_modules/@lark/foundation-adapter-shellapi/es/transport/utils.js",
+      "count": 4,
+      "users": 3,
+      "first_seen": 1793838534221,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=d7d87e3a92ed6e9288172e19a1983de4",
+      "pid_dist": {
+        "video-conference-page": 4
+      },
+      "os_dist": {
+        "Windows": 4
+      },
+      "release_dist": {
+        "7.24.0_2024_7_25_11_30_32_516": 4
+      },
+      "source_type_dist": {
+        "manual": 4
+      },
+      "host_version_dist": {
+        "7.24.4": 4
+      },
+      "distinct_sessions": 4,
+      "latest_event": {
+        "page": "video-conference-page",
+        "release": "7.24.0_2024_7_25_11_30_32_516",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview/calls-and-meetings/./src/hooks/list.ts",
+        "mapped_path": "packages/byteview-calls-and-meetings/src/hooks/list.ts",
+        "line": 98,
+        "function": "",
+        "sourcemap_missing": false,
+        "project_frames": 3,
+        "chunk_files": []
+      },
+      "category": "network",
+      "family_key": "NetError { code: 10003, msg: \"Offline\", extra: {} }",
+      "family_users": 6,
+      "family_count": 7,
+      "family_size": 3
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=e99a08e6bf9f6c33f1e3166644c3a5e8&layout=normal&release=7.24.0_2024_7_25_11_30_32_516",
+      "issue_id": "e99a08e6bf9f6c33f1e3166644c3a5e8",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "NetError { code: 10003, msg: \"Offline\", extra: {} }",
+      "message_core": "NetError { code: 10003, msg: \"Offline\", extra: {} }",
+      "error_name": "Error",
+      "filename": "webpack://@byteview/calls-and-meetings/../../node_modules/@lark/foundation-adapter-shellapi/es/transport/utils.js",
+      "count": 2,
+      "users": 2,
+      "first_seen": 1793838534221,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=dac12ede840dbafdfd1f3282a45f3502",
+      "pid_dist": {
+        "video-conference-page": 2
+      },
+      "os_dist": {
+        "Windows": 2
+      },
+      "release_dist": {
+        "7.24.0_2024_7_25_11_30_32_516": 2
+      },
+      "source_type_dist": {
+        "manual": 2
+      },
+      "host_version_dist": {
+        "7.24.4": 2
+      },
+      "distinct_sessions": 2,
+      "latest_event": {
+        "page": "video-conference-page",
+        "release": "7.24.0_2024_7_25_11_30_32_516",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview/calls-and-meetings/../../node_modules/@lark/foundation-adapter-shellapi/es/transport/callServerApi.js",
+        "mapped_path": null,
+        "line": 59,
+        "function": "result",
+        "sourcemap_missing": false,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "network",
+      "family_key": "NetError { code: 10003, msg: \"Offline\", extra: {} }",
+      "family_users": 6,
+      "family_count": 7,
+      "family_size": 3
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=9713d0c3e767482595f6c1bdbd00d1dc&layout=normal&release=7.72.3_2026_6_30_14_59_31_210",
+      "issue_id": "9713d0c3e767482595f6c1bdbd00d1dc",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "NetError { code: 10003, msg: \"Offline\", extra: {} }",
+      "message_core": "NetError { code: 10003, msg: \"Offline\", extra: {} }",
+      "error_name": "Error",
+      "filename": "webpack://@byteview/calls-and-meetings/../../node_modules/@lark/services/node_modules/@lark/foundation-adapter-shellapi/es/transport/utils.js",
+      "count": 1,
+      "users": 1,
+      "first_seen": 1793871320999,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=1ff20cb067afe4558e099702d02afe27",
+      "pid_dist": {
+        "video-conference-page": 1
+      },
+      "os_dist": {
+        "Windows": 1
+      },
+      "release_dist": {
+        "7.72.3_2026_6_30_14_59_31_210": 1
+      },
+      "source_type_dist": {
+        "manual": 1
+      },
+      "host_version_dist": {
+        "7.72.0": 1
+      },
+      "distinct_sessions": 1,
+      "latest_event": {
+        "page": "video-conference-page",
+        "release": "7.72.3_2026_6_30_14_59_31_210",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview/calls-and-meetings/./src/components/auto-open-setting-guide/biz.tsx",
+        "mapped_path": "packages/byteview-calls-and-meetings/src/components/auto-open-setting-guide/biz.tsx",
+        "line": 197,
+        "function": "enableStartWithMeeting",
+        "sourcemap_missing": false,
+        "project_frames": 2,
+        "chunk_files": []
+      },
+      "category": "network",
+      "family_key": "NetError { code: 10003, msg: \"Offline\", extra: {} }",
+      "family_users": 6,
+      "family_count": 7,
+      "family_size": 3
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=cf02d09b54878a235e7809bde5ec8103&layout=normal&release=8.1.17",
+      "issue_id": "cf02d09b54878a235e7809bde5ec8103",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[RECORD_SDK] create recording failed",
+      "message_core": "create recording failed",
+      "error_name": "Error",
+      "filename": "file:///Applications/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/147.0.7727.149/Resources/webcontent/videomm/extensions-modal/record-page/record-page.78a84c9a.js",
+      "count": 5,
+      "users": 5,
+      "first_seen": 1793801293385,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=cb7fb6d25639121e4e0ce66b96c67022",
+      "pid_dist": {
+        "record-page": 5
+      },
+      "os_dist": {
+        "Mac": 5
+      },
+      "release_dist": {
+        "8.1.17": 5
+      },
+      "source_type_dist": {
+        "manual": 5
+      },
+      "host_version_dist": {
+        "8.1.17": 5
+      },
+      "distinct_sessions": 5,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.1.17",
+        "source_type": "manual",
+        "raw_filename": "file:///Applications/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/147.0.7727.149/Resources/webcontent/videomm/extensions-modal/record-page/record-page.78a84c9a.js",
+        "mapped_path": null,
+        "line": 1,
+        "function": "Re.endRecording",
+        "sourcemap_missing": true,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "business",
+      "family_key": "create recording failed",
+      "family_users": 5,
+      "family_count": 5,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=a55feea3a78a7b152c52e6e32fd887c0&layout=normal&release=8.3.14",
+      "issue_id": "a55feea3a78a7b152c52e6e32fd887c0",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[RECORD_SDK] [error] ParseDiagramError: parse quadrant failed",
+      "message_core": "ParseDiagramError: parse quadrant failed",
+      "error_name": "Error",
+      "filename": "https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/6021-8cc8d1fdab541f954fab-ai.js",
+      "count": 4,
+      "users": 4,
+      "first_seen": 1793863808179,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=994d15f8684e4a29a5dde7867dbd4936",
+      "pid_dist": {
+        "record-page": 4
+      },
+      "os_dist": {
+        "Windows": 1,
+        "Mac": 3
+      },
+      "release_dist": {
+        "8.3.14": 1,
+        "8.3.21": 1,
+        "8.2.18": 2
+      },
+      "source_type_dist": {
+        "manual": 4
+      },
+      "host_version_dist": {
+        "8.3.14": 1,
+        "8.3.21": 1,
+        "8.2.18": 2
+      },
+      "distinct_sessions": 4,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.3.14",
+        "source_type": "manual",
+        "raw_filename": "https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/4315-4882b72f71a61dbfa146-ai.js",
+        "mapped_path": null,
+        "line": 1,
+        "function": "?",
+        "sourcemap_missing": true,
+        "project_frames": 10,
+        "chunk_files": [
+          "4315-4882b72f71a61dbfa146-ai.js",
+          "3057-3fb68a0fe088817178ae-ai.js",
+          "6021-8cc8d1fdab541f954fab-ai.js",
+          "9400-7347e0675c79de5f2f7c-ai.js"
+        ]
+      },
+      "category": "business",
+      "family_key": "ParseDiagramError: parse quadrant failed",
+      "family_users": 4,
+      "family_count": 4,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=5464ef997f7848cc2403cdb9c09e1473&layout=normal&release=8.5.3",
+      "issue_id": "5464ef997f7848cc2403cdb9c09e1473",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[SUMMARY_SDK] [error] CommonError: NetError { code: -358, msg: \"\", extra: {\"code\": \"11\", \"msg\": \"\"} }",
+      "message_core": "[SUMMARY_SDK] [error] CommonError: NetError { code: -358, msg: \"\", extra: {\"code\": \"11\", \"msg\": \"\"} }",
+      "error_name": "Error",
+      "filename": "native-resource://sandbox_fs/webcontent/video-conference-native/extensions-page/vc-ai/static/js/5335-1bb7bfc085bd7238f264-dev-ai.js",
+      "count": 4,
+      "users": 3,
+      "first_seen": 1793865884800,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=88b1236adb15adfd5c940c137d8d3f89",
+      "pid_dist": {
+        "record-page": 4
+      },
+      "os_dist": {
+        "Windows": 1,
+        "Mac": 3
+      },
+      "release_dist": {
+        "8.5.3": 4
+      },
+      "source_type_dist": {
+        "manual": 4
+      },
+      "host_version_dist": {
+        "8.5.3": 4
+      },
+      "distinct_sessions": 3,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.5.3",
+        "source_type": "manual",
+        "raw_filename": "native-resource://sandbox_fs/webcontent/video-conference-native/extensions-page/vc-ai/static/js/5335-1bb7bfc085bd7238f264-dev-ai.js",
+        "mapped_path": null,
+        "line": 1,
+        "function": "?",
+        "sourcemap_missing": true,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "network",
+      "family_key": "[SUMMARY_SDK] [error] CommonError: NetError { code: -358, msg: \"\", extra: {\"code\": \"11\", \"msg\": \"\"} }",
+      "family_users": 3,
+      "family_count": 4,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=3253a5042da7be3b82f7fac0e4eb8d78&layout=normal&release=8.4.7",
+      "issue_id": "3253a5042da7be3b82f7fac0e4eb8d78",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[SUMMARY_SDK] [fatal] ErrorBoundary: Loading chunk 8711 failed.\n(error: https://sf6-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/8711-101132738f49eea64bb9-ai.js)",
+      "message_core": "[SUMMARY_SDK] [fatal] ErrorBoundary: Loading chunk 8711 failed.\n(error: https://sf6-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/8711-101132738f49eea64bb9-ai.js)",
+      "error_name": "Error",
+      "filename": "https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/minutes-ai-layout-pc-5ff74e36e98030ed4eff-ai.js",
+      "count": 3,
+      "users": 3,
+      "first_seen": 1793870559368,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=3cc1cd3aa7d39f5f1179c7edadbe49fb",
+      "pid_dist": {
+        "record-page": 3
+      },
+      "os_dist": {
+        "Windows": 3
+      },
+      "release_dist": {
+        "8.4.7": 3
+      },
+      "source_type_dist": {
+        "manual": 3
+      },
+      "host_version_dist": {
+        "8.4.7": 3
+      },
+      "distinct_sessions": 3,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.4.7",
+        "source_type": "manual",
+        "raw_filename": "https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/minutes-ai-layout-pc-5ff74e36e98030ed4eff-ai.js",
+        "mapped_path": null,
+        "line": 1,
+        "function": "?",
+        "sourcemap_missing": false,
+        "project_frames": 6,
+        "chunk_files": [
+          "minutes-ai-layout-pc-5ff74e36e98030ed4eff-ai.js"
+        ]
+      },
+      "category": "host",
+      "family_key": "[SUMMARY_SDK] [fatal] ErrorBoundary: Loading chunk 8711 failed. (error: https://sf6-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/8711-*-ai.js)",
+      "family_users": 3,
+      "family_count": 3,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=90aad5173ef05528172c6f6e51afcd26&layout=normal&release=8.4.7",
+      "issue_id": "90aad5173ef05528172c6f6e51afcd26",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[RECORD_SDK] audio chunk discontinuity",
+      "message_core": "audio chunk discontinuity",
+      "error_name": "Error",
+      "filename": "file:///Applications/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/147.0.7727.149/Resources/webcontent/videomm/extensions-modal/record-page/59.bcb3c400.js",
+      "count": 3,
+      "users": 3,
+      "first_seen": 1793868345552,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=88670bb71978452c1cdb2ef1a7ea0f54",
+      "pid_dist": {
+        "record-page": 3
+      },
+      "os_dist": {
+        "Mac": 3
+      },
+      "release_dist": {
+        "8.4.7": 3
+      },
+      "source_type_dist": {
+        "manual": 3
+      },
+      "host_version_dist": {
+        "8.4.7": 3
+      },
+      "distinct_sessions": 3,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.4.7",
+        "source_type": "manual",
+        "raw_filename": "native-resource://sandbox_fs/neotix/lark-api-core.js",
+        "mapped_path": null,
+        "line": 1812,
+        "function": "hostObject.NativeCallJSV2",
+        "sourcemap_missing": false,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "business",
+      "family_key": "audio chunk discontinuity",
+      "family_users": 3,
+      "family_count": 3,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=41f42feba93440a4b2fc39939b325cdb&layout=normal&release=7.76.4_2026_8_27_16_57_36_982",
+      "issue_id": "41f42feba93440a4b2fc39939b325cdb",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "Failed to execute \"webview_ShellAPI.app.services.iron.setViewUserSettingStartMinutesMeetingWhenJoinMeeting_req_559\": set start minutes meeting when join meeting failed ",
+      "message_core": "Failed to execute \"webview_ShellAPI.app.services.iron.setViewUserSettingStartMinutesMeetingWhenJoinMeeting_req_559\": set start minutes meeting when join meeting failed ",
+      "error_name": "ShellAPIError",
+      "filename": "native-resource://sandbox_fs/neotix/lark-api-core.js",
+      "count": 3,
+      "users": 3,
+      "first_seen": 1793850485076,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=8e5e2d5ede48616c2215b0eda5ca2c20",
+      "pid_dist": {
+        "video-conference-page": 3
+      },
+      "os_dist": {
+        "Windows": 2,
+        "Mac": 1
+      },
+      "release_dist": {
+        "7.76.4_2026_8_27_16_57_36_982": 1,
+        "7.72.3_2026_6_30_14_59_31_210": 1,
+        "8.2.3_2026_9_23_16_51_41_288": 1
+      },
+      "source_type_dist": {
+        "manual": 3
+      },
+      "host_version_dist": {
+        "8.0.3": 1,
+        "7.72.8": 1,
+        "8.2.18": 1
+      },
+      "distinct_sessions": 3,
+      "latest_event": {
+        "page": "video-conference-page",
+        "release": "7.76.4_2026_8_27_16_57_36_982",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview/calls-and-meetings/./src/components/auto-open-setting-guide/biz.tsx",
+        "mapped_path": "packages/byteview-calls-and-meetings/src/components/auto-open-setting-guide/biz.tsx",
+        "line": 197,
+        "function": "enableStartWithMeeting",
+        "sourcemap_missing": false,
+        "project_frames": 2,
+        "chunk_files": []
+      },
+      "category": "host",
+      "family_key": "Failed to execute \"webview_ShellAPI.app.services.iron.setViewUserSettingStartMinutesMeetingWhenJoinMeeting_req_*\": set start minutes meeting when join meeting failed",
+      "family_users": 3,
+      "family_count": 3,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=4a9551796905e9fd4b904a6d284766d7&layout=normal&release=7.23.6",
+      "issue_id": "4a9551796905e9fd4b904a6d284766d7",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "Failed to execute \"webview_ShellAPI.app.webview.closeWebview_req_578\": Failed! ",
+      "message_core": "Failed to execute \"webview_ShellAPI.app.webview.closeWebview_req_578\": Failed! ",
+      "error_name": "ShellapiCommonResult",
+      "filename": "native-resource://sandbox_fs/neotix/lark-api-core.js",
+      "count": 2,
+      "users": 2,
+      "first_seen": 1793844461401,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=9a68403fb25c922b69b94d137a64c9e2",
+      "pid_dist": {
+        "video-conference-page": 2
+      },
+      "os_dist": {
+        "Windows": 2
+      },
+      "release_dist": {
+        "7.23.6": 2
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 2
+      },
+      "host_version_dist": {
+        "7.23.6": 2
+      },
+      "distinct_sessions": 2,
+      "latest_event": {
+        "page": "video-conference-page",
+        "release": "7.23.6",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "file:///C:/Program%20Files%20(x86)/Feishu/app/webcontent/video-conference-page/navigator/static/js/call-and-meeting.js",
+        "mapped_path": null,
+        "line": 2,
+        "function": "?",
+        "sourcemap_missing": true,
+        "project_frames": 5,
+        "chunk_files": [
+          "call-and-meeting.js"
+        ]
+      },
+      "category": "host",
+      "family_key": "Failed to execute \"webview_ShellAPI.app.webview.closeWebview_req_*\": Failed!",
+      "family_users": 3,
+      "family_count": 3,
+      "family_size": 2
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=f20183d7befea6fd079f05106314e9e8&layout=normal&release=7.23.18",
+      "issue_id": "f20183d7befea6fd079f05106314e9e8",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "Failed to execute \"webview_ShellAPI.app.webview.closeWebview_req_1447\": Failed! ",
+      "message_core": "Failed to execute \"webview_ShellAPI.app.webview.closeWebview_req_1447\": Failed! ",
+      "error_name": "ShellapiCommonResult",
+      "filename": "native-resource://sandbox_fs/neotix/lark-api-core.js",
+      "count": 1,
+      "users": 1,
+      "first_seen": 1793805129031,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=6de43b1704556d88f3eb2a617230bd36",
+      "pid_dist": {
+        "video-conference-page": 1
+      },
+      "os_dist": {
+        "Mac": 1
+      },
+      "release_dist": {
+        "7.23.18": 1
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 1
+      },
+      "host_version_dist": {
+        "7.23.18": 1
+      },
+      "distinct_sessions": 1,
+      "latest_event": {
+        "page": "video-conference-page",
+        "release": "7.23.18",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "file:///Applications/Lark.localized/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/109.0.5414.128/Resources/webcontent/video-conference-page/navigator/static/js/call-and-meeting.js",
+        "mapped_path": null,
+        "line": 2,
+        "function": "?",
+        "sourcemap_missing": true,
+        "project_frames": 5,
+        "chunk_files": [
+          "call-and-meeting.js"
+        ]
+      },
+      "category": "host",
+      "family_key": "Failed to execute \"webview_ShellAPI.app.webview.closeWebview_req_*\": Failed!",
+      "family_users": 3,
+      "family_count": 3,
+      "family_size": 2
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=75cc921f41767d0d1dd2f06a90ef4d67&layout=normal&release=8.3.21",
+      "issue_id": "75cc921f41767d0d1dd2f06a90ef4d67",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[RECORD_SDK] [error] FishBoneError: track scroll_chart when hidden",
+      "message_core": "FishBoneError: track scroll_chart when hidden",
+      "error_name": "Error",
+      "filename": "https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/3057-3fb68a0fe088817178ae-ai.js",
+      "count": 6,
+      "users": 3,
+      "first_seen": 1793797923394,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=070e416cbb8e4d637e2c948b4a90605a",
+      "pid_dist": {
+        "record-page": 6
+      },
+      "os_dist": {
+        "Mac": 6
+      },
+      "release_dist": {
+        "8.3.21": 4,
+        "8.3.14": 2
+      },
+      "source_type_dist": {
+        "manual": 6
+      },
+      "host_version_dist": {
+        "8.3.21": 4,
+        "8.3.14": 2
+      },
+      "distinct_sessions": 3,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.3.21",
+        "source_type": "manual",
+        "raw_filename": "https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/6021-8cc8d1fdab541f954fab-ai.js",
+        "mapped_path": null,
+        "line": 1,
+        "function": "HTMLDivElement.f",
+        "sourcemap_missing": true,
+        "project_frames": 6,
+        "chunk_files": [
+          "6021-8cc8d1fdab541f954fab-ai.js",
+          "696-7c19a9f8e7ffb55a707a-ai.js",
+          "3057-3fb68a0fe088817178ae-ai.js"
+        ]
+      },
+      "category": "business",
+      "family_key": "FishBoneError: track scroll_chart when hidden",
+      "family_users": 3,
+      "family_count": 6,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=b6dc89913e3da9d00319345a22b83f4e&layout=normal&release=7.35.0_2024_12_26_14_52_12_42",
+      "issue_id": "b6dc89913e3da9d00319345a22b83f4e",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "message channel not ready in 30000 ms",
+      "message_core": "message channel not ready in 30000 ms",
+      "error_name": "Error",
+      "filename": "webpack://@byteview/calls-and-meetings/../../node_modules/@lark/lark-larklet/es/runtime/extension/renderer/webview/index.js",
+      "count": 2,
+      "users": 2,
+      "first_seen": 1793840261692,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=f8b6cb4c0bf7a22462ad3e18e71c08e8",
+      "pid_dist": {
+        "video-conference-page": 2
+      },
+      "os_dist": {
+        "Windows": 2
+      },
+      "release_dist": {
+        "7.35.0_2024_12_26_14_52_12_42": 1,
+        "7.42.0_2025_4_11_11_2_47_967": 1
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 2
+      },
+      "host_version_dist": {
+        "7.36.6": 1,
+        "7.42.0": 1
+      },
+      "distinct_sessions": 2,
+      "latest_event": {
+        "page": "video-conference-page",
+        "release": "7.35.0_2024_12_26_14_52_12_42",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "webpack://@byteview/calls-and-meetings/../../node_modules/@lark/lark-larklet/es/runtime/extension/renderer/webview/index.js",
+        "mapped_path": null,
+        "line": 50,
+        "function": "",
+        "sourcemap_missing": false,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "host",
+      "family_key": "message channel not ready in 30000 ms",
+      "family_users": 3,
+      "family_count": 3,
+      "family_size": 2
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=a0c4a4186d46f1ea3c800550a9d7b1e6&layout=normal&release=8.2.3_2026_11_5_14_58_46_979",
+      "issue_id": "a0c4a4186d46f1ea3c800550a9d7b1e6",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "message channel not ready in 30000 ms",
+      "message_core": "message channel not ready in 30000 ms",
+      "error_name": "Error",
+      "filename": "webpack://@byteview/calls-and-meetings/../node_modules/@lark/lark-larklet/es/runtime/extension/renderer/webview/index.js",
+      "count": 1,
+      "users": 1,
+      "first_seen": 1793869391029,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=c4ecdbf978eec44719cdba3b67d809e7",
+      "pid_dist": {
+        "video-conference-page": 1
+      },
+      "os_dist": {
+        "Mac": 1
+      },
+      "release_dist": {
+        "8.2.3_2026_11_5_14_58_46_979": 1
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 1
+      },
+      "host_version_dist": {
+        "8.6.0": 1
+      },
+      "distinct_sessions": 1,
+      "latest_event": {
+        "page": "video-conference-page",
+        "release": "8.2.3_2026_11_5_14_58_46_979",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "webpack://@byteview/calls-and-meetings/../node_modules/@lark/lark-larklet/es/runtime/extension/renderer/webview/index.js",
+        "mapped_path": null,
+        "line": 50,
+        "function": "",
+        "sourcemap_missing": false,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "host",
+      "family_key": "message channel not ready in 30000 ms",
+      "family_users": 3,
+      "family_count": 3,
+      "family_size": 2
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=2b3dbb3cfa468bdc72e9af03ab9b39e9&layout=normal&release=8.4.7",
+      "issue_id": "2b3dbb3cfa468bdc72e9af03ab9b39e9",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[RECORD_SDK] videochat.JoinMeetingRequest(2333) request timeout after 10000ms",
+      "message_core": "videochat.JoinMeetingRequest(2333) request timeout after 10000ms",
+      "error_name": "APITimeoutError",
+      "filename": "/webcontent/videomm/extensions-modal/record-page/record-page.f601327b.js",
+      "count": 3,
+      "users": 3,
+      "first_seen": 1793842194597,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=34ed4176001e8bfed5cd9b605343b486",
+      "pid_dist": {
+        "record-page": 3
+      },
+      "os_dist": {
+        "Windows": 3
+      },
+      "release_dist": {
+        "8.4.7": 3
+      },
+      "source_type_dist": {
+        "manual": 3
+      },
+      "host_version_dist": {
+        "8.4.7": 3
+      },
+      "distinct_sessions": 3,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.4.7",
+        "source_type": "manual",
+        "raw_filename": "at async /webcontent/videomm/extensions-modal/record-page/59.bcb3c400.js",
+        "mapped_path": "vc-ai/at async /webcontent/videomm/extensions-modal/record-page/59.bcb3c400.js",
+        "line": 2,
+        "function": "?",
+        "sourcemap_missing": true,
+        "project_frames": 8,
+        "chunk_files": [
+          "59.bcb3c400.js",
+          "record-page.f601327b.js"
+        ]
+      },
+      "category": "business",
+      "family_key": "videochat.JoinMeetingRequest(2333) request timeout after 10000ms",
+      "family_users": 3,
+      "family_count": 3,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=2ace51d6f75f118ca549570193e8007d&layout=normal&release=8.4.7",
+      "issue_id": "2ace51d6f75f118ca549570193e8007d",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[RECORD_SDK] voixcap startRecording failed",
+      "message_core": "voixcap startRecording failed",
+      "error_name": "Error",
+      "filename": "file:///Applications/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/147.0.7727.149/Resources/webcontent/videomm/extensions-modal/record-page/59.bcb3c400.js",
+      "count": 3,
+      "users": 3,
+      "first_seen": 1793805944278,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=6d78b4fee02f92518462d847d7586601",
+      "pid_dist": {
+        "record-page": 3
+      },
+      "os_dist": {
+        "Mac": 3
+      },
+      "release_dist": {
+        "8.4.7": 3
+      },
+      "source_type_dist": {
+        "manual": 3
+      },
+      "host_version_dist": {
+        "8.4.7": 3
+      },
+      "distinct_sessions": 3,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.4.7",
+        "source_type": "manual",
+        "raw_filename": "file:///Applications/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/147.0.7727.149/Resources/webcontent/videomm/extensions-modal/record-page/59.bcb3c400.js",
+        "mapped_path": null,
+        "line": 2,
+        "function": "J.endRecording",
+        "sourcemap_missing": true,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "business",
+      "family_key": "voixcap startRecording failed",
+      "family_users": 3,
+      "family_count": 3,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=d6b41a24b34b0db1b40cefaa9d505b4c&layout=normal&release=8.4.7",
+      "issue_id": "d6b41a24b34b0db1b40cefaa9d505b4c",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[SUMMARY_SDK] [error] ParseDiagramError: parse compare-table-json failed",
+      "message_core": "[SUMMARY_SDK] [error] ParseDiagramError: parse compare-table-json failed",
+      "error_name": "Error",
+      "filename": "native-resource://sandbox_fs/webcontent/video-conference-native/extensions-page/vc-ai/static/js/7289-9d9f180db10d81a5a676-dev-ai.js",
+      "count": 5,
+      "users": 2,
+      "first_seen": 1793791632082,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=1cbe9bd45bac0f1ff757c5d70e4b28f2",
+      "pid_dist": {
+        "record-page": 5
+      },
+      "os_dist": {
+        "Windows": 5
+      },
+      "release_dist": {
+        "8.4.7": 5
+      },
+      "source_type_dist": {
+        "manual": 5
+      },
+      "host_version_dist": {
+        "8.4.7": 5
+      },
+      "distinct_sessions": 2,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.4.7",
+        "source_type": "manual",
+        "raw_filename": "native-resource://sandbox_fs/webcontent/video-conference-native/extensions-page/vc-ai/static/js/8987-41113406d4d8afa00469-dev-ai.js",
+        "mapped_path": null,
+        "line": 2,
+        "function": "xs",
+        "sourcemap_missing": true,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "business",
+      "family_key": "[SUMMARY_SDK] [error] ParseDiagramError: parse compare-table-json failed",
+      "family_users": 2,
+      "family_count": 5,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=a691719b0b5000f6a99ff3753b6408f4&layout=normal&release=8.4.7",
+      "issue_id": "a691719b0b5000f6a99ff3753b6408f4",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[SUMMARY_SDK] [warn] ErrorBoundary: BarChartComponent data error",
+      "message_core": "[SUMMARY_SDK] [warn] ErrorBoundary: BarChartComponent data error",
+      "error_name": "Error",
+      "filename": "https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/6021-8cc8d1fdab541f954fab-ai.js",
+      "count": 4,
+      "users": 2,
+      "first_seen": 1793860717703,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=20b5ed14a84f7c5f334aa509f44bff12",
+      "pid_dist": {
+        "record-page": 4
+      },
+      "os_dist": {
+        "Windows": 4
+      },
+      "release_dist": {
+        "8.4.7": 4
+      },
+      "source_type_dist": {
+        "manual": 4
+      },
+      "host_version_dist": {
+        "8.4.7": 4
+      },
+      "distinct_sessions": 2,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.4.7",
+        "source_type": "manual",
+        "raw_filename": "https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/1502-8a673f5158b7de71c201-ai.js",
+        "mapped_path": null,
+        "line": 2,
+        "function": "ut",
+        "sourcemap_missing": false,
+        "project_frames": 9,
+        "chunk_files": [
+          "1502-8a673f5158b7de71c201-ai.js",
+          "4315-4882b72f71a61dbfa146-ai.js",
+          "6021-8cc8d1fdab541f954fab-ai.js",
+          "9400-7347e0675c79de5f2f7c-ai.js"
+        ]
+      },
+      "category": "business",
+      "family_key": "[SUMMARY_SDK] [warn] ErrorBoundary: BarChartComponent data error",
+      "family_users": 2,
+      "family_count": 4,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=46d3500152232cd9feba133793a4038c&layout=normal&release=8.4.7",
+      "issue_id": "46d3500152232cd9feba133793a4038c",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[SUMMARY_SDK] [warn] ErrorBoundary: Expected ',' or ']' after array element in JSON at position 440 (line 1 column 441)",
+      "message_core": "[SUMMARY_SDK] [warn] ErrorBoundary: Expected ',' or ']' after array element in JSON at position 440 (line 1 column 441)",
+      "error_name": "SyntaxError",
+      "filename": "<anonymous>",
+      "count": 7,
+      "users": 2,
+      "first_seen": 1793861709129,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=204b8e18c291a85887df287ae677a567",
+      "pid_dist": {
+        "record-page": 7
+      },
+      "os_dist": {
+        "Windows": 7
+      },
+      "release_dist": {
+        "8.4.7": 7
+      },
+      "source_type_dist": {
+        "manual": 7
+      },
+      "host_version_dist": {
+        "8.4.7": 7
+      },
+      "distinct_sessions": 2,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.4.7",
+        "source_type": "manual",
+        "raw_filename": "native-resource://sandbox_fs/webcontent/video-conference-native/extensions-page/vc-ai/static/js/668-0be91ac289d9f2434279-dev-ai.js",
+        "mapped_path": null,
+        "line": 1,
+        "function": "e.track",
+        "sourcemap_missing": false,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "business",
+      "family_key": "[SUMMARY_SDK] [warn] ErrorBoundary: Expected ',' or ']' after array element in JSON at position * (line * column *)",
+      "family_users": 2,
+      "family_count": 7,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=48a79026bb0e2f928f02d0a4fee870ee&layout=normal&release=8.2.14",
+      "issue_id": "48a79026bb0e2f928f02d0a4fee870ee",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[RECORD_SDK] audio duration mismatch on recording end",
+      "message_core": "audio duration mismatch on recording end",
+      "error_name": "Error",
+      "filename": "file:///Applications/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/147.0.7727.149/Resources/webcontent/videomm/extensions-modal/record-page/59.20a28f4d.js",
+      "count": 2,
+      "users": 2,
+      "first_seen": 1793848286626,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=1e62ab3cc9da4dc50fb46efef1c144fb",
+      "pid_dist": {
+        "record-page": 2
+      },
+      "os_dist": {
+        "Mac": 2
+      },
+      "release_dist": {
+        "8.2.14": 1,
+        "8.2.18": 1
+      },
+      "source_type_dist": {
+        "manual": 2
+      },
+      "host_version_dist": {
+        "8.2.14": 1,
+        "8.2.18": 1
+      },
+      "distinct_sessions": 2,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.2.14",
+        "source_type": "manual",
+        "raw_filename": "native-resource://sandbox_fs/neotix/lark-api-core.js",
+        "mapped_path": null,
+        "line": 1980,
+        "function": "Object.apply",
+        "sourcemap_missing": false,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "business",
+      "family_key": "audio duration mismatch on recording end",
+      "family_users": 2,
+      "family_count": 2,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=minutes_record&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=b4b2e1edef8f00ff37bae73ef2107cd7&layout=normal&release=8.3.21",
+      "issue_id": "b4b2e1edef8f00ff37bae73ef2107cd7",
+      "bid": "minutes_record",
+      "repo": "byteview-web",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-web",
+      "project_dir": "vc-ai",
+      "scm_repos": [
+        "ee/lark/vc_ai",
+        "ee/lark/vc_ai_doubao"
+      ],
+      "message": "[RECORD_SDK] [warn] CommonError: Failed to fetch",
+      "message_core": "CommonError: Failed to fetch",
+      "error_name": "TypeError",
+      "filename": "",
+      "count": 2,
+      "users": 2,
+      "first_seen": 1793867074065,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=minutes_record&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=b3d5ae1706c9479d3347b4f4e2ebfc5e",
+      "pid_dist": {
+        "record-page": 2
+      },
+      "os_dist": {
+        "Mac": 2
+      },
+      "release_dist": {
+        "8.3.21": 1,
+        "8.1.25": 1
+      },
+      "source_type_dist": {
+        "manual": 2
+      },
+      "host_version_dist": {
+        "8.3.21": 1,
+        "8.1.25": 1
+      },
+      "distinct_sessions": 2,
+      "latest_event": {
+        "page": "record-page",
+        "release": "8.3.21",
+        "source_type": "manual",
+        "raw_filename": null,
+        "mapped_path": null,
+        "line": null,
+        "function": null,
+        "sourcemap_missing": false,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "network",
+      "family_key": "CommonError: Failed to fetch",
+      "family_users": 2,
+      "family_count": 2,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=2ac5421e074eb9ae4f0f90a976495bf7&layout=normal&release=7.29.1_2024_10_8_17_37_17_460",
+      "issue_id": "2ac5421e074eb9ae4f0f90a976495bf7",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "Document is not focused.",
+      "message_core": "Document is not focused.",
+      "error_name": "NotAllowedError",
+      "filename": "",
+      "count": 2,
+      "users": 2,
+      "first_seen": 1793865643736,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=b28f37fe0426c8e70010a9e1ea3bb6a1",
+      "pid_dist": {
+        "video-conference-native": 2
+      },
+      "os_dist": {
+        "Mac": 2
+      },
+      "release_dist": {
+        "7.29.1_2024_10_8_17_37_17_460": 1,
+        "7.38.0_2025_2_13_14_38_38_178": 1
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 2
+      },
+      "host_version_dist": {
+        "7.29.15": 1,
+        "7.38.15": 1
+      },
+      "distinct_sessions": 2,
+      "latest_event": {
+        "page": "video-conference-native",
+        "release": "7.29.1_2024_10_8_17_37_17_460",
+        "source_type": "onunhandledrejection",
+        "raw_filename": null,
+        "mapped_path": null,
+        "line": null,
+        "function": null,
+        "sourcemap_missing": false,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "business",
+      "family_key": "Document is not focused.",
+      "family_users": 2,
+      "family_count": 2,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=ed21e9e0347c85c78dd31f2e7eb336aa&layout=normal&release=8.4.1_2026_10_20_17_14_3_22",
+      "issue_id": "ed21e9e0347c85c78dd31f2e7eb336aa",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "Loading chunk 0 failed.\n(error: file:///Users/yuzhou.hz/work/harness-workspaces/vctab-local-chunk-recovery-5e4a38d3-2026-11-04/byteview-pc/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/147.0.7727.149/Resources/webcontent/video-conference-page/navigator/static/js/0.js)",
+      "message_core": "Loading chunk 0 failed.\n(error: file:///Users/yuzhou.hz/work/harness-workspaces/vctab-local-chunk-recovery-5e4a38d3-2026-11-04/byteview-pc/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/147.0.7727.149/Resources/webcontent/video-conference-page/navigator/static/js/0.js)",
+      "error_name": "ChunkLoadError",
+      "filename": "webpack://@byteview/calls-and-meetings/webpack/runtime/jsonp chunk loading",
+      "count": 2,
+      "users": 2,
+      "first_seen": 1793845407408,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=9b2a29fdf1f7f669b43a92d447913203",
+      "pid_dist": {
+        "video-conference-page": 2
+      },
+      "os_dist": {
+        "Mac": 1,
+        "Windows": 1
+      },
+      "release_dist": {
+        "8.4.1_2026_10_20_17_14_3_22": 2
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 1,
+        "manual": 1
+      },
+      "host_version_dist": {
+        "8.4.7": 2
+      },
+      "distinct_sessions": 2,
+      "latest_event": {
+        "page": "video-conference-page",
+        "release": "8.4.1_2026_10_20_17_14_3_22",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "webpack://@byteview/calls-and-meetings/./src/meeting-row-detail/lazy-adapter.tsx",
+        "mapped_path": "packages/byteview-calls-and-meetings/src/meeting-row-detail/lazy-adapter.tsx",
+        "line": 7,
+        "function": "e",
+        "sourcemap_missing": false,
+        "project_frames": 4,
+        "chunk_files": []
+      },
+      "category": "host",
+      "family_key": "Loading chunk 0 failed. (error: file:///Users/yuzhou.hz/work/harness-workspaces/vctab-local-chunk-recovery-5e4a38d3-2026-11-04/byteview-pc/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/147.0.7727.149/Resources/webcontent/video-conference-page/navigator/static/js/0.js)",
+      "family_users": 2,
+      "family_count": 2,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=070ce668dafa9cbc5d71981ac5515f37&layout=normal",
+      "issue_id": "070ce668dafa9cbc5d71981ac5515f37",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "Cannot read properties of null (reading 'removeChild')",
+      "message_core": "Cannot read properties of null (reading 'removeChild')",
+      "error_name": "TypeError",
+      "filename": "https://byteview-pc.com/video-conference-page/lib/navigator/static/js/call-and-meeting.js",
+      "count": 3,
+      "users": 1,
+      "first_seen": 1793802523388,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=fe4b249474aacba64a8f413807b20ab1",
+      "pid_dist": {
+        "video-conference-page": 3
+      },
+      "os_dist": {
+        "Mac": 3
+      },
+      "release_dist": {
+        "unknown": 3
+      },
+      "source_type_dist": {
+        "manual": 1,
+        "onerror": 2
+      },
+      "host_version_dist": {
+        "8.4.7": 3
+      },
+      "distinct_sessions": 3,
+      "latest_event": {
+        "page": "video-conference-page",
+        "release": "",
+        "source_type": "manual",
+        "raw_filename": "<anonymous>",
+        "mapped_path": null,
+        "line": 16,
+        "function": "?",
+        "sourcemap_missing": false,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "business",
+      "family_key": "Cannot read properties of null (reading 'removeChild')",
+      "family_users": 1,
+      "family_count": 3,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=d226580fe75c9122d85dfa855d8b1990&layout=normal&release=8.5.0_2026_10_27_14_27_42_153",
+      "issue_id": "d226580fe75c9122d85dfa855d8b1990",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "Cannot read properties of undefined (reading 'map')",
+      "message_core": "Cannot read properties of undefined (reading 'map')",
+      "error_name": "TypeError",
+      "filename": "webpack://@byteview/calls-and-meetings/./src/hooks/vctablist.ts",
+      "count": 1,
+      "users": 1,
+      "first_seen": 1793873100709,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=0789b9a4f34bff6826efc64b961369a8",
+      "pid_dist": {
+        "video-conference-page": 1
+      },
+      "os_dist": {
+        "Windows": 1
+      },
+      "release_dist": {
+        "8.5.0_2026_10_27_14_27_42_153": 1
+      },
+      "source_type_dist": {
+        "manual": 1
+      },
+      "host_version_dist": {
+        "8.5.3": 1
+      },
+      "distinct_sessions": 1,
+      "latest_event": {
+        "page": "video-conference-page",
+        "release": "8.5.0_2026_10_27_14_27_42_153",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview/calls-and-meetings/./src/hooks/list.ts",
+        "mapped_path": "packages/byteview-calls-and-meetings/src/hooks/list.ts",
+        "line": 98,
+        "function": "",
+        "sourcemap_missing": false,
+        "project_frames": 3,
+        "chunk_files": []
+      },
+      "category": "business",
+      "family_key": "Cannot read properties of undefined (reading 'map')",
+      "family_users": 1,
+      "family_count": 1,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=2ab7ebc984d49fbdd50f44c47c13f5b5&layout=normal&release=7.24.0_2024_7_25_11_30_32_516",
+      "issue_id": "2ab7ebc984d49fbdd50f44c47c13f5b5",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "disk I/O error",
+      "message_core": "disk I/O error",
+      "error_name": "Error",
+      "filename": "/O error",
+      "count": 1,
+      "users": 1,
+      "first_seen": 1793859988668,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=f29fc9f67b2c7c5fb688fd70c8208b59",
+      "pid_dist": {
+        "video-conference-page": 1
+      },
+      "os_dist": {
+        "Windows": 1
+      },
+      "release_dist": {
+        "7.24.0_2024_7_25_11_30_32_516": 1
+      },
+      "source_type_dist": {
+        "manual": 1
+      },
+      "host_version_dist": {
+        "7.24.4": 1
+      },
+      "distinct_sessions": 1,
+      "latest_event": {
+        "page": "video-conference-page",
+        "release": "7.24.0_2024_7_25_11_30_32_516",
+        "source_type": "manual",
+        "raw_filename": "webpack://@byteview/calls-and-meetings/./src/hooks/list.ts",
+        "mapped_path": "packages/byteview-calls-and-meetings/src/hooks/list.ts",
+        "line": 98,
+        "function": "",
+        "sourcemap_missing": false,
+        "project_frames": 2,
+        "chunk_files": []
+      },
+      "category": "business",
+      "family_key": "disk I/O error",
+      "family_users": 1,
+      "family_count": 1,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=539e1f16240f821e5a83d3d8da5f32e5&layout=normal",
+      "issue_id": "539e1f16240f821e5a83d3d8da5f32e5",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "Loading chunk 253 failed.\n(error: file:///Users/yuzhou.hz/work/harness-workspaces/vctab-local-chunk-recovery-5e4a38d3-2026-11-04/byteview-pc/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/147.0.7727.149/Resources/webcontent/video-conference-page/navigator/static/js/row-detail.js)",
+      "message_core": "Loading chunk 253 failed.\n(error: file:///Users/yuzhou.hz/work/harness-workspaces/vctab-local-chunk-recovery-5e4a38d3-2026-11-04/byteview-pc/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/147.0.7727.149/Resources/webcontent/video-conference-page/navigator/static/js/row-detail.js)",
+      "error_name": "ChunkLoadError",
+      "filename": "https://byteview-pc.com/video-conference-page/lib/navigator/static/js/call-and-meeting.js",
+      "count": 4,
+      "users": 1,
+      "first_seen": 1793802612848,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=7bc1361edda05fa16415bb5a3e9f324e",
+      "pid_dist": {
+        "video-conference-page": 4
+      },
+      "os_dist": {
+        "Mac": 4
+      },
+      "release_dist": {
+        "unknown": 4
+      },
+      "source_type_dist": {
+        "manual": 4
+      },
+      "host_version_dist": {
+        "8.4.7": 4
+      },
+      "distinct_sessions": 4,
+      "latest_event": {
+        "page": "video-conference-page",
+        "release": "",
+        "source_type": "manual",
+        "raw_filename": "https://byteview-pc.com/video-conference-page/lib/navigator/static/js/call-and-meeting.js",
+        "mapped_path": null,
+        "line": 2,
+        "function": "?",
+        "sourcemap_missing": false,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "host",
+      "family_key": "Loading chunk 253 failed. (error: file:///Users/yuzhou.hz/work/harness-workspaces/vctab-local-chunk-recovery-5e4a38d3-2026-11-04/byteview-pc/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/147.0.7727.149/Resources/webcontent/video-conference-page/navigator/static/js/row-detail.js)",
+      "family_users": 1,
+      "family_count": 4,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=92db351833ec2b0b4c265763a1aa5265&layout=normal&release=8.2.3_2026_10_19_20_57_12_145",
+      "issue_id": "92db351833ec2b0b4c265763a1aa5265",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "NetError { code: -21, msg: \"\", extra: {\"code\": \"3\", \"msg\": \"\"} }",
+      "message_core": "NetError { code: -21, msg: \"\", extra: {\"code\": \"3\", \"msg\": \"\"} }",
+      "error_name": "Error",
+      "filename": "webpack-internal:///../../node_modules/@lark/services/node_modules/@lark/foundation-adapter-shellapi/es/transport/utils.js",
+      "count": 1,
+      "users": 1,
+      "first_seen": 1793791517414,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=a69253fd7308909c9f0ada21e67c8c2a",
+      "pid_dist": {
+        "video-conference-page": 1
+      },
+      "os_dist": {
+        "Mac": 1
+      },
+      "release_dist": {
+        "8.2.3_2026_10_19_20_57_12_145": 1
+      },
+      "source_type_dist": {
+        "manual": 1
+      },
+      "host_version_dist": {
+        "8.5.5": 1
+      },
+      "distinct_sessions": 1,
+      "latest_event": {
+        "page": "video-conference-page",
+        "release": "8.2.3_2026_10_19_20_57_12_145",
+        "source_type": "manual",
+        "raw_filename": "webpack-internal:///../../node_modules/@lark/services/node_modules/@lark/foundation-adapter-shellapi/es/transport/callServerApi.js",
+        "mapped_path": null,
+        "line": 69,
+        "function": "callServerApi",
+        "sourcemap_missing": true,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "network",
+      "family_key": "NetError { code: -21, msg: \"\", extra: {\"code\": \"3\", \"msg\": \"\"} }",
+      "family_users": 1,
+      "family_count": 1,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=a1c543ae130f09a8e7b259cc5eaf0324&layout=normal&release=7.23.18",
+      "issue_id": "a1c543ae130f09a8e7b259cc5eaf0324",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "NetError { code: -352, msg: \"\", extra: {\"msg\": \"\", \"code\": \"11\"} }",
+      "message_core": "NetError { code: -352, msg: \"\", extra: {\"msg\": \"\", \"code\": \"11\"} }",
+      "error_name": "Error",
+      "filename": "file:///Applications/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/109.0.5414.128/Resources/webcontent/video-conference-page/navigator/static/js/call-and-meeting.js",
+      "count": 1,
+      "users": 1,
+      "first_seen": 1793849463066,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=72a76669e79af6eff9fdb4fde22b21d9",
+      "pid_dist": {
+        "video-conference-page": 1
+      },
+      "os_dist": {
+        "Mac": 1
+      },
+      "release_dist": {
+        "7.23.18": 1
+      },
+      "source_type_dist": {
+        "manual": 1
+      },
+      "host_version_dist": {
+        "7.23.18": 1
+      },
+      "distinct_sessions": 1,
+      "latest_event": {
+        "page": "video-conference-page",
+        "release": "7.23.18",
+        "source_type": "manual",
+        "raw_filename": "file:///Applications/Lark.app/Contents/Frameworks/Lark%20Framework.framework/Versions/109.0.5414.128/Resources/webcontent/video-conference-page/navigator/static/js/call-and-meeting.js",
+        "mapped_path": null,
+        "line": 2,
+        "function": "f",
+        "sourcemap_missing": true,
+        "project_frames": 2,
+        "chunk_files": [
+          "call-and-meeting.js"
+        ]
+      },
+      "category": "network",
+      "family_key": "NetError { code: -352, msg: \"\", extra: {\"msg\": \"\", \"code\": \"11\"} }",
+      "family_users": 1,
+      "family_count": 1,
+      "family_size": 1
+    },
+    {
+      "detail_error": null,
+      "issue_url": "https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&lang=zh&start_time=1793791247&end_time=1793877647&site_type=web&region=cn&issue_id=a204151975274211b95b9843cb098d5f&layout=normal&release=7.24.0_2024_7_25_11_30_32_516",
+      "issue_id": "a204151975274211b95b9843cb098d5f",
+      "bid": "lark_vc_pc",
+      "repo": "byteview-pc",
+      "repo_dir": "/Users/bytedance/Desktop/workspace/byteview-pc",
+      "project_dir": "packages",
+      "scm_repos": [],
+      "message": "NetError { code: 10002, msg: \"Timeout\", extra: {} }",
+      "message_core": "NetError { code: 10002, msg: \"Timeout\", extra: {} }",
+      "error_name": "Error",
+      "filename": "webpack://@byteview/page/../../node_modules/@lark/foundation-adapter-shellapi/es/transport/utils.js",
+      "count": 11,
+      "users": 1,
+      "first_seen": 1793843222105,
+      "status": "unassigned",
+      "slardar_url": "https://slardar.bytedance.net/node/web/data_search?bid=lark_vc_pc&ev_type=js_error&site_type=web&region=cn&lang=zh&env=production&start_time=1793272847&end_time=1793877647&filter_id=53a35c02219f4b8086ce24c1e0d32c39",
+      "pid_dist": {
+        "video-conference-native": 11
+      },
+      "os_dist": {
+        "Windows": 11
+      },
+      "release_dist": {
+        "7.24.0_2024_7_25_11_30_32_516": 11
+      },
+      "source_type_dist": {
+        "onunhandledrejection": 11
+      },
+      "host_version_dist": {
+        "7.24.4": 11
+      },
+      "distinct_sessions": 1,
+      "latest_event": {
+        "page": "video-conference-native",
+        "release": "7.24.0_2024_7_25_11_30_32_516",
+        "source_type": "onunhandledrejection",
+        "raw_filename": "webpack://@byteview/page/../../node_modules/@universe-design/biz-react-lark-pc/es/components/Emoji/service.js",
+        "mapped_path": null,
+        "line": 90,
+        "function": "res",
+        "sourcemap_missing": false,
+        "project_frames": 0,
+        "chunk_files": []
+      },
+      "category": "network",
+      "family_key": "NetError { code: 10002, msg: \"Timeout\", extra: {} }",
+      "family_users": 1,
+      "family_count": 11,
+      "family_size": 1
+    }
+  ]
+}
