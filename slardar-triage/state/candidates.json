@@ -5872,12 +5872,7 @@
     "first_seen_at": "2026-10-30T09:06:40.984Z",
     "refreshed_at": "2026-11-05T04:13:30.083Z",
     "status": "pending",
-    "verdict": {
-      "fixable": true,
-      "reason": "packages/byteview-calls-and-meetings/src/services/mulit-device.ts 的 getJoinedDeviceInfo 已 catch 并返回空列表，但 catch 仍 captureError；可对已降级的拉取失败降级为日志，停止作为 JS 错误上报",
-      "by": "agent",
-      "at": "2026-10-30T09:09:45.794Z"
-    },
+    "verdict": null,
     "verdicts": [
       {
         "fixable": true,
@@ -6172,12 +6167,7 @@
     "first_seen_at": "2026-11-05T04:13:30.083Z",
     "refreshed_at": "2026-11-05T04:13:30.083Z",
     "status": "pending",
-    "verdict": {
-      "fixable": true,
-      "reason": "packages/byteview-calls-and-meetings/src/hooks/upcoming-list.ts 拉取即将开始的会议遇到 ConnPoolSyncTimeoutError 后由 list.ts 直接置为 failed；可在该业务调用点针对瞬时连接池超时重试并保留已有列表，改善用户侧失败状态",
-      "by": "agent",
-      "at": "2026-11-05T08:31:32.695Z"
-    },
+    "verdict": null,
     "verdicts": [
       {
         "fixable": true,
