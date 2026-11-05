@@ -72,7 +72,10 @@ lark-cli docs +fetch --doc <doc_token> --doc-format markdown --jq '.data.documen
 
 ## 第 5 步（可选）：落本地
 
-把最有用的一两条结论写进本地 `~/.claude/projects/<proj>/memory/`（正文带飞书源 URL），供本会话与后续快速复用，避免重复 recall。
+把最有用的一两条结论落到本机快速召回层（正文带飞书源 URL），供本会话与后续快速复用，避免重复 recall。落点按当前 harness 分支：
+
+- Claude Code 会话：`~/.claude/projects/<proj>/memory/`，沿用 memory 文件格式（frontmatter 带 `name` / `description` / `metadata.type`）。
+- traex 会话：`~/.trae/cli/memories/extensions/ad_hoc/notes/<YYYYMMDDTHHMMSS±ZZZZ>-<slug>.md`，正文不带 frontmatter，H1 为标题，随后一行写来源与类型；traex 下一次记忆整合时并入。
 
 ## 备注
 

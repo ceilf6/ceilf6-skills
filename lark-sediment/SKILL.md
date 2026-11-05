@@ -123,7 +123,7 @@ lark-cli docs +fetch --doc <doc_token> --doc-format markdown --jq '.data.documen
 - 给用户汇报：写到了哪（父节点 → 文档标题）、新建还是追加、为何选这里（一句话）、文档 URL——这是事后纠偏的入口，不可省略；
 - B 线单独一行：叙事节标题与所在需求子文档（无需求上下文时写「B 线未产出」）；
 - 在相关文档之间补「关联」链接（新文档指向旧的排查/需求文档，反之亦可）；
-- 可选：在本地 `~/.claude/projects/<proj>/memory/` 加一条指针（标题 + 一句 hook + 飞书 URL），让本地 memory 指向这条共享沉淀。
+- 可选：在本机快速召回层加一条指针（标题 + 一句 hook + 飞书 URL），让本地 memory 指向这条共享沉淀。Claude Code 会话写 `~/.claude/projects/<proj>/memory/`；traex 会话写 `~/.trae/cli/memories/extensions/ad_hoc/notes/<YYYYMMDDTHHMMSS±ZZZZ>-<slug>.md`（无 frontmatter，H1 标题 + 来源行 + 正文）。
 
 ## 备注
 
