@@ -34,6 +34,11 @@ export function saveState(dir, state) {
 function fromScan(c, now) {
   return {
     issue_id: c.issue_id,
+    origin: c.origin ?? 'slardar',
+    origin_id: c.origin_id ?? c.issue_id,
+    chat_id: c.chat_id ?? null,
+    sender: c.sender ?? null,
+    created_at: c.created_at ?? null,
     bid: c.bid,
     message: c.message,
     issue_url: c.issue_url ?? null,
@@ -58,6 +63,11 @@ export function mergeScan(state, scanned, now) {
     if (cur) {
       pool[c.issue_id] = {
         ...cur,
+        origin: cur.origin ?? c.origin ?? 'slardar',
+        origin_id: cur.origin_id ?? c.origin_id ?? c.issue_id,
+        chat_id: c.chat_id ?? cur.chat_id ?? null,
+        sender: c.sender ?? cur.sender ?? null,
+        created_at: c.created_at ?? cur.created_at ?? null,
         users: c.users ?? cur.users,
         count: c.count ?? cur.count,
         issue_url: c.issue_url ?? cur.issue_url,
@@ -155,7 +165,7 @@ function classify(state, owner) {
   return { class: v.fixable ? 'fixable' : 'skip', source: v.by, reason: v.reason, at: v.at };
 }
 
-// 环境桶（服务端 / 网络 / 宿主）里还没判过的条目整桶跳过，不逐条读代码；这不是判定、不落盘，
+// Slardar 环境桶（服务端 / 网络 / 宿主）里还没判过的条目整桶跳过，不逐条读代码；这不是判定、不落盘，
 // 用户捞回或 agent 判过的条目不受桶影响，所以派过单的超时类告警仍按它自己的状态归类。
 function bucketed(c, verdict) {
   if (verdict.class !== 'unjudged' || !isBucketed(c.category)) return verdict;
@@ -170,10 +180,17 @@ export function walk(state, scanned, { skip = [] } = {}) {
   for (const c of enrich(scanned)) {
     const id = c.issue_id;
     const owner = state.candidates[id] ?? null;
-    const verdict = bucketed(c, classify(state, owner));
+    const origin = c.origin ?? owner?.origin ?? 'slardar';
+    const classification = classify(state, owner);
+    const verdict = origin === 'slardar' ? bucketed(c, classification) : classification;
     const e = c.latest_event ?? {};
     items.push({
       issue_id: id,
+      origin,
+      origin_id: c.origin_id ?? owner?.origin_id ?? id,
+      chat_id: c.chat_id ?? owner?.chat_id ?? null,
+      sender: c.sender ?? owner?.sender ?? null,
+      created_at: c.created_at ?? owner?.created_at ?? null,
       users: c.users ?? 0,
       count: c.count ?? 0,
       // 池里的 message 冻在首见那次，可能还带着早已换掉的 logId 之类易变量；呈现要用本次扫描的原文。
@@ -227,23 +244,25 @@ export function readLedger(dir) {
 }
 
 export function ledgerRows(state, scanned, now) {
-  return scanned.map((c) => {
-    const owner = state.candidates[c.issue_id];
-    return {
-      at: now,
-      bid: c.bid,
-      issue_id: c.issue_id,
-      count: c.count ?? 0,
-      users: c.users ?? 0,
-      distinct_sessions: c.distinct_sessions ?? 0,
-      pid_top: topOf(c.pid_dist),
-      os_top: topOf(c.os_dist),
-      release_top: topOf(c.release_dist),
-      host_version_top: topOf(c.host_version_dist),
-      source_type_top: topOf(c.source_type_dist),
-      status: owner?.status ?? 'unknown',
-    };
-  });
+  return scanned
+    .filter((c) => (c.origin ?? state.candidates[c.issue_id]?.origin ?? 'slardar') === 'slardar')
+    .map((c) => {
+      const owner = state.candidates[c.issue_id];
+      return {
+        at: now,
+        bid: c.bid,
+        issue_id: c.issue_id,
+        count: c.count ?? 0,
+        users: c.users ?? 0,
+        distinct_sessions: c.distinct_sessions ?? 0,
+        pid_top: topOf(c.pid_dist),
+        os_top: topOf(c.os_dist),
+        release_top: topOf(c.release_dist),
+        host_version_top: topOf(c.host_version_dist),
+        source_type_top: topOf(c.source_type_dist),
+        status: owner?.status ?? 'unknown',
+      };
+    });
 }
 
 export function appendLedger(dir, rows) {

@@ -1,6 +1,8 @@
 # 样例（呈现 → 收敛对话 → 技术方案）
 
-## 呈现
+除「群消息胜出」外，以下告警量级、Issue 链接、桶清单与前 100 条示例均适用于 Slardar 来源。收敛对话和技术方案回显展示共用的逐项决策方式。
+
+## 呈现（Slardar）
 
 【Slardar · vc_ai 近 24h】
 现象：PC 端会中 AI 视图（ai-layout）拉取会议 AI 总结时等了 10 秒没有结果，错误以 unhandledrejection 上报
@@ -29,7 +31,22 @@ Issue：https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&la
 
 先定复现条件。这条既出现在会中 AI 视图（ai-layout），也出现在妙记 PC（minutes-ai-layout-pc）。你想先按哪个场景看？
 
-## 捞回
+## 群消息胜出
+
+【群消息 · 需要处理】
+发送人：VC Alert Bot
+时间：2026-11-05 16:00 +08:00
+消息 ID：`om_xxx`
+原文：`TypeError: Cannot read properties of undefined (reading 'map')`
+
+共享判定回显（已落档）：按 `references/judging.md` 判为能修。证据理由：错误会让当前内容块被 ErrorBoundary 吞掉，所属 Web 仓存在运行时形状校验的改动点。
+证据原文：<判断时读取的附件/回复/链接及代码原文>
+
+这只是候选判定的依据；技术方案、改动范围与验收尚待你逐项决定。
+
+先定复现条件：这条消息对应哪个端、页面和操作时序？
+
+## 捞回（Slardar）
 
 用户：捞回 2
 （APINotProvided 在宿主桶里整桶跳过、从未判定；用户捞回后它就是普通候选，这正是整桶跳过要靠捞回兜住的假阴性。）
@@ -80,7 +97,7 @@ agent：这条的最新帧在 `vc-ai/src/services/ai-layout.ts:271`，master 上
 
 ## 前 100 条没有能修的
 
-翻到第 5 页仍没有 `fixable` 时发，照样附清单：
+Slardar worker 翻到第 5 页仍没有 `fixable` 时向主 Agent 返回本来源摘要；主 Agent 按双线终态决定是否呈现，照样附清单：
 
 前 100 条没有判为能修的。
 待处理（你捞回过、还没派也没拒）：

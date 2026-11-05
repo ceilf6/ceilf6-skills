@@ -24,6 +24,18 @@ const cliStatus = (...args) => {
 };
 
 const scanned = (over = {}) => ({ issue_id: 'i1', bid: 'vc_ai', message: 'm', users: 200, count: 5000, first_seen: 1788000000000, issue_url: 'u1', slardar_url: 's1', ...over });
+const larkMessage = (over = {}) => ({
+  issue_id: 'lark:om_1',
+  origin: 'lark',
+  origin_id: 'om_1',
+  chat_id: 'oc_d7ae3bb59ccbfdebe20cb1aa819b8cb7',
+  message: "TypeError: Cannot read properties of undefined (reading 'map')",
+  sender: 'VC Alert Bot',
+  created_at: '2026-11-05T08:00:00.000Z',
+  users: 0,
+  count: 0,
+  ...over,
+});
 const empty = () => ({ candidates: {}, dispatched: {} });
 const T0 = '2026-09-10T00:00:00.000Z';
 const T1 = '2026-09-11T00:00:00.000Z';
@@ -39,6 +51,169 @@ const snap = (over = {}) => scanned({
   latest_event: { raw_filename: 'webpack://@byteview-web/vc-ai/./src/services/ai-layout.ts', mapped_path: 'vc-ai/src/services/ai-layout.ts', line: 271, function: 'getMeetingAISummary', page: '/webview/ai-layout', release: '7.77.0.21' },
   ...over,
 });
+
+test('Lark 候选保留来源证据，walk 的 source 仍表示判定来源', () => {
+  const { state } = mergeScan(empty(), [larkMessage()], T0);
+  assert.deepEqual(
+    {
+      origin: state.candidates['lark:om_1'].origin,
+      origin_id: state.candidates['lark:om_1'].origin_id,
+      chat_id: state.candidates['lark:om_1'].chat_id,
+      sender: state.candidates['lark:om_1'].sender,
+      created_at: state.candidates['lark:om_1'].created_at,
+    },
+    {
+      origin: 'lark',
+      origin_id: 'om_1',
+      chat_id: 'oc_d7ae3bb59ccbfdebe20cb1aa819b8cb7',
+      sender: 'VC Alert Bot',
+      created_at: '2026-11-05T08:00:00.000Z',
+    },
+  );
+
+  judge(state, 'lark:om_1', { fixable: false, reason: '用户侧表现正常', at: T1 });
+  const item = walk(state, [larkMessage()]).items[0];
+  assert.equal(item.origin, 'lark');
+  assert.equal(item.origin_id, 'om_1');
+  assert.equal(item.source, 'agent');
+  assert.equal(item.class, 'skip');
+});
+
+test('Lark 候选复用用户决定优先规则和 verdicts 历史', () => {
+  const { state } = mergeScan(empty(), [larkMessage()], T0);
+  judge(state, 'lark:om_1', { fixable: false, reason: '缺少用户侧影响证据', at: T0 });
+  revive(state, 'lark:om_1', T1);
+  assert.throws(
+    () => judge(state, 'lark:om_1', { fixable: false, reason: '再次否定', at: T2 }),
+    /已由用户捞回/,
+  );
+  assert.deepEqual(
+    state.candidates['lark:om_1'].verdicts.map((v) => [v.by, v.fixable]),
+    [['agent', false], ['user', true]],
+  );
+});
+
+test('ledgerRows 只记录 Slardar 候选，不把 Lark 消息当量级样本', () => {
+  const { state } = mergeScan(empty(), [snap(), larkMessage()], T0);
+  const rows = ledgerRows(state, [snap(), larkMessage()], T1);
+  assert.deepEqual(rows.map((row) => row.issue_id), ['i1']);
+});
+
+test('Lark 重复 merge 更新证据、保留缺省字段及用户决定', () => {
+  for (const decision of ['revived', 'rejected', 'dispatched']) {
+    let { state } = mergeScan(empty(), [larkMessage()], T0);
+    judge(state, 'lark:om_1', { fixable: false, reason: '待确认影响', at: T0 });
+    if (decision === 'revived') revive(state, 'lark:om_1', T1);
+    if (decision === 'rejected') reject(state, 'lark:om_1', '用户不修', T1);
+    if (decision === 'dispatched') {
+      markDispatched(state, 'lark:om_1', { task_id: 'task_lark', supplement: '已确认', at: T1 });
+    }
+    const before = structuredClone(state.candidates['lark:om_1']);
+    const dispatched = structuredClone(state.dispatched);
+    const evidence = {
+      chat_id: 'oc_updated',
+      sender: 'VC Alert Bot Updated',
+      created_at: '2026-11-05T09:00:00.000Z',
+    };
+    ({ state } = mergeScan(state, [larkMessage(evidence)], T2));
+    const expected = { ...before, ...evidence, refreshed_at: T2 };
+    assert.deepEqual(state.candidates['lark:om_1'], expected, decision);
+    for (const missing of [undefined, null]) {
+      ({ state } = mergeScan(state, [larkMessage({
+        origin: missing, origin_id: missing,
+        chat_id: missing, sender: missing, created_at: missing,
+      })], T2));
+      assert.deepEqual(state.candidates['lark:om_1'], expected, `${decision}: ${missing}`);
+    }
+    assert.deepEqual(state.dispatched, dispatched, decision);
+  }
+});
+
+test('历史 Slardar 重复 merge 补齐默认来源并保留判定', () => {
+  const verdict = { fixable: false, reason: '历史已判', by: 'agent', at: T0 };
+  const legacy = {
+    issue_id: 'i1', bid: 'vc_ai', message: 'm', users: 200, count: 5000,
+    status: 'pending', verdict, verdicts: [verdict], decision: null,
+    first_seen_at: T0, refreshed_at: T0,
+  };
+  let state = { candidates: { i1: legacy }, dispatched: {} };
+  for (const at of [T1, T2]) {
+    ({ state } = mergeScan(state, [scanned()], at));
+    assert.deepEqual(state.candidates.i1, {
+      ...legacy, origin: 'slardar', origin_id: 'i1',
+      chat_id: null, sender: null, created_at: null,
+      issue_url: 'u1', slardar_url: 's1', refreshed_at: at,
+    });
+  }
+});
+
+test('walk 与 ledgerRows 从 owner 回退来源，历史 Slardar 仍记录量级', () => {
+  const { state } = mergeScan(empty(), [larkMessage()], T0);
+  state.candidates.i1 = { issue_id: 'i1', bid: 'vc_ai', message: 'm', status: 'pending' };
+  const larkSnapshot = { issue_id: 'lark:om_1', message: larkMessage().message };
+  const item = walk(state, [larkSnapshot]).items[0];
+  assert.equal(item.origin, 'lark');
+  assert.equal(item.origin_id, 'om_1');
+  assert.equal(item.chat_id, 'oc_d7ae3bb59ccbfdebe20cb1aa819b8cb7');
+  assert.equal(item.sender, 'VC Alert Bot');
+  assert.equal(item.created_at, '2026-11-05T08:00:00.000Z');
+  assert.equal(item.source, null);
+  assert.deepEqual(ledgerRows(state, [larkSnapshot], T1), []);
+  const slardarSnapshot = { issue_id: 'i1', message: 'm', count: 7, users: 3 };
+  const legacyItem = walk(state, [slardarSnapshot]).items[0];
+  assert.equal(legacyItem.origin, 'slardar');
+  assert.equal(legacyItem.origin_id, 'i1');
+  const rows = ledgerRows(state, [larkSnapshot, slardarSnapshot], T1);
+  assert.deepEqual(rows.map((row) => [row.issue_id, row.count, row.users, row.status]), [
+    ['i1', 7, 3, 'pending'],
+  ]);
+  assert.equal('origin' in state.candidates.i1, false);
+});
+
+for (const [category, message] of [
+  ['network', 'TypeError: Failed to fetch'],
+  ['host', 'ChunkLoadError: Loading chunk 123 failed'],
+]) {
+  test(`环境桶来源：显式 Lark ${category} 候选进入逐条判定`, () => {
+    const candidate = larkMessage({ message });
+    const { state } = mergeScan(empty(), [candidate], T0);
+    const before = walk(state, [candidate]);
+    assert.deepEqual(before.items.map((item) => [item.category, item.class, item.source]), [
+      [category, 'unjudged', null],
+    ]);
+    assert.deepEqual(before.buckets, {});
+    assert.equal(before.exhausted, false);
+    for (const fixable of [true, false]) {
+      judge(state, candidate.issue_id, { fixable, reason: '逐条检查影响', at: T1 });
+      const item = walk(state, [candidate]).items[0];
+      assert.deepEqual([item.class, item.source, item.reason], [
+        fixable ? 'fixable' : 'skip', 'agent', '逐条检查影响',
+      ]);
+    }
+  });
+
+  test(`环境桶来源：owner 回退 Lark ${category} 候选进入逐条判定`, () => {
+    const { state } = mergeScan(empty(), [larkMessage({ message })], T0);
+    const snapshot = { issue_id: 'lark:om_1', message };
+    const before = walk(state, [snapshot]);
+    assert.deepEqual(before.items.map((item) => [item.origin, item.category, item.class, item.source]), [
+      ['lark', category, 'unjudged', null],
+    ]);
+    assert.deepEqual(before.buckets, {});
+    assert.equal(before.exhausted, false);
+  });
+
+  test(`环境桶来源：Slardar ${category} 候选维持整桶跳过`, () => {
+    for (const origin of [undefined, 'slardar']) {
+      const candidate = scanned({ message, origin });
+      const { state } = mergeScan(empty(), [candidate], T0);
+      const item = walk(state, [candidate]).items[0];
+      assert.deepEqual([item.origin, item.category, item.class, item.source], [
+        'slardar', category, 'skip', 'bucket',
+      ]);
+    }
+  });
+}
 
 test('空目录加载得到空状态，保存后可回读', () => {
   const dir = mkdtempSync(join(tmpdir(), 'st-'));
@@ -371,6 +546,11 @@ test('walk 的 message 与帧信息取本次扫描快照；--skip 只把非 skip
   reject(state, 'i2', '不修', T0);
   const out = walk(state, scan, { skip: ['i1', 'i2'] });
   assert.deepEqual(out.items[0], {
+    origin: 'slardar',
+    origin_id: 'i1',
+    chat_id: null,
+    sender: null,
+    created_at: null,
     issue_id: 'i1', users: 50, count: 5000, message: '[warn] ErrorBoundary: n.map is not a function', message_core: '[warn] ErrorBoundary: n.map is not a function', bid: 'vc_ai', repo: null, issue_url: 'u1',
     class: 'skip', source: 'session', reason: '', at: null,
     category: 'business', family_key: '[warn] ErrorBoundary: *.map is not a function', family_users: 50, family_count: 5000, family_size: 1,
