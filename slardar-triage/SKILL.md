@@ -15,7 +15,7 @@ description: 并行扫描 Slardar 线上 JS 错误与指定飞书群的最新消
 
 worker 只回四种状态：
 
-- `candidate`：共享状态确认当前候选为 `fixable`；
+- `candidate`：共享状态确认当前候选为 `fixable`；Lark 候选还必须通过「已有处理门禁」；
 - `continue`：当前候选已按既有逻辑判定并落账，继续下一条；
 - `exhausted`：该来源按自身边界扫完；
 - `blocked`：该来源因认证、权限、网络或依赖失败不能继续。
@@ -171,7 +171,21 @@ lark-cli im +chat-messages-list --as bot \
 }
 ```
 
-主 Agent 对这一条执行与 Slardar 完全相同的 `merge -> walk -> judge -> walk`：缓存判定照常复用，`unjudged` 按 `references/judging.md` 读证据，用户捞回、拒绝、已派单与 `rejudge` 语义不变。`walk` 为 `skip` 就回 `continue`，为 `fixable` 就回 `candidate`。Lark 候选不写 Slardar 量级 ledger。
+主 Agent 对这一条执行与 Slardar 完全相同的 `merge -> walk -> judge -> walk`：缓存判定照常复用，`unjudged` 按 `references/judging.md` 读证据，用户捞回、拒绝、已派单与 `rejudge` 语义不变。`walk` 为 `skip` 就回 `continue`；`walk` 为 agent `fixable` 只说明技术上能修，Lark worker 必须继续执行下述「已有处理门禁」，通过后才回 `candidate`。用户捞回项仍按既有用户决定优先规则处理。Lark 候选不写 Slardar 量级 ledger。
+
+### 已有处理门禁（Lark candidate 返回前必做）
+
+用户口径中，其他人已经处理当前问题就等同于本技能的「不能修」。Lark worker 对每个准备返回的 agent `fixable` 候选必须完成以下检查；缓存的 agent `fixable` 也不能直接复用为 `candidate`：
+
+1. 读取当前消息、话题回复、附件和消息内链接，找明确的接手、处理中、已报 Oncall、已有任务或已有 MR 证据。
+2. 用当前问题的报错原文、Issue ID、文件或函数名、已知任务标题等精确证据执行针对性重叠检查：Harness 任务只用 `node <harness>/scripts/task-runtime/schedule/task-schedule.js list` 后按候选仓库与精确证据过滤，不逐个扫描 task JSON；BITS MR 查询先按 `bytedcli-enhanced` 与 `bytedcli-bits-mr` skill 读取规则，再在候选仓库上下文运行 `bytedcli --json bits mr search --state opened --keyword '<来自当前证据的精确关键词>'`，可以查多个精确词，禁止无关键词列出全部开放 MR。
+3. 消息材料给出明确 Meego / Oncall 链接时，只查该条目的当前状态；禁止全局搜索 Meego 或 Oncall。
+
+命中必须有能关联到当前具体问题的正向证据。只命中宽泛关键词、相邻告警或相似标题不算；任务或 MR 标题命中后还要核对描述、来源证据或改动点确实覆盖当前问题。一条消息有多个独立问题时，先检查当前准备呈现的问题；不能拿另一个问题的处理证据跳过当前问题。
+
+确认已有处理：worker 请求主 Agent 对 `lark:<message_id>` 执行 `judge --fixable no --reason "已有处理：<处理人、动作或任务/MR/Oncall 证据>"`；主 Agent 完成不可中断的状态写入单元并重跑 `walk` 后，本条回 `continue`，继续下一条。没有命中：不持久化「无人处理」，worker 只回 `candidate`，不请求任何额外状态写入。
+
+任一必查材料或针对性查询因认证、权限、网络或依赖失败而无法完成，本 worker 只回 `blocked`，不请求状态写入；不得把「未完成检查」当成「没有人在处理」。另一来源仍按双线竞速规则继续。
 
 bot 不在群时，`230002 Bot/User can NOT be out of the chat` 只令本 worker `blocked`；不得把它伪装成群里没有消息，也不得阻塞仍可运行的 Slardar worker。改用 user 身份只在用户已授权 `im:message:readonly` 与 `im:chat:read` 且本人在群内时允许。
 
@@ -244,6 +258,7 @@ bash <skill>/scripts/board.sh --state <state> --issue-id <id>
 - Slardar 走查顺序按同文案聚合的合计用户数、族内按单条用户数，列表已按它排好，第一条能修即全局影响最大；判定仍以 issue 为单位，只有能修 / 不能修两档，拿不准判不能修并写明缺的证据（见 `references/judging.md`）。
 - 环境桶（服务端 / 网络 / 宿主）整桶跳过是走查捷径，不是判定：不落盘、不写理由到候选池；桶内条目用户捞回后与普通候选一样走收敛与派单。
 - 用户的拒绝与捞回优先于任何 agent 判定；agent 不改判捞回项。
+- Lark agent 候选呈现前必须通过「已有处理门禁」；已有处理按 agent `fixable=no` 落账并继续下一条，没有命中不持久化，查询失败则该来源 `blocked`。不得用全局 Meego / Oncall 搜索或无关键词开放 MR 列表替代针对性检查。
 - 呈现与收敛对话里，Lark 首次呈现必须回显共享状态中已落档的候选判定及证据理由；这属于「共享判定回显」，不代表用户已批准技术方案、改动范围或验收。技术方案结论由用户逐项决定；其他初步分析在用户要求「说说你的判断」后给出，仍须用户批准后才能派单。
 - Slardar 来源写答辩或复盘材料要某条告警的量级时间线：`node <skill>/scripts/state.mjs history --dir <state> --issue-id <id>`，基线取派单时那一行。没派过单的候选没有「派单前」参照，`recovery.ratio` 为 null；`latest_present` 为 false 时 `ratio` 按那次扫描的最小次数算，是上界而不是实测值。技能不判定修复是否见效，这个数只是给人看的原始材料。
 - 派单只经 byteview-web-harness 任务链；本技能不开 worktree、不起 omh。
