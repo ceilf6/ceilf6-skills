@@ -4,12 +4,52 @@ import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { DEFAULT_BIDS, PROJECTS, UNRESOLVED_FILTER, coreMessage, makeRunner, makeTextRunner, normalizeSourcePath, parseShareLink, resolveBin, resolveProjectRepo, resolveRepo } from './lib/cli.mjs';
 import { flattenRows, summarize } from './lib/stats.mjs';
-import { enrich } from './lib/category.mjs';
+import { enrich, familyKey } from './lib/category.mjs';
 
 const SAMPLE_SIZE = 300;
+// Slardar 列表接口单页上限，更大的 page-size 也只返回 100 条。
+const LIST_PAGE_MAX = 100;
+// newMinUsers：24h 内只有 1 个用户的 issue 多是单人环境问题，且在小 bid 里每天成批出现又消失，默认不当新增看。
+export const NEW_DEFAULTS = { newHours: 48, newDepth: 300, baselineDays: 7, newMinUsers: 2 };
 
 function commonArgs(bid, window) {
   return ['--bid', bid, '--env', PROJECTS[bid].env, '--site-type', 'web', '--start-time', String(window.start), '--end-time', String(window.end)];
+}
+
+function listArgs(bid, window, { page = 1, pageSize, filter = UNRESOLVED_FILTER }) {
+  return ['js-error', 'list', ...commonArgs(bid, window), '--filter', filter, '--order-by', 'user_descend', '--page-num', String(page), '--page-size', String(pageSize)];
+}
+
+function chunks(list, size) {
+  const out = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
+
+// 列表接口的 min_crash_time 是「查询窗口内的最早事件」，不是 issue 的首次出现：24h 窗口里它几乎总等于窗口起点。
+// 判「新出现」要拿同一批 issue 在更长的基线窗口里的最早事件，落在最近 newHours 内才算新；基线窗口里查不到的不算新。
+// 新 issue 常只是老文案在新版本下换了堆栈（Slardar 按堆栈拆 issue），所以同时记下它的文案族是否在非新 issue 里出现过。
+async function detectNew(bid, window, { newHours, newDepth, baselineDays, newMinUsers }, runner) {
+  const pageCount = Math.ceil(newDepth / LIST_PAGE_MAX);
+  const pages = await Promise.all(Array.from({ length: pageCount }, (_, i) => runner(listArgs(bid, window, { page: i + 1, pageSize: LIST_PAGE_MAX }))));
+  // 低于用户数门槛的 issue 不查基线、新旧未知；它们也不参与「族是否已知」——一次回归常是一批 1–2 人的新堆栈，
+  // 把其中 1 人的那些当成老族会把整批压回量级排序。
+  const issues = pages.flatMap((p) => p?.data?.result ?? []).slice(0, newDepth);
+  const eligible = new Set(issues.filter((i) => (i.user ?? 0) >= newMinUsers).map((i) => i.issue_id));
+  const baseline = { start: window.end - baselineDays * 86400, end: window.end };
+  const firstSeen = new Map();
+  const lookups = chunks([...eligible], LIST_PAGE_MAX).map(async (ids) => {
+    const filter = JSON.stringify([...JSON.parse(UNRESOLVED_FILTER), { filter_name: 'issue_id', op: 'in', values: ids }]);
+    const res = await runner(listArgs(bid, baseline, { pageSize: ids.length, filter }));
+    for (const r of res?.data?.result ?? []) firstSeen.set(r.issue_id, Number(r.min_crash_time));
+  });
+  await Promise.all(lookups);
+  const threshold = (window.end - newHours * 3600) * 1000;
+  const isNew = (issue) => firstSeen.has(issue.issue_id) && firstSeen.get(issue.issue_id) >= threshold;
+  const family = (issue) => familyKey(coreMessage(issue.message));
+  const knownFamilies = new Set(issues.filter((i) => eligible.has(i.issue_id) && !isNew(i)).map(family));
+  const fresh = new Map(issues.filter(isNew).map((i) => [i.issue_id, { issue: i, new_family: !knownFamilies.has(family(i)) }]));
+  return { firstSeen, fresh };
 }
 
 function chunkName(filename) {
@@ -84,12 +124,20 @@ function issueDetailUrl(bid, window, issueId, release) {
   return `https://slardar.bytedance.net/node/web/js/detail?${params.toString()}`;
 }
 
-async function scanBid(bid, window, page, pageSize, runner, textRunner, repoDir) {
+async function scanBid(bid, window, page, pageSize, newOpts, runner, textRunner, repoDir) {
   const project = PROJECTS[bid];
-  const list = await runner(['js-error', 'list', ...commonArgs(bid, window), '--filter', UNRESOLVED_FILTER, '--order-by', 'user_descend', '--page-num', String(page), '--page-size', String(pageSize)]);
+  // 新增检测只在第 1 页做一次：它看的是前 newDepth 条，与翻页无关。
+  const [list, detected] = await Promise.all([
+    runner(listArgs(bid, window, { page, pageSize })),
+    page === 1 && newOpts.newDepth > 0 ? detectNew(bid, window, newOpts, runner) : { firstSeen: new Map(), fresh: new Map() },
+  ]);
   const issues = list?.data?.result ?? [];
+  // 新 issue 不在本页时追加进候选，按用户数取前 pageSize 条；其余只计数。
+  const inPage = new Set(issues.map((i) => i.issue_id));
+  const extra = [...detected.fresh.values()].filter((f) => !inPage.has(f.issue.issue_id)).map((f) => f.issue).sort((a, b) => (b.user ?? 0) - (a.user ?? 0)).slice(0, pageSize);
   const candidates = [];
-  for (const issue of issues) {
+  for (const issue of [...issues, ...extra]) {
+    const fresh = detected.fresh.get(issue.issue_id) ?? null;
     const query = await runner(['log', 'query', ...commonArgs(bid, window), '--ev-type', 'js_error', '--filter', JSON.stringify([{ filter_name: 'issue_id', op: 'in', values: [issue.issue_id] }]), '--columns', 'pid,release,os,source_type,session_id,user_agent,dh_key', '--page-size', String(SAMPLE_SIZE), '--order-by', 'timestamp', '--order', 'desc', '--no-share']);
     const rows = flattenRows(query);
     const { detail, detail_error } = await fetchDetail(rows, bid, window, runner);
@@ -109,24 +157,30 @@ async function scanBid(bid, window, page, pageSize, runner, textRunner, repoDir)
       filename: issue.filename,
       count: issue.count,
       users: issue.user,
+      // first_seen 是扫描窗口内的最早事件；baseline_first_seen 才是基线窗口内的最早事件（毫秒），不在新增检测范围内时为 null。
       first_seen: issue.min_crash_time,
+      baseline_first_seen: detected.firstSeen.get(issue.issue_id) ?? null,
+      is_new: fresh !== null,
+      new_family: fresh?.new_family ?? false,
       status: issue.issue_status,
       slardar_url: await shareLink(bid, window, issue.issue_id, textRunner),
       ...summarize(rows),
       latest_event: latest,
     });
   }
-  return candidates;
+  return { candidates, new_total: detected.fresh.size };
 }
 
-export async function scan({ bids, hours, page = 1, pageSize = 20, repo, now = Date.now(), runner, textRunner }) {
+export async function scan({ bids, hours, page = 1, pageSize = 20, newHours = NEW_DEFAULTS.newHours, newDepth = NEW_DEFAULTS.newDepth, baselineDays = NEW_DEFAULTS.baselineDays, newMinUsers = NEW_DEFAULTS.newMinUsers, repo, now = Date.now(), runner, textRunner }) {
   const end = Math.floor(now / 1000);
   const window = { start: end - hours * 3600, end };
+  const newOpts = { newHours, newDepth, baselineDays, newMinUsers };
   const bin = resolveBin(resolveRepo(repo));
   const run = runner ?? makeRunner(bin);
   const runText = textRunner ?? (runner ? null : makeTextRunner(bin));
   const skipped = [];
   const bidCounts = {};
+  const newCounts = {};
   // 各 bid 互不依赖，同时起跑；一个 bid 失败只记 skipped，不拖累其他 bid。
   const perBid = await Promise.all(bids.map(async (bid) => {
     if (!PROJECTS[bid]) {
@@ -134,9 +188,10 @@ export async function scan({ bids, hours, page = 1, pageSize = 20, repo, now = D
       return [];
     }
     try {
-      const found = await scanBid(bid, window, page, pageSize, run, runText, resolveProjectRepo(bid, repo));
-      bidCounts[bid] = found.length;
-      return found;
+      const found = await scanBid(bid, window, page, pageSize, newOpts, run, runText, resolveProjectRepo(bid, repo));
+      bidCounts[bid] = found.candidates.length;
+      newCounts[bid] = found.new_total;
+      return found.candidates;
     } catch (error) {
       skipped.push({ bid, reason: String(error.message ?? error).slice(0, 300) });
       return [];
@@ -145,7 +200,7 @@ export async function scan({ bids, hours, page = 1, pageSize = 20, repo, now = D
   // 候选以 Slardar issue 为单位、不合并：同文案的 issue 是 Slardar 按堆栈拆开的，合并会让一个判定盖住多条调用链。
   // 排序按同文案聚合后的合计用户数：单条按堆栈拆开后量级被摊薄，聚合后贪心走查的第一条能修才是全局影响最大。
   const candidates = enrich(perBid.flat());
-  return { scanned_at: new Date(now).toISOString(), window, page, page_size: pageSize, bids: bidCounts, skipped_bids: skipped, candidates };
+  return { scanned_at: new Date(now).toISOString(), window, page, page_size: pageSize, new_hours: newHours, new_depth: newDepth, baseline_days: baselineDays, new_min_users: newMinUsers, bids: bidCounts, new_issues: newCounts, skipped_bids: skipped, candidates };
 }
 
 function isMain() {
@@ -169,11 +224,15 @@ if (isMain()) {
     hours: Number(arg('--hours', '24')),
     page: Number(arg('--page', '1')),
     pageSize: Number(arg('--page-size', '20')),
+    newHours: Number(arg('--new-hours', String(NEW_DEFAULTS.newHours))),
+    newDepth: Number(arg('--new-depth', String(NEW_DEFAULTS.newDepth))),
+    baselineDays: Number(arg('--baseline-days', String(NEW_DEFAULTS.baselineDays))),
+    newMinUsers: Number(arg('--new-min-users', String(NEW_DEFAULTS.newMinUsers))),
     repo: arg('--repo'),
   });
   if (out) {
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, `${JSON.stringify(result, null, 2)}\n`);
   }
-  process.stdout.write(`${JSON.stringify({ ok: true, out: out ?? null, page: result.page, candidates: result.candidates.length, bids: result.bids, skipped_bids: result.skipped_bids })}\n`);
+  process.stdout.write(`${JSON.stringify({ ok: true, out: out ?? null, page: result.page, candidates: result.candidates.length, bids: result.bids, new_issues: result.new_issues, skipped_bids: result.skipped_bids })}\n`);
 }

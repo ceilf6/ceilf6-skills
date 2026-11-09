@@ -95,11 +95,28 @@ agent：这条的最新帧在 `vc-ai/src/services/ai-layout.ts:271`，master 上
 
 确认后回复「派这条」；要改哪一项直接说。
 
+## 新增候选胜出（Slardar）
+
+新族候选排在所有候选之前，所以它胜出时前面通常没有跳过项；标题不变，多一行首次出现：
+
+【Slardar · lark_vc_pc 近 24h】
+现象：PC 端会中页面复制会议链接后，剪贴板写入失败却弹出成功提示
+报错：Failed to execute 'writeText' on 'Clipboard': Document is not focused.
+Issue：https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&…
+首次出现：11-05 16:00 +08:00（近 48h 新出现）
+
+整桶跳过（没逐条读代码）：
+- 网络：1 条 / 1 用户，最大 3 条：
+  1. 新 [error] CommonError: [native-api] network proxy failed（1 用户）
+要捞回哪条直接说「捞回 1」；要看某桶全部条目说「展开 网络」。
+
+先定复现条件。……
+
 ## 前 100 条没有能修的
 
 Slardar worker 翻到第 5 页仍没有 `fixable` 时向主 Agent 返回本来源摘要；主 Agent 按双线终态决定是否呈现，照样附清单：
 
-前 100 条没有判为能修的。
+前 100 条和近 48h 新增 3 条里没有判为能修的。
 待处理（你捞回过、还没派也没拒）：
 - …
 排在前面、判为不能修的：

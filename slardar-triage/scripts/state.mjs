@@ -46,6 +46,7 @@ function fromScan(c, now) {
     users: c.users ?? 0,
     count: c.count ?? 0,
     first_seen: c.first_seen ?? null,
+    baseline_first_seen: c.baseline_first_seen ?? null,
     first_seen_at: now,
     refreshed_at: now,
     status: 'pending',
@@ -72,6 +73,7 @@ export function mergeScan(state, scanned, now) {
         count: c.count ?? cur.count,
         issue_url: c.issue_url ?? cur.issue_url,
         slardar_url: c.slardar_url ?? cur.slardar_url,
+        ...((c.baseline_first_seen ?? cur.baseline_first_seen) != null ? { baseline_first_seen: c.baseline_first_seen ?? cur.baseline_first_seen } : {}),
         refreshed_at: now,
       };
       continue;
@@ -200,6 +202,9 @@ export function walk(state, scanned, { skip = [] } = {}) {
       repo: c.repo ?? null,
       issue_url: c.issue_url ?? owner?.issue_url ?? null,
       ...(verdict.class !== 'skip' && skip.includes(id) ? { class: 'skip', source: 'session', reason: '', at: null } : verdict),
+      is_new: Boolean(c.is_new),
+      new_family: Boolean(c.new_family),
+      baseline_first_seen: c.baseline_first_seen ?? owner?.baseline_first_seen ?? null,
       category: c.category,
       family_key: c.family_key,
       family_users: c.family_users,
@@ -219,7 +224,7 @@ export function walk(state, scanned, { skip = [] } = {}) {
     .filter((p) => p.status === 'pending' && p.verdict?.by === 'user' && p.verdict.fixable)
     .sort((a, b) => (b.users ?? 0) - (a.users ?? 0))
     .map((p) => ({ issue_id: p.issue_id, users: p.users ?? 0, message: p.message, issue_url: p.issue_url, at: p.verdict.at }));
-  return { items, todo, buckets: bucketSummary(items), exhausted: !items.some((i) => i.class !== 'skip') };
+  return { items, todo, buckets: bucketSummary(items), new_issues: items.filter((i) => i.is_new).length, exhausted: !items.some((i) => i.class !== 'skip') };
 }
 
 function topOf(dist) {

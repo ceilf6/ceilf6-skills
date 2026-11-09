@@ -553,6 +553,7 @@ test('walk 的 message 与帧信息取本次扫描快照；--skip 只把非 skip
     created_at: null,
     issue_id: 'i1', users: 50, count: 5000, message: '[warn] ErrorBoundary: n.map is not a function', message_core: '[warn] ErrorBoundary: n.map is not a function', bid: 'vc_ai', repo: null, issue_url: 'u1',
     class: 'skip', source: 'session', reason: '', at: null,
+    is_new: false, new_family: false, baseline_first_seen: null,
     category: 'business', family_key: '[warn] ErrorBoundary: *.map is not a function', family_users: 50, family_count: 5000, family_size: 1,
     detail_error: null, mapped_path: 'vc-ai/src/services/ai-layout.ts', line: 271, function: 'getMeetingAISummary', page: '/webview/ai-layout', release: '7.77.0.21',
     sourcemap_missing: false, chunk_files: [],
@@ -607,6 +608,30 @@ test('walk 按同文案聚合的合计用户数排序，同族相邻、族内按
   const out = walk(state, scan);
   assert.deepEqual(out.items.map((i) => [i.issue_id, i.family_users, i.family_size]), [['f-big', 600, 2], ['f-small', 600, 2], ['lone', 500, 1]]);
   assert.equal(out.items[0].family_key, out.items[1].family_key);
+});
+
+test('walk 把新族候选排在最前并带首次出现时间；老文案换堆栈的新 issue 仍按量级排；池里记住基线首次出现', () => {
+  const scan = [
+    snap({ issue_id: 'big', message: 'APINotProvided', users: 900, baseline_first_seen: 1787000000000 }),
+    snap({ issue_id: 'variant', message: '[warn] ErrorBoundary: n.map is not a function', users: 300, is_new: true, new_family: false, baseline_first_seen: 1788100000000 }),
+    snap({ issue_id: 'fresh', message: "Cannot read properties of null (reading 'meetingId')", users: 7, is_new: true, new_family: true, baseline_first_seen: 1788120000000 }),
+  ];
+  const { state } = mergeScan(empty(), scan, T0);
+  assert.equal(state.candidates.fresh.baseline_first_seen, 1788120000000);
+  const out = walk(state, scan);
+  assert.deepEqual(out.items.map((i) => [i.issue_id, i.class, i.is_new, i.new_family, i.baseline_first_seen]), [
+    ['fresh', 'unjudged', true, true, 1788120000000],
+    ['big', 'skip', false, false, 1787000000000],
+    ['variant', 'unjudged', true, false, 1788100000000],
+  ]);
+  assert.equal(out.new_issues, 2);
+  // 后续页没有新增检测结果时，首次出现时间从池里回填；有新值时覆盖。
+  const later = walk(state, [snap({ issue_id: 'fresh', users: 9 })]).items[0];
+  assert.deepEqual([later.is_new, later.baseline_first_seen], [false, 1788120000000]);
+  const { state: refreshed } = mergeScan(state, [snap({ issue_id: 'fresh', users: 9, baseline_first_seen: 1788130000000 })], T1);
+  assert.equal(refreshed.candidates.fresh.baseline_first_seen, 1788130000000);
+  const kept = mergeScan(refreshed, [snap({ issue_id: 'fresh', users: 9 })], T2).state;
+  assert.equal(kept.candidates.fresh.baseline_first_seen, 1788130000000);
 });
 
 test('walk 以 issue 为单位：文案相同的 issue 各自归类，不继承彼此的派单或判定', () => {

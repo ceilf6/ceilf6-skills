@@ -26,7 +26,7 @@ worker 只回四种状态：
 
 **Slardar 与飞书平台只读。** 判定、拒绝、捞回、派单的全部状态都在 `<state>/` 本地文件里，Slardar 上的 issue 状态、处理人、评论等一律不改：平台状态是团队共享视图，本技能的台账是个人工作流，两者互不同步。用户说「不修」「标一下」「关掉」指的都是本地台账。
 
-**Slardar worker 只管「vc-ai / byteview-pc 能修且还没派过单」的告警，agent 判定都不静默丢弃。** 服务端错误码、网络、宿主与 Native 桥三类告警整桶跳过、不逐条读代码；其余按同文案聚合的合计用户数降序逐条走查，第一条能修即停。排在它前面的整桶跳过、agent 判不能修和已派单条目都带理由出现在跳过清单里，用户一句「捞回 N」即可推翻；用户拒过的条目保留在台账中继续跳过，但不再呈现。派出去的单不再跟踪去向：不查 omh 阶段、不查 MR 是否合入、不看修复是否见效。
+**Slardar worker 只管「vc-ai / byteview-pc 能修且还没派过单」的告警，agent 判定都不静默丢弃。** 服务端错误码、网络、宿主与 Native 桥三类告警整桶跳过、不逐条读代码；其余先看近 48h 新出现且文案族也是新的告警，再按同文案聚合的合计用户数降序逐条走查，第一条能修即停。排在它前面的整桶跳过、agent 判不能修和已派单条目都带理由出现在跳过清单里，用户一句「捞回 N」即可推翻；用户拒过的条目保留在台账中继续跳过，但不再呈现。派出去的单不再跟踪去向：不查 omh 阶段、不查 MR 是否合入、不看修复是否见效。
 
 ## 入口
 
@@ -41,7 +41,7 @@ worker 只回四种状态：
 | 「派这条」 | 「派单」一节 |
 | 「这条不修 <摘要或 issue_id>，原因：<文本>」 | `node <skill>/scripts/state.mjs reject --dir <state> --issue-id <id> --reason "<原话>"`，回话题确认。只写本地台账，不调用 Slardar 的 set_status 等写接口 |
 
-参数：`--bid`（默认 `vc_ai,minutes_record,lark_vc_pc`，三个 bid 并行扫、合并成一个顺序；不加 vc_web / vc_pages）、`--hours`（24）、`--page-size`（20，每个 bid 按影响用户数各取一页；最多翻到第 5 页）。
+参数：`--bid`（默认 `vc_ai,minutes_record,lark_vc_pc`，三个 bid 并行扫、合并成一个顺序；不加 vc_web / vc_pages）、`--hours`（24）、`--page-size`（20，每个 bid 按影响用户数各取一页；最多翻到第 5 页）、`--new-hours`（48，首次出现落在这段时间内算新）、`--new-depth`（300，每个 bid 检查 24h 内按用户数排前多少条的新旧；0 关闭）、`--baseline-days`（7，判首次出现用的基线窗口）、`--new-min-users`（2，24h 内用户数低于它的不当新增看）。
 
 三个 bid 的差别（脚本已处理，判定时要知道）：
 - `vc_ai`：会中 / 妙记 / 豆包里的 AI 视图自己上报，环境名 `online`，sourcemap 已绑定，`mapped_path` 直接指到源码。
@@ -69,7 +69,9 @@ worker 的 `<worker-scan.json>` 是本 worker 独享、位于 `<state>` 外的�
 ```bash
 node <skill>/scripts/scan.mjs --bid <bids> --hours <hours> --page <N> --page-size 20 --repo <repo> --out <worker-scan.json>
 ```
-首轮 `N=1`。每个 bid 按影响用户数（`user_descend`）各取一页、并行拉取，合并后按**同文案聚合的合计用户数**重排（`family_key` 是抹掉 logId、meeting_id、JSON 位置、压缩标识符等易变量后的文案，`family_users` / `family_size` 是同族合计），同族相邻、族内按单条用户数。判定仍以 Slardar issue 为单位、不合并：同文案的 issue 是 Slardar 按堆栈拆开的，各自判定；两个 bid 里出现同一文案也各算一条，是否同缺陷要读过调用链再归（`--same-as`）。每条还带 `category`：`server`（错误码、限流、invalid user）/ `network`（Failed to fetch、Load failed、NetError、网络代理失败）/ `host`（APINotProvided、native-api 超时、Java bridge、WKWebView 释放）/ `business`（其余），规则在 `<skill>/scripts/lib/category.mjs`。stdout 的 `bids` 是各 bid 的候选数。`skipped_bids` 里有 vc_ai：回话题说明原因并停在这一步；只有 minutes_record 没扫成：继续走，但呈现时带一句「录音页本次未扫到：<reason>」。
+首轮 `N=1`。每个 bid 按影响用户数（`user_descend`）各取一页、并行拉取，合并后按**同文案聚合的合计用户数**重排（`family_key` 是抹掉 logId、meeting_id、JSON 位置、压缩标识符等易变量后的文案，`family_users` / `family_size` 是同族合计），同族相邻、族内按单条用户数。
+
+第 1 页同时做**新增检测**：Slardar 列表返回的 `min_crash_time`（候选里的 `first_seen`）是查询窗口内的最早事件，24h 窗口里几乎等于窗口起点，不能当首次出现用。脚本把每个 bid 24h 内按用户数排前 `--new-depth` 条的 issue 拿到 `--baseline-days` 天的基线窗口里再查一次，基线内最早事件落在最近 `--new-hours` 内的标 `is_new: true`，`baseline_first_seen` 是这个时间（毫秒）；它不在常规页里时追加进 `candidates`（按用户数最多追加 `page_size` 条），stdout 的 `new_issues` 是各 bid 的新 issue 数。Slardar 按堆栈拆 issue，老文案在新版本下换了堆栈也会成为新 issue，所以只有文案族在非新 issue 里没出现过的才标 `new_family: true`，排序时这些排在所有候选之前（它们用户数小，按量级排永远轮不到），其余新 issue 仍按量级排、只带标记。基线里查不到的 issue 不算新；24h 内不足 `--new-min-users` 个用户的也不算（单人环境问题，且在小 bid 里每天成批出现又消失），要看它们就把参数降到 1。判定仍以 Slardar issue 为单位、不合并：同文案的 issue 是 Slardar 按堆栈拆开的，各自判定；两个 bid 里出现同一文案也各算一条，是否同缺陷要读过调用链再归（`--same-as`）。每条还带 `category`：`server`（错误码、限流、invalid user）/ `network`（Failed to fetch、Load failed、NetError、网络代理失败）/ `host`（APINotProvided、native-api 超时、Java bridge、WKWebView 释放）/ `business`（其余），规则在 `<skill>/scripts/lib/category.mjs`。stdout 的 `bids` 是各 bid 的候选数。`skipped_bids` 里有 vc_ai：回话题说明原因并停在这一步；只有 minutes_record 没扫成：继续走，但呈现时带一句「录音页本次未扫到：<reason>」。
 
 ### 3. 合并候选池并记台账
 
@@ -87,7 +89,7 @@ node <skill>/scripts/state.mjs merge --dir <state> --scan <scan.json>
 ```bash
 node <skill>/scripts/state.mjs walk --dir <state> --scan <scan.json> [--skip <id,id>]
 ```
-`items` 按族合计用户数降序（同第 2 步的顺序），每条带 `category`、`family_key`、`family_users`、`family_size` 与 `class`：
+`items` 先是 `new_family` 的新族候选，再按族合计用户数降序（同第 2 步的顺序），每条带 `is_new`、`new_family`、`baseline_first_seen`、`category`、`family_key`、`family_users`、`family_size` 与 `class`；`new_issues` 是本页标为新的条数：
 - `skip`：`source` 为 `dispatched`（已派单或同缺陷已派单）/ `rejected`（用户拒过）/ `agent`（agent 判不能修）/ `session`（本会话看过）/ `bucket`（环境桶整桶跳过，`reason` 是桶名），带 `reason`、`at`
 - `fixable`：`source` 为 `user`（用户捞回）或 `agent`
 - `unjudged`：还没判过
@@ -117,6 +119,7 @@ Lark 候选胜出时，主 Agent 呈现发送人、消息时间、`message_id`�
 现象：<一句人话：哪个端、哪个页面、用户侧或运行时发生了什么>
 报错：<原始 message>
 Issue：<issue_url>
+首次出现：<baseline_first_seen 转 Asia/Shanghai，到分钟>（近 48h 新出现<，老文案换了堆栈>）
 
 同文案另 <family_size-1> 条 issue，合计 <family_users> 用户。
 
@@ -136,12 +139,14 @@ Issue：<issue_url>
 ```
 - 标题里的 `<bid>` 写当前这条的 bid（`vc_ai` 或 `minutes_record`）；minutes_record 的「现象」要点明是录音页里的 AI 视图。
 - 当前条 `source=user` 时标题后加「（你捞回的）」。
+- 「首次出现」一行只在 `is_new` 时写；`new_family=false` 时括号里补「老文案换了堆栈」。不是新 issue 的不写这行，也不要拿 `first_seen` 充当首次出现（它是窗口起点）。
+- 跳过清单与整桶跳过里 `is_new` 的条目在摘要前加「新」字，让用户看得出哪些是新出现后被跳过的。
 - 待处理 = `walk.todo` 去掉当前这条；为空省略该节。
 - 「同文案另 k 条」一行只在 `family_size>1` 时写；`family_size=1` 省略。
 - 跳过清单 = 当前这条之前、`source` 不是 `bucket` 或 `rejected` 的 `skip` 项（跨页累积），全部列出、不折叠，从 1 编号，「捞回 N」按这个编号。来源措辞：`agent` → `agent`，`dispatched` → `已派单`，`session` → `本会话看过`（不带理由）。`source=rejected` 的条目仍由 `walk` 跳过，但不进入呈现、编号或「捞回 N」清单。为空省略该节。
 - 整桶跳过 = 当前这条之前的 `bucket` 项按 `category` 分桶（跨页累积），每桶一行写条数与合计用户数，桶内按用户数列出最大 3 条，编号接着跳过清单往下排；「展开 <桶名>」把该桶全部条目列出并接着编号。两个清单都为空时省略。
 - 「现象」只写可观察事实，不写代码路径、函数名、根因、改法。
-- 翻到第 5 页仍没有 `fixable`：Slardar worker 返回 `exhausted` 与「前 100 条没有判为能修的」、跳过清单和待处理清单；主 Agent 按「双线竞速」决定整体结果。这句不带「新」字：候选池不看告警首次出现的时间。
+- 翻到第 5 页仍没有 `fixable`：Slardar worker 返回 `exhausted` 与「前 100 条和近 48h 新增 <新增条数> 条里没有判为能修的」、跳过清单和待处理清单；主 Agent 按「双线竞速」决定整体结果。
 
 ## 群消息扫描
 

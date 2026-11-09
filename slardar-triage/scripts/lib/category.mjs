@@ -51,6 +51,7 @@ export function familyKey(messageCore) {
 }
 
 // 给每条候选补上 category 与所属族的合计量级，并按「族合计用户数降序 → 同族内单条用户数降序」重排。
+// 新出现且文案族也是新的候选排在最前：它们用户数小，按量级排永远轮不到；老文案换了堆栈的新 issue 不算，仍按量级排。
 // 判定仍以 issue 为单位，这里只改排序与呈现。
 export function enrich(candidates) {
   const families = new Map();
@@ -69,7 +70,7 @@ export function enrich(candidates) {
       const fam = families.get(c.family_key);
       return { ...c, family_users: fam.users, family_count: fam.count, family_size: fam.size };
     })
-    .sort((a, b) => b.family_users - a.family_users || a.family_key.localeCompare(b.family_key) || (b.users ?? 0) - (a.users ?? 0));
+    .sort((a, b) => Number(Boolean(b.new_family)) - Number(Boolean(a.new_family)) || b.family_users - a.family_users || a.family_key.localeCompare(b.family_key) || (b.users ?? 0) - (a.users ?? 0));
 }
 
 // 走查输出里的整桶摘要：每个环境桶里有多少条、多少族、合计多少用户。
