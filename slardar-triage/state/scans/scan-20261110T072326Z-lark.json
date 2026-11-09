@@ -1,0 +1,31 @@
+{
+  "scanned_at": "2026-11-10T07:23:26Z",
+  "candidates": [
+    {
+      "issue_id": "lark:om_x100b61f75c149d1cdd793c1dbaf316f",
+      "origin": "lark",
+      "origin_id": "om_x100b61f75c149d1cdd793c1dbaf316f",
+      "chat_id": "oc_d7ae3bb59ccbfdebe20cb1aa819b8cb7",
+      "message": "<card title=\"[P2][cn]Web 报警|白屏/影响用户数报警\">\n**报警链接** :\n[白屏/影响用户数报警](https://slardar.bytedance.net/node/web/alarm/detail?bid=vc_pages&env=online&region=cn&start_time=1793777760&end_time=1793864160&id=973200&history_id=&strategy_id=&from_alarm_card=1)\n**环境** :\nonline\n**报警时间** :\n2026-11-05 15:31:00+08:00\n\n**项目名** :\n[vc_pages] : 视频会议web落地页\n**报警接收人** :\nyangjinliang\n---\n**触发原因 :** (多策略关系-与)[查看/修改报警规则](https://slardar.bytedance.net/node/web/alarm/detail?bid=vc_pages&env=online&region=cn&start_time=1793777879&end_time=1793864279&id=973200&history_id=&strategy_id=&from_alarm_card=1)\n**🔴 策略1 - 白屏/影响用户数监控**\n**触发条件**: 白屏/影响用户数 阈值 > 0 触发报警\n**📊 触发数据**: 当前值 **20.00** (阈值 0) | 样本量 513 | 用户数 20 | 时间窗口 1440分钟\n**现场数据 :**\n🖼️ Image(img_key:img_v3_02175_4e7ccaa5-5110-427b-8330-b69e5c12064g)\n**监控详情 :** [监控详情](https://slardar.bytedance.net/node/web/blank?bid=vc_pages&env=online&region=cn&start_time=1793691060&end_time=1793863860&filter_id=3b83d84b978409cd25d84834007eec54&activeTab=err)\n**评论** : [点击前往评论](https://slardar.bytedance.net/node/web/alarm/detail?env=online&region=cn&bid=vc_pages&start_time=1793863860&end_time=1793950260&id=973200&open_comment_history_id=67571838)\n---\n**🤖 Agent归因分析**\n**归因结论：** 白屏影响用户数升高主要由8.5.0.2版本、Microsoft Edge浏览器Windows端贡献。\n**关键证据：**\n1. 维度归因显示release=8.5.0.2贡献度最高（100%）\n2. 浏览器维度中Microsoft Edge贡献度最高（81.9%）\n3. 系统维度中Windows系统贡献度最高（74.1%）\n[点击进入深度归因](https://slardar.bytedance.net/next/?prompt=%E5%B8%AE%E6%88%91%E5%AF%B9%E6%8A%A5%E8%AD%A6history_id%E4%B8%BA67571838%E7%9A%84%E6%8A%A5%E8%AD%A6%E8%BF%9B%E8%A1%8C%E6%B7%B1%E5%BA%A6%E5%BD%92%E5%9B%A0&from=alarm_attribution)\n---\n<clickable>\n{整个报警规则 ▼}\n[取消屏蔽]\n[一键拉群]\n</clickable>\n<clickable>\n[有效]\n[无效]\n[正常波动]\n[处理中]\n[已解决]\n</clickable>\n<clickable>\n\n</clickable>\n</card>",
+      "sender": "Slardar Oncall",
+      "created_at": "2026-11-04 23:33",
+      "users": 0,
+      "count": 0,
+      "thread_id": "omt_1989b9e4b714da7b",
+      "attachment_clues": [
+        "img_v3_02175_4e7ccaa5-5110-427b-8330-b69e5c12064g"
+      ],
+      "link_clues": [
+        "Slardar vc_pages alarm 973200",
+        "白屏监控详情 filter_id=3b83d84b978409cd25d84834007eec54",
+        "报警评论 history_id=67571838",
+        "深度归因 history_id=67571838",
+        "Feishu thread applink"
+      ]
+    }
+  ],
+  "bids": {
+    "lark": 1
+  },
+  "skipped_bids": []
+}

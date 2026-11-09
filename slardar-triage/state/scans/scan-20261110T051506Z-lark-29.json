@@ -1,0 +1,16 @@
+{
+  "scanned_at": "2026-11-10T05:15:06.000Z",
+  "candidates": [
+    {
+      "issue_id": "lark:om_x100b61a8e2d120a4cfec143f3c00565",
+      "origin": "lark",
+      "origin_id": "om_x100b61a8e2d120a4cfec143f3c00565",
+      "chat_id": "oc_d7ae3bb59ccbfdebe20cb1aa819b8cb7",
+      "message": "<card title=\"Slardar 新增JS错误【版本: 8.4.0.39】\">\n您订阅的bid为vc_ai的站点出现了新增错误，报警名为[新增js错误](https://slardar.bytedance.net/node/web/alarm_new_error/detail?bid=vc_ai&site_type=web&id=44628&start_time=1793623888&end_time=1793710288)，目前该错误出现1次，影响1个用户\n【订阅信息】:\n \n错误开始出现时间: 2026-11-03 19:51:28\n \n样本量阈值: 0\n \n用户阈值: 0\n \n报警级别: P2\n \n通知人: [@杨金良(ou_3224b3ec4c93ae257ca7708670899cf1)]\n【错误信息】:\n \nerror type: NativeNetworkProxyError\n \nerror msg: [error] CommonError: [native-api] network proxy failed: command=94003, contextId=18ehibtk4qsv\n \nfile name: blob:https://vc.feishu.cn/97ae8462-0d76-447a-bc5a-7d8bfd9f1179\n \n详情链接: [\\[Click For Details\\]](https://slardar.bytedance.net/node/web/js?&bid=vc_ai&start_time=1793703088&end_time=1793710288&filter_conditions=%7B%22type%22%3A%22%22%2C%22sub_conditions%22%3A%5B%7B%22type%22%3A%22%22%2C%22op%22%3A%22not_in%22%2C%22dimension%22%3A%22path%22%2C%22values%22%3A%5B%22%2Fwebview%2Fai-layout-codinx%22%5D%7D%2C%7B%22type%22%3A%22%22%2C%22op%22%3A%22not_includes%22%2C%22dimension%22%3A%22message%22%2C%22values%22%3A%5B%22Failed+to+fetch%22%5D%7D%2C%7B%22type%22%3A%22%22%2C%22op%22%3A%22in%22%2C%22dimension%22%3A%22issue_id%22%2C%22values%22%3A%5B%225643a950a0a70a9e5924cb7084aeccaf%22%5D%7D%5D%7D&env=Slardar_All)\n\n---\n[一键拉群]\n---\n[有效] [无效] [正常波动] [处理中] [已解决]\n</card>",
+      "sender": "Slardar Oncall",
+      "created_at": "2026-11-03 03:51",
+      "users": 1,
+      "count": 1
+    }
+  ]
+}
