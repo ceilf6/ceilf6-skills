@@ -248,7 +248,8 @@ export function readLedger(dir) {
   return rows;
 }
 
-export function ledgerRows(state, scanned, now) {
+// window_hours 是这行次数 / 用户数所覆盖的窗口长度：缩窗扫描（1 小时、10 分钟）的行量级不可与 24h 行相比。
+export function ledgerRows(state, scanned, now, windowHours = 24) {
   return scanned
     .filter((c) => (c.origin ?? state.candidates[c.issue_id]?.origin ?? 'slardar') === 'slardar')
     .map((c) => {
@@ -257,6 +258,7 @@ export function ledgerRows(state, scanned, now) {
         at: now,
         bid: c.bid,
         issue_id: c.issue_id,
+        window_hours: windowHours,
         count: c.count ?? 0,
         users: c.users ?? 0,
         distinct_sessions: c.distinct_sessions ?? 0,
@@ -286,7 +288,8 @@ export function appendLedger(dir, rows) {
 export function mergeFromScan(dir, scan) {
   const { state } = mergeScan(loadState(dir), scan.candidates, scan.scanned_at);
   saveState(dir, state);
-  const appended = appendLedger(dir, ledgerRows(state, scan.candidates, scan.scanned_at));
+  const windowHours = scan.window ? (scan.window.end - scan.window.start) / 3600 : 24;
+  const appended = appendLedger(dir, ledgerRows(state, scan.candidates, scan.scanned_at, windowHours));
   const pending = pendingSorted(state);
   mkdirSync(join(dir, 'scans'), { recursive: true });
   writeFileSync(join(dir, 'scans', 'merge-latest.json'), `${JSON.stringify({ pending }, null, 2)}\n`);
@@ -305,9 +308,11 @@ function rowCount(r) {
 
 // 回落比拿「派单前最近一次的次数」对「台账最新一次扫描里本条 + 同缺陷各条（covered_by）的次数之和」：
 // 报错文案改名会让原 issue 消失、量转到新 issue，只看原 issue 会把改名误判成修好了。
-export function history(state, ledger, issueId) {
+// 基线与回落比只看 24h 窗口的台账行：缩窗扫描记下的次数是几分钟的量，混进来会把回落比算成已修复。早期行没有 window_hours，都是 24h 扫的。
+export function history(state, allRows, issueId) {
   const c = state.candidates[issueId];
   if (!c) throw new Error(`候选池里没有 ${issueId}`);
+  const ledger = allRows.filter((r) => (r.window_hours ?? 24) === 24);
   const byAt = (a, b) => Date.parse(a.at) - Date.parse(b.at);
   const isOwn = rowMatcher(c);
   const coveredMatchers = Object.values(state.candidates).filter((x) => x.covered_by === issueId).map(rowMatcher);

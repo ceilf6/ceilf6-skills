@@ -41,7 +41,7 @@ worker 只回四种状态：
 | 「派这条」 | 「派单」一节 |
 | 「这条不修 <摘要或 issue_id>，原因：<文本>」 | `node <skill>/scripts/state.mjs reject --dir <state> --issue-id <id> --reason "<原话>"`，回话题确认。只写本地台账，不调用 Slardar 的 set_status 等写接口 |
 
-参数：`--bid`（默认 `vc_ai,minutes_record,lark_vc_pc`，三个 bid 并行扫、合并成一个顺序；不加 vc_web / vc_pages）、`--hours`（24）、`--page-size`（20，每个 bid 按影响用户数各取一页；最多翻到第 5 页）、`--new-hours`（48，首次出现落在这段时间内算新）、`--new-depth`（300，每个 bid 检查 24h 内按用户数排前多少条的新旧；0 关闭）、`--baseline-days`（7，判首次出现用的基线窗口）、`--new-min-users`（2，24h 内用户数低于它的不当新增看）。
+参数：`--bid`（默认 `vc_ai,minutes_record,lark_vc_pc`，三个 bid 并行扫、合并成一个顺序；不加 vc_web / vc_pages）、`--hours`（24；`--minutes` 给缩窗用，给了就覆盖 `--hours`）、`--page-size`（20，每个 bid 按影响用户数各取一页；最多翻到第 5 页）、`--new-hours`（48，首次出现落在这段时间内算新）、`--new-depth`（300，每个 bid 检查 24h 内按用户数排前多少条的新旧；0 关闭）、`--baseline-days`（7，判首次出现用的基线窗口）、`--new-min-users`（2，24h 内用户数低于它的不当新增看）。
 
 三个 bid 的差别（脚本已处理，判定时要知道）：
 - `vc_ai`：会中 / 妙记 / 豆包里的 AI 视图自己上报，环境名 `online`，sourcemap 已绑定，`mapped_path` 直接指到源码。
@@ -108,6 +108,8 @@ node <skill>/scripts/state.mjs walk --dir <state> --scan <scan.json> [--skip <id
 
 `exhausted: true`（本页全是 `skip`）：`N+1` 从第 2 步重跑，最多到 `N=5`（前 100 条）。跨页时把各页 `walk` 的 `skip` 项按页序累积，作为第 5 步的跳过清单，按 `issue_id` 去重、保留先出现的那条。本页 `candidates` 少于 `page_size` 说明已到末页，不再往后翻。
 
+24h 翻到第 5 页（或末页）仍没有 `fixable` 时**缩窗重扫**：先 `--hours 1`，仍没有再 `--minutes 10`，各自从第 1 页按第 2–4 步重走（`merge` 照常；加 `--new-depth 0`，新增检测在 24h 第 1 页已做过）。缩窗不改变排序逻辑，起作用的地方是窗口内总 issue 数小到前几页就覆盖了长尾：vc_ai 24h 有八千多条 issue，前 100 条止于一百多用户，而 10 分钟窗口里 1–2 个用户的 issue 就排得进来，这正是小而致命的那一层。缩窗命中的是**样本**，不是全集——只有这几分钟里恰好触发的 issue 才会出现，所以它是 24h 走查与新增检测之后的兜底，不替代前两者。缩窗的 `walk` 跳过清单接在 24h 清单后面累积；台账行按窗口长度记 `window_hours`，`history` 的基线与回落比只看 24h 行。缩窗胜出的候选呈现时标题写实际窗口（「近 1 小时」「近 10 分钟」），量级也写该窗口的数字，任务书里的「线上事实」要另按 24h 窗口补一句次数 / 用户数（`js-error list --filter issue_id`）。10 分钟窗口仍无 `fixable` 才算 `exhausted`。
+
 ### 5. 呈现
 
 Lark 候选胜出时，主 Agent 呈现发送人、消息时间、`message_id`、原始消息正文、判断使用的附件/回复/链接，以及共享状态中按 `references/judging.md` 已落档的候选判定及其证据理由。明确标为「共享判定回显」，这是候选判定的依据，不代表用户已批准技术方案、改动范围或验收；随后进入同一套一次一问收敛。
@@ -137,7 +139,7 @@ Issue：<issue_url>
 
 <第一个引导问题>
 ```
-- 标题里的 `<bid>` 写当前这条的 bid（`vc_ai` 或 `minutes_record`）；minutes_record 的「现象」要点明是录音页里的 AI 视图。
+- 标题里的 `<bid>` 写当前这条的 bid（`vc_ai` 或 `minutes_record`）；minutes_record 的「现象」要点明是录音页里的 AI 视图。「近 24h」按实际扫描窗口写，缩窗命中的写「近 1 小时」「近 10 分钟」，并在报错下一行写「该窗口 <count> 次 / <users> 用户」。
 - 当前条 `source=user` 时标题后加「（你捞回的）」。
 - 「首次出现」一行只在 `is_new` 时写；`new_family=false` 时括号里补「老文案换了堆栈」。不是新 issue 的不写这行，也不要拿 `first_seen` 充当首次出现（它是窗口起点）。
 - 跳过清单与整桶跳过里 `is_new` 的条目在摘要前加「新」字，让用户看得出哪些是新出现后被跳过的。
@@ -146,7 +148,7 @@ Issue：<issue_url>
 - 跳过清单 = 当前这条之前、`source` 不是 `bucket` 或 `rejected` 的 `skip` 项（跨页累积），全部列出、不折叠，从 1 编号，「捞回 N」按这个编号。来源措辞：`agent` → `agent`，`dispatched` → `已派单`，`session` → `本会话看过`（不带理由）。`source=rejected` 的条目仍由 `walk` 跳过，但不进入呈现、编号或「捞回 N」清单。为空省略该节。
 - 整桶跳过 = 当前这条之前的 `bucket` 项按 `category` 分桶（跨页累积），每桶一行写条数与合计用户数，桶内按用户数列出最大 3 条，编号接着跳过清单往下排；「展开 <桶名>」把该桶全部条目列出并接着编号。两个清单都为空时省略。
 - 「现象」只写可观察事实，不写代码路径、函数名、根因、改法。
-- 翻到第 5 页仍没有 `fixable`：Slardar worker 返回 `exhausted` 与「前 100 条和近 48h 新增 <新增条数> 条里没有判为能修的」、跳过清单和待处理清单；主 Agent 按「双线竞速」决定整体结果。
+- 24h 前 100 条、近 1 小时、近 10 分钟都没有 `fixable`：Slardar worker 返回 `exhausted` 与「24h 前 100 条、近 48h 新增 <新增条数> 条、近 1 小时与近 10 分钟窗口里都没有判为能修的」、跳过清单和待处理清单；主 Agent 按「双线竞速」决定整体结果。
 
 ## 群消息扫描
 

@@ -173,7 +173,7 @@ async function scanBid(bid, window, page, pageSize, newOpts, runner, textRunner,
 
 export async function scan({ bids, hours, page = 1, pageSize = 20, newHours = NEW_DEFAULTS.newHours, newDepth = NEW_DEFAULTS.newDepth, baselineDays = NEW_DEFAULTS.baselineDays, newMinUsers = NEW_DEFAULTS.newMinUsers, repo, now = Date.now(), runner, textRunner }) {
   const end = Math.floor(now / 1000);
-  const window = { start: end - hours * 3600, end };
+  const window = { start: Math.floor(end - hours * 3600), end };
   const newOpts = { newHours, newDepth, baselineDays, newMinUsers };
   const bin = resolveBin(resolveRepo(repo));
   const run = runner ?? makeRunner(bin);
@@ -221,7 +221,8 @@ if (isMain()) {
   const out = arg('--out');
   const result = await scan({
     bids: arg('--bid', DEFAULT_BIDS.join(',')).split(',').map((s) => s.trim()).filter(Boolean),
-    hours: Number(arg('--hours', '24')),
+    // --minutes 给缩窗扫描用（如 10 分钟），给了就覆盖 --hours。
+    hours: arg('--minutes') !== undefined ? Number(arg('--minutes')) / 60 : Number(arg('--hours', '24')),
     page: Number(arg('--page', '1')),
     pageSize: Number(arg('--page-size', '20')),
     newHours: Number(arg('--new-hours', String(NEW_DEFAULTS.newHours))),

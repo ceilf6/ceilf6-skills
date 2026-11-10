@@ -12,7 +12,7 @@
 
 - Issue `{{issue_id}}`,错误信息 `{{message}}`,上报文件 `{{filename}}`,状态 {{status}}。
 - Slardar 告警链接(评审看上下文用,MR 描述须原样带上):{{slardar_url}}
-- 24h {{count}} 次 / {{users}} 用户;首次出现 {{baseline_first_seen 转 Asia/Shanghai;为 null 或等于基线起点时写「7 天基线内持续出现」,不要用 first_seen(它是扫描窗口起点)}}。
+- 24h {{count}} 次 / {{users}} 用户(缩窗命中的候选按 24h 窗口另查一次再填,不填缩窗的量);首次出现 {{baseline_first_seen 转 Asia/Shanghai;为 null 或等于基线起点时写「7 天基线内持续出现」,不要用 first_seen(它是扫描窗口起点)}}。
 - {{sample_size}} 条事件抽样:页面 {{pid_dist}};系统 {{os_dist}};release {{release_dist}};source_type {{source_type_dist}};宿主版本 {{host_version_dist}};distinct session {{distinct_sessions}}。
 - 结论:{{一段话:触发面与根因方向}}
 

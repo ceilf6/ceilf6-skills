@@ -345,6 +345,14 @@ test('scan 新增检测：基线窗口里首次出现在 48h 内的 issue 标 is
   assert.ok(calls.some((c) => c.includes('--order-by user_descend --page-num 1 --page-size 2')));
 });
 
+test('scan 缩窗：hours 为小数时窗口起点取整秒', async () => {
+  const calls = [];
+  const runner = (args) => { calls.push(args.join(' ')); return args[0] === 'js-error' ? { data: { result: [] } } : { data: { table_list: [] } }; };
+  const r = await scan({ bids: ['vc_ai'], hours: 1 / 6, newDepth: 0, now: NOW, runner });
+  assert.deepEqual(r.window, { start: END - 600, end: END });
+  assert.ok(calls[0].includes(`--start-time ${END - 600} --end-time ${END}`));
+});
+
 test('scan 新增检测只在第 1 页做，--new-depth 0 关闭；新 issue 追加数不超过 page-size', async () => {
   const calls = [];
   const r2 = await scan({ bids: ['vc_ai'], hours: 24, pageSize: 2, page: 2, now: NOW, runner: newRunner(calls) });

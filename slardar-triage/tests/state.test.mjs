@@ -388,6 +388,7 @@ test('ledgerRows 每个扫描候选一行，带分布主项与池内状态；池
     at: T1,
     bid: 'vc_ai',
     issue_id: 'i1',
+    window_hours: 24,
     count: 5000,
     users: 200,
     distinct_sessions: 285,
@@ -719,6 +720,22 @@ test('history 只按 issue_id 认台账行：同文案的其他 issue 不混入�
   assert.equal(h.recovery.baseline_count, 900);
   assert.equal(h.recovery.latest_count, 400);
   assert.equal(h.recovery.ratio, 400 / 900);
+});
+
+test('缩窗扫描的台账行带 window_hours，history 的基线与回落比不看它们', () => {
+  const { state } = mergeScan(empty(), [snap({ count: 1000 })], T0);
+  markDispatched(state, 'i1', { task_id: 't', supplement: 'x', at: T0 });
+  const day = ledgerRows(state, [snap({ count: 1000 })], T0);
+  const tenMinutes = ledgerRows(state, [snap({ count: 3 })], T1, 1 / 6);
+  assert.equal(tenMinutes[0].window_hours, 1 / 6);
+  const h = history(state, [...day, ...tenMinutes], 'i1');
+  assert.deepEqual(h.rows.map((r) => [r.at, r.count]), [[T0, 1000]]);
+  assert.equal(h.recovery.latest_at, T0);
+  assert.equal(h.recovery.ratio, 1);
+  // mergeFromScan 按 scan.window 算窗口长度写进台账。
+  const dir = mkdtempSync(join(tmpdir(), 'st-'));
+  mergeFromScan(dir, { scanned_at: T2, window: { start: 1788000000, end: 1788000600 }, candidates: [snap({ count: 3 })] });
+  assert.equal(readLedger(dir)[0].window_hours, 1 / 6);
 });
 
 test('history 对没派单的候选不给基线，ratio 为 null', () => {

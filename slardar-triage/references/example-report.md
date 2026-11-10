@@ -112,11 +112,24 @@ Issue：https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark
 
 先定复现条件。……
 
+## 缩窗命中（Slardar）
+
+24h 前 100 条都跳过后缩到 10 分钟窗口命中，标题与量级都按该窗口写，不冒充 24h 的量：
+
+【Slardar · lark_vc_pc 近 10 分钟】
+现象：PC 原生邀请页 SIP/H323 面板在信息请求失败后一直转圈
+报错：Cannot read properties of undefined (reading 'sipInfo')
+Issue：https://slardar.bytedance.net/node/web/js/detail?env=production&bid=lark_vc_pc&…
+该窗口 1 次 / 1 用户。
+
+排在它前面、判为不能修的：
+1. …（24h 与缩窗两轮的清单接着编号）
+
 ## 前 100 条没有能修的
 
 Slardar worker 翻到第 5 页仍没有 `fixable` 时向主 Agent 返回本来源摘要；主 Agent 按双线终态决定是否呈现，照样附清单：
 
-前 100 条和近 48h 新增 3 条里没有判为能修的。
+24h 前 100 条、近 48h 新增 3 条、近 1 小时与近 10 分钟窗口里都没有判为能修的。
 待处理（你捞回过、还没派也没拒）：
 - …
 排在前面、判为不能修的：
