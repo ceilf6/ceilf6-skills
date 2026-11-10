@@ -15601,10 +15601,10 @@
     "baseline_first_seen": null,
     "status": "pending",
     "verdict": {
-      "fixable": true,
-      "reason": "用户打开 AI 纪要侧边栏时，7507 用户引导查询约 63 秒后失败；checkGuideKeyConsumed 将失败降级成未消费且初始化链同步等待，可能重复展示引导并拖慢页面就绪。Web 侧可将查询失败降级为不展示引导，并与页面 ready 解耦",
+      "fixable": false,
+      "reason": "退役能力：会中笔记已下线；证据：vc_subtitle_summary 中 GET_USER_GUIDE_REQUEST 的 Native command 7507 用户引导查询链路",
       "by": "agent",
-      "at": "2026-11-10T10:31:50.878Z"
+      "at": "2026-11-10T12:29:36.435Z"
     },
     "verdicts": [
       {
@@ -15612,6 +15612,12 @@
         "reason": "用户打开 AI 纪要侧边栏时，7507 用户引导查询约 63 秒后失败；checkGuideKeyConsumed 将失败降级成未消费且初始化链同步等待，可能重复展示引导并拖慢页面就绪。Web 侧可将查询失败降级为不展示引导，并与页面 ready 解耦",
         "by": "agent",
         "at": "2026-11-10T10:31:50.878Z"
+      },
+      {
+        "fixable": false,
+        "reason": "退役能力：会中笔记已下线；证据：vc_subtitle_summary 中 GET_USER_GUIDE_REQUEST 的 Native command 7507 用户引导查询链路",
+        "by": "agent",
+        "at": "2026-11-10T12:29:36.435Z"
       }
     ],
     "decision": null
