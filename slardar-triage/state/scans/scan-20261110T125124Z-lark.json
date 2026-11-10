@@ -1,0 +1,26 @@
+{
+  "scanned_at": "2026-11-10T12:51:24Z",
+  "candidates": [
+    {
+      "issue_id": "lark:om_x100b6109baa09ca0dd10870e41450a2",
+      "origin": "lark",
+      "origin_id": "om_x100b6109baa09ca0dd10870e41450a2",
+      "chat_id": "oc_d7ae3bb59ccbfdebe20cb1aa819b8cb7",
+      "message": "<card title=\"Slardar 新增JS错误【版本: 8.5.0.4】\">\n您订阅的bid为vc_ai的站点出现了新增错误，报警名为[新增js错误](https://slardar.bytedance.net/node/web/alarm_new_error/detail?bid=vc_ai&site_type=web&id=44628&start_time=1793235925&end_time=1793322325)，目前该错误出现1次，影响1个用户\n【订阅信息】:\n \n错误开始出现时间: 2026-10-30 08:05:25\n \n样本量阈值: 0\n \n用户阈值: 0\n \n报警级别: P2\n \n通知人: [@杨金良(ou_3224b3ec4c93ae257ca7708670899cf1)]\n【错误信息】:\n \nerror type: ChunkLoadError\n \nerror msg: [fatal] ErrorBoundary: Loading chunk 5903 failed.\n(missing: https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/5903-48ca4dc0234ad7e363de-ai.js?now=1793318711162)\n \nfile name: https://sf1-scmcdn-cn.feishucdn.com/obj/feishu-static/byteview/vc-ai/static/js/5903-48ca4dc0234ad7e363de-ai.js?now=1793318711162)\n \n详情链接: [\\[Click For Details\\]](https://slardar.bytedance.net/node/web/js?&bid=vc_ai&start_time=1793315125&end_time=1793322325&filter_conditions=%7B%22type%22%3A%22%22%2C%22sub_conditions%22%3A%5B%7B%22type%22%3A%22%22%2C%22op%22%3A%22not_in%22%2C%22dimension%22%3A%22path%22%2C%22values%22%3A%5B%22%2Fwebview%2Fai-layout-codinx%22%5D%7D%2C%7B%22type%22%3A%22%22%2C%22op%22%3A%22not_includes%22%2C%22dimension%22%3A%22message%22%2C%22values%22%3A%5B%22Failed+to+fetch%22%5D%7D%2C%7B%22type%22%3A%22%22%2C%22op%22%3A%22in%22%2C%22dimension%22%3A%22issue_id%22%2C%22values%22%3A%5B%22d35b00b9048d1d52ecd38828aedaa4dd%22%5D%7D%5D%7D&env=Slardar_All)\n\n---\n[一键拉群]\n---\n[有效] [无效] [正常波动] [处理中] [已解决]\n</card>",
+      "sender": "Slardar Oncall",
+      "created_at": "2026-10-29 17:05",
+      "users": 0,
+      "count": 0,
+      "attachment_clues": [],
+      "link_clues": [
+        "Slardar 新增错误 alarm id=44628",
+        "Slardar issue d35b00b9048d1d52ecd38828aedaa4dd",
+        "Feishu thread"
+      ]
+    }
+  ],
+  "bids": {
+    "lark": 1
+  },
+  "skipped_bids": []
+}
