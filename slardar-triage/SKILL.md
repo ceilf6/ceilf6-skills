@@ -98,6 +98,8 @@ node <skill>/scripts/state.mjs walk --dir <state> --scan <scan.json> [--skip <id
 
 已缓存的 agent 结论如果被新证据或判定口径推翻，先用 `node <skill>/scripts/state.mjs rejudge --dir <state> --issue-id <id>` 清空当前结论，再按本节重新走查。`rejudge` 只接受 pending 的 agent 判定，保留 `verdicts` 历史；用户拒绝或捞回的条目不得用它改判。
 
+普通技术判定前先执行**退役能力硬过滤**。证据明确指向已下线的「会中笔记 / 个人笔记」能力时（包括 `GET_USER_GUIDE_REQUEST`、Native command `7507`、会中笔记引导状态及其直接调用链），不再评估影响、修法或已有处理情况，直接按 `references/judging.md` 判 `fixable=no`，理由写「退役能力：会中笔记已下线；证据：<页面、能力或调用链>」，然后继续下一条。该规则同时覆盖 Slardar 与 Lark 来源，也覆盖已缓存为 agent `fixable` 的历史候选：先 `rejudge`，再按退役能力落档。不得只凭文案里出现「笔记」「纪要」「总结」就命中；妙记、AI 纪要 / 会后纪要、录音页以及仍在使用的总结能力继续按普通口径判断。
+
 从头往下看：第一条非 `skip` 的是 `fixable` 就停，进第 5 步；是 `unjudged` 就按 `<skill>/references/judging.md` 读代码判定、`judge` 落档，然后重跑 `walk`。`items[].issue_id` 就是 `judge` / `rejudge` / `revive` 要用的池内键。同族的其他 issue（`family_key` 相同）不用各自再读一遍代码：调用链相同就跟着当前这条的结论一起 `judge`（理由注明「同文案族，调用链同 <issue_id>」），派单后再用 `--same-as` 归到那张单。
 
 读代码（`<repo>` 按候选的 `repo` 取：byteview-web 或 byteview-pc）：`git -C <repo> show origin/master:<mapped_path> | sed -n '<line-30>,<line+30>p'`，位置已变时 `git -C <repo> log --oneline -5 origin/master -- <mapped_path>`、`git -C <repo> grep -n '<函数名>' origin/master -- <project_dir>`。完整堆栈：`<repo>/node_modules/.bin/slardar-web-cli --raw log detail --bid <bid> --env <vc_ai→online / minutes_record→production> --site-type web --start-time <window.start> --end-time <window.end> --ev-type js_error --dh-key <dh_key>`（`dh_key` 取 `log query --filter issue_id` 的样本）。线上 release 对应 commit：`bytedcli --json scm repo version list <scm_repo> --type online --version <release> --page-size 10` 取 `data.versions[].base_commit_hash`（vc_ai 同时试 `ee/lark/vc_ai` 与 `ee/lark/vc_ai_doubao`，type 再试 test）。
@@ -265,6 +267,7 @@ bash <skill>/scripts/board.sh --state <state> --issue-id <id>
 - Slardar 走查顺序按同文案聚合的合计用户数、族内按单条用户数，列表已按它排好，第一条能修即全局影响最大；判定仍以 issue 为单位，只有能修 / 不能修两档，拿不准判不能修并写明缺的证据（见 `references/judging.md`）。
 - 环境桶（服务端 / 网络 / 宿主）整桶跳过是走查捷径，不是判定：不落盘、不写理由到候选池；桶内条目用户捞回后与普通候选一样走收敛与派单。
 - 用户的拒绝与捞回优先于任何 agent 判定；agent 不改判捞回项。
+- 已下线的会中笔记 / 个人笔记能力不纳入候选；必须用页面、能力或调用链证据确认，不能扩大成对妙记、AI 纪要 / 会后纪要、录音页或所有含「笔记 / 纪要 / 总结」文案问题的排除。
 - Lark agent 候选呈现前必须通过「已有处理门禁」；已有处理按 agent `fixable=no` 落账并继续下一条，没有命中不持久化，查询失败则该来源 `blocked`。不得用全局 Meego / Oncall 搜索或无关键词开放 MR 列表替代针对性检查。
 - 呈现与收敛对话里，Lark 首次呈现必须回显共享状态中已落档的候选判定及证据理由；这属于「共享判定回显」，不代表用户已批准技术方案、改动范围或验收。技术方案结论由用户逐项决定；其他初步分析在用户要求「说说你的判断」后给出，仍须用户批准后才能派单。
 - Slardar 来源写答辩或复盘材料要某条告警的量级时间线：`node <skill>/scripts/state.mjs history --dir <state> --issue-id <id>`，基线取派单时那一行。没派过单的候选没有「派单前」参照，`recovery.ratio` 为 null；`latest_present` 为 false 时 `ratio` 按那次扫描的最小次数算，是上界而不是实测值。技能不判定修复是否见效，这个数只是给人看的原始材料。
