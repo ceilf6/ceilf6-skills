@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "scanned_at": "2026-11-11T13:14:18Z",
+  "window": null,
+  "candidates": [
+    {
+      "issue_id": "lark:om_x100b601ed5d478b0cfbf785bc8ec885",
+      "origin": "lark",
+      "origin_id": "om_x100b601ed5d478b0cfbf785bc8ec885",
+      "chat_id": "oc_d7ae3bb59ccbfdebe20cb1aa819b8cb7",
+      "message": "<card title=\"[已恢复][critical] [P1][WebVC][前端]WebVC加入会议失败\">\n服务: byteview.infra.alarm\n集群: Asia-SaaS: default\n规则: [P1][WebVC][前端]WebVC加入会议失败 [\\[查看规则配置\\]](https://cloud.byteintl.net/argos/alarm/detail/2211824275/43980969037267?zone=Asia-SaaS&check_vregion=Asia-SaaS&psm=byteview.infra.alarm&argos_from_source=argos_alarm_card)\n报警时间: 2026-11-10 05:20:41 (UTC+0) (已持续-0分钟)\n值班人: 杨金良孙忠达\n通知方式: Lark + Webhook + api\n---\n**Vars: **\nerr_cnt_threshold: 3\nerror_3min: 10\nerror_4min: 4\nerror_5min: 0\nqps_num: 600\nsla_3min: 0.285\nsla_4min: 0.555\nsla_5min: 1\nslo: 0.995\nslo_3min: 0.95\ntotal_3min: 14\ntotal_4min: 9\ntotal_5min: 3\nwarn1: 1\nwarn2: 0\n[ 详情链接 ]: [\\[点击查看详情\\]](https://cloud.byteintl.net/argos/alarm/detail/single/2211824275/43980969037267/6af2a9ab43e08988ce063f98?alarm_reg=Asia-SouthEastBD&argos_from_source=argos_alarm_card&check_vregion=Asia-SaaS&psm=byteview.infra.alarm&rule_id=503926227&send_item_id=6af2a9b043e08988ce064174&suit_type=bosun_raw&triggger_alert_id=&vregion=Asia-SaaS&zone=Asia-SaaS)\n---\n📝 **报警前30分钟今(红)昨(蓝)同比**\n📝 sum:rate{counter,,,diff}:byteview.utils.watchdog.vc_join_meeting_alert_dev.count{}{alert_source=*}\n🖼️ 报警前30分钟今(红)昨(蓝)同比(img_key:img_v3_0217a_2140e95c-7693-404a-83e7-f0777479e93g)\n📝 sum:rate{counter,,,diff}:byteview.utils.watchdog.vc_join_meeting_alert_dev.count{}{alert_source=*,error_code=not_literal_or(0|2|401|10100|220101|220301|220302|220303|220304|231104|232301|232302|232303|232304|232501|232502|232504|233301|233309|233310|233321|233322|233323|234401|234402|234403|238000|233324)}\n🖼️ 报警前30分钟今(红)昨(蓝)同比(img_key:img_v3_0217a_bb3ba5da-1a79-475c-b22f-d01d5259ea8g)\n---\n**Argos根因分析**\n\n「分析完成」\n▶ RCA分析  (标签说明) 分析详情\n    - 「轻微波动」 [(标签说明)](https://bytedance.larkoffice.com/docx/GYjddf6Y9oqGQFxdsv6c3OIXngc)\n    - 此报警绑定的基础RCA: [generic](https://cloud.byteintl.net/argos/aaas/viewer?case_id=6af2a9ab57b0b89975396863&region=Asia-SaaS&psm=byteview.infra.alarm&from=1794286541&to=1794288613)\n▲\n[分析报告](https://cloud.byteintl.net/argos/aaas/viewer?case_id=6af2a9abb5a2e4752a59cafd_v2&from=1794286541&psm=byteview.infra.alarm&region=Asia-SaaS&to=1794288613) [赞] [踩]\n---\n[确认(不屏蔽)] [创建群组] [驾驶舱](https://cloud.byteintl.net/argos/alarm/command_center?problem_id=43980969037267&problem_type=traditional&problem_vregion=Asia-SaaS&start_at=1794288041&end_at=1794288361) 输入报警备注_____ {正确有效报警 / 规则不合理 / 通知频次不合理 / PPE/测试报警 / 流量波动 ▼} {30m / 1h / 2h / 6h / 12h / 24h / 7d / 取消屏蔽 ▼}\n---\n📝 该消息由自定义消息模板default生成\n\n</card>",
+      "sender": "Argos平台报警",
+      "created_at": "2026-11-09 21:20",
+      "users": 0,
+      "count": 0
+    }
+  ]
+}

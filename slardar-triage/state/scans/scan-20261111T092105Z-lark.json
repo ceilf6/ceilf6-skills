@@ -1,0 +1,20 @@
+{
+  "scanned_at": "2026-11-11T09:21:05Z",
+  "candidates": [
+    {
+      "issue_id": "lark:om_x100b629881909cacc0125c91c61d000",
+      "origin": "lark",
+      "origin_id": "om_x100b629881909cacc0125c91c61d000",
+      "chat_id": "oc_d7ae3bb59ccbfdebe20cb1aa819b8cb7",
+      "message": "<card title=\"[已恢复][warning] WebVC 临时报警规则\">\n服务: byteview.infra.alarm\n集群: China-North: default\n规则: WebVC 临时报警规则 [\\[查看规则配置\\]](https://cloud.bytedance.net/argos/alarm/detail/1100763395/17592696686873?zone=CN&check_vregion=China-North&psm=byteview.infra.alarm&argos_from_source=argos_alarm_card)\n报警时间: 2026-10-23 10:56:52 (UTC+8) (已持续2分钟)\n值班人: 崔荣存杨金良喻宙丁安斌\n通知方式: Lark + Webhook\n---\n**Vars: **\nerr_cnt_threshold: 3\nerror_3min: 12\nerror_4min: 7\nerror_5min: 9\nqps_num: 600\nsla_3min: 0.956\nsla_4min: 0.964\nsla_5min: 0.945\nslo: 0.995\nslo_3min: 0.95\ntotal_3min: 279\ntotal_4min: 199\ntotal_5min: 165\nwarn1: 1\nwarn2: 0\n[ 详情链接 ]: [\\[点击查看详情\\]](https://cloud.bytedance.net/argos/alarm/detail/single/1100763395/17592696686873/6adacc7ce67e7ff55bdcb4d0?alarm_reg=CN&argos_from_source=argos_alarm_card&check_vregion=China-North&psm=byteview.infra.alarm&rule_id=510642457&send_item_id=6adaccf4ef25198d3fb7a17f&suit_type=bosun_raw&triggger_alert_id=&vregion=China-North&zone=CN)\n---\n📝 **报警前30分钟今(红)昨(蓝)同比**\n📝 sum:rate{counter,,,diff}:byteview.utils.watchdog.vc_join_meeting_alert_dev.count{}{alert_source=not_literal_or(to_passport)}\n🖼️ 报警前30分钟今(红)昨(蓝)同比(img_key:img_v3_0216o_e5ccbab5-494e-4757-b104-b1d23b4a13bg)\n📝 sum:rate{counter,,,diff}:byteview.utils.watchdog.vc_join_meeting_alert_dev.count{}{alert_source=not_literal_or(to_passport),error_code=not_literal_or(0|2|10100|232501|232502|232504|220101|220301|220302|220303|220304|233309|233310|232302|233301|233322|232303|232304|232301|234401|238000)}\n🖼️ 报警前30分钟今(红)昨(蓝)同比(img_key:img_v3_0216o_08eeb779-2c71-4dab-a02c-1f571c622deg)\n---\n**Argos根因分析**\n\n「分析完成」\n▶ RCA分析   (标签说明) 疑似根因: byteview.utils.watchdog 下游 toutiao.rocketmq.byteview_parti_action_event 延迟相关度较高; 异常集中在: lf 机房; 日志&Trace: LogID(4c*7f(72us), 77*3d(43us), 2a*6d(74us)); 相关Problem: 发现 2 个高相关监控项(byteview.utils.watchdog{method=MessageH ...\n    - 「显著波动」 「可用性未受影响」 [(标签说明)](http://aiops-argos.byted.org/aaas_center/j/e56e8BMSSyeoSAp)\n    - 疑似根因: byteview.utils.watchdog 下游 toutiao.rocketmq.byteview_parti_action_event 延迟相关度较高\n    - 异常集中在: lf 机房\n    - 日志&Trace: LogID([4c***7f](http://aiops-argos.byted.org/aaas_center/j/8be19peg8VuWlqf)(72us), [77***3d](http://aiops-argos.byted.org/aaas_center/j/bb705v1AuCeb68B)(43us), [2a***6d](http://aiops-argos.byted.org/aaas_center/j/0a093Z8xPiVzBYZ)(74us))\n    - 相关Problem: 发现 2 个高相关监控项([byteview.utils.watchdog{method=MessageHandler_byteview_utils_watchdog_AutomationJ2SIPCallback}时延上升](https://cloud.bytedance.net/argos/overview/server_overview?psm=byteview.utils.watchdog&region=China-North&from=1792723192&to=1792724182)等)\n    - Problem详情: [LINK](http://aiops-argos.byted.org/aaas_center/j/e33521MACCV3jv)\n    - 此报警绑定的基础RCA: [generic](http://aiops-argos.byted.org/aaas_center/j/41005zxDFbXtL7h)\n▲\n[深度分析] [分析报告](http://aiops-argos.byted.org/aaas_center/j/00164P2KsDB5p4j) [赞] [踩]\n---\n[确认(不屏蔽)] [创建群组] [驾驶舱](https://cloud.bytedance.net/argos/alarm/command_center?problem_id=17592696686873&problem_type=traditional&problem_vregion=China-North&start_at=1792724092&end_at=1792724821) 输入报警备注_____ {正确有效报警 / 规则不合理 / 通知频次不合理 / PPE/测试报警 / 流量波动 ▼} {30m / 1h / 2h / 6h / 12h / 24h / 7d / 取消屏蔽 ▼}\n---\n📝 该消息由自定义消息模板default生成\n\n</card>",
+      "sender": "Argos平台报警",
+      "created_at": "2026-10-22 19:56",
+      "users": 0,
+      "count": 0
+    }
+  ],
+  "bids": {
+    "lark": 1
+  },
+  "skipped_bids": []
+}

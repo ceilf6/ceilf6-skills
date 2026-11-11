@@ -1,0 +1,20 @@
+{
+  "scanned_at": "2026-11-11T09:10:58Z",
+  "candidates": [
+    {
+      "issue_id": "lark:om_x100b6121dc717880dfd18ab7b5e8e1e",
+      "origin": "lark",
+      "origin_id": "om_x100b6121dc717880dfd18ab7b5e8e1e",
+      "chat_id": "oc_d7ae3bb59ccbfdebe20cb1aa819b8cb7",
+      "message": "<card title=\"Slardar 新增JS错误【版本: 7.74.4-fallback】\">\n您订阅的bid为vc_ai的站点出现了新增错误，报警名为[新增js错误](https://slardar.bytedance.net/node/web/alarm_new_error/detail?bid=vc_ai&site_type=web&id=44628&start_time=1793070522&end_time=1793156922)，目前该错误出现1次，影响1个用户\n【订阅信息】:\n \n错误开始出现时间: 2026-10-28 10:08:42\n \n样本量阈值: 0\n \n用户阈值: 0\n \n报警级别: P2\n \n通知人: [@杨金良(ou_3224b3ec4c93ae257ca7708670899cf1)]\n【错误信息】:\n \nerror type: InvokeServerPbError\n \nerror msg: [InvokeServierPBFast error]: logId=2026102810083724A42713CA6B63EBDDE5, rate limit\n \nfile name: https://vc-sg.feishu.cn/webview/static/js/357-fbff1ec0539dad3da216-dev-ai.js\n \n详情链接: [\\[Click For Details\\]](https://slardar.bytedance.net/node/web/js?&bid=vc_ai&start_time=1793149722&end_time=1793156922&filter_conditions=%7B%22type%22%3A%22%22%2C%22sub_conditions%22%3A%5B%7B%22type%22%3A%22%22%2C%22op%22%3A%22not_in%22%2C%22dimension%22%3A%22path%22%2C%22values%22%3A%5B%22%2Fwebview%2Fai-layout-codinx%22%5D%7D%2C%7B%22type%22%3A%22%22%2C%22op%22%3A%22not_includes%22%2C%22dimension%22%3A%22message%22%2C%22values%22%3A%5B%22Failed+to+fetch%22%5D%7D%2C%7B%22type%22%3A%22%22%2C%22op%22%3A%22in%22%2C%22dimension%22%3A%22issue_id%22%2C%22values%22%3A%5B%22ca2bba20a4a3de189da3d172a3cd651c%22%5D%7D%5D%7D&env=Slardar_All)\n\n---\n[一键拉群]\n---\n[有效] [无效] [正常波动] [处理中] [已解决]\n</card>",
+      "sender": "Slardar Oncall",
+      "created_at": "2026-10-27 19:08",
+      "users": 1,
+      "count": 1
+    }
+  ],
+  "bids": {
+    "lark": 1
+  },
+  "skipped_bids": []
+}

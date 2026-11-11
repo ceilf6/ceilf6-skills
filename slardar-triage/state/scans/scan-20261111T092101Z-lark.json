@@ -1,0 +1,20 @@
+{
+  "scanned_at": "2026-11-11T09:21:01Z",
+  "candidates": [
+    {
+      "issue_id": "lark:om_x100b6298a0ad1cbcce471fa9f1c6c6d",
+      "origin": "lark",
+      "origin_id": "om_x100b6298a0ad1cbcce471fa9f1c6c6d",
+      "chat_id": "oc_d7ae3bb59ccbfdebe20cb1aa819b8cb7",
+      "message": "<card title=\"[P0][cn]Web 报警|错误影响用户数报警\">\n**报警链接** :\n[错误影响用户数报警](https://slardar.bytedance.net/node/web/alarm/detail?bid=vc_web&env=online&region=cn&start_time=1792703407&end_time=1792725007&id=542135&history_id=&strategy_id=&from_alarm_card=1)\n**环境** :\nonline\n**报警时间** :\n2026-10-23 11:04:00+08:00\n\n**项目名** :\n[vc_web] : 视频会议web版\n**报警接收人** :\n@杨金良(ou_3224b3ec4c93ae257ca7708670899cf1)\n---\n**触发原因 :** (多策略关系-与)[查看/修改报警规则](https://slardar.bytedance.net/node/web/alarm/detail?bid=vc_web&env=online&region=cn&start_time=1792703407&end_time=1792725007&id=542135&history_id=&strategy_id=&from_alarm_card=1)\n**🔴 策略1 - 错误影响用户数监控**\n**触发条件**: 错误影响用户数 阈值 > 15 触发报警\n**过滤条件**: res_status 大于等于 500, url 匹配正则 (feishu|larksuite), req_headers 不匹配正则 (46|12001|2300|89051|88013|70006|1000020|2385)\n**📊 触发数据**: 当前值 **35.00** (阈值 15) | 样本量 36 | 用户数 35 | 时间窗口 10分钟\n**现场数据 :**\n🖼️ Image(img_key:img_v3_0216o_66643f1f-5cdb-4d18-88c6-e5dac7584dcg)\n**监控详情 :** [监控详情](https://slardar.bytedance.net/node/web/req/overview?bid=vc_web&env=online&region=cn&start_time=1792723440&end_time=1792724640&filter_conditions=%5B%7B%22type%22%3A%22%22%2C%22op%22%3A%22gte%22%2C%22filter_name%22%3A%22res_status%22%2C%22values%22%3A%5B%22500%22%5D%2C%22sub_conditions%22%3A%5B%5D%2C%22func%22%3A%22%22%2C%22args%22%3A%5B%5D%7D%2C%7B%22type%22%3A%22%22%2C%22op%22%3A%22regex%22%2C%22filter_name%22%3A%22url%22%2C%22values%22%3A%5B%22%28feishu%7Clarksuite%29%22%5D%2C%22sub_conditions%22%3A%5B%5D%2C%22func%22%3A%22%22%2C%22args%22%3A%5B%5D%7D%2C%7B%22type%22%3A%22%22%2C%22op%22%3A%22not_regex%22%2C%22filter_name%22%3A%22req_headers%22%2C%22values%22%3A%5B%22%2846%7C12001%7C2300%7C89051%7C88013%7C70006%7C1000020%7C2385%29%22%5D%2C%22sub_conditions%22%3A%5B%5D%2C%22func%22%3A%22%22%2C%22args%22%3A%5B%5D%7D%5D&activeTab=err)\n**评论** : [点击前往评论](https://slardar.bytedance.net/node/web/alarm/detail?env=online&region=cn&bid=vc_web&start_time=1792724640&end_time=1792725240&id=542135&open_comment_history_id=66690933)\n---\n**🤖 Agent归因分析**\nAgent正在执行初步归因分析...\n---\n❌ **Workflow执行失败**\n\n**错误信息:** workflow execution failed with status: failed\n\n**执行时间:** 2026-10-23 11:05:32\n\n**LogID:** `021792724707065fdbddc020011060c1e409b781200008b6dcc9d` 💡[自定义Workflow](https://slardar.bytedance.net/node/web/workflow-studio/auto-create-workflow?metric=http.error_user&rule_id=542135&history_id=66690933&bid=vc_web)\n---\n<clickable>\n{整个报警规则 ▼}\n[取消屏蔽]\n[一键拉群]\n</clickable>\n<clickable>\n[有效]\n[无效]\n[正常波动]\n[处理中]\n[已解决]\n</clickable>\n<clickable>\n\n</clickable>\n</card>",
+      "sender": "Slardar Oncall",
+      "created_at": "2026-10-22 20:05",
+      "users": 35,
+      "count": 36
+    }
+  ],
+  "bids": {
+    "lark": 1
+  },
+  "skipped_bids": []
+}
