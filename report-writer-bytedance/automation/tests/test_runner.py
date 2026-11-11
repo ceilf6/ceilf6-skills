@@ -105,34 +105,31 @@ class SubprocessTests(unittest.TestCase):
                 runner.run_preflight_check("write", ["bytedcli", "bits", "auth", "logout"], {}, io.StringIO())
         self.assertEqual(checked.call_count, 1)
 
-    def test_preflight_requires_codex_code_mode_host(self):
+    def test_preflight_requires_executable_traex(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             home = Path(temp_dir)
-            codex = home / "codex"
-            codex.write_text("", encoding="utf-8")
-            codex.chmod(0o700)
+            traex = home / "traex"
+            traex.write_text("", encoding="utf-8")
+            traex.chmod(0o600)
             prompt = home / "prompt.md"
             prompt.write_text("", encoding="utf-8")
             skill = home / "skill"
             skill.mkdir()
             (skill / "SKILL.md").write_text("", encoding="utf-8")
-            with mock.patch.object(runner, "CODEX", codex), mock.patch.object(
+            with mock.patch.object(runner, "TRAEX", traex), mock.patch.object(
                 runner, "PROMPT_FILE", prompt
             ), mock.patch.object(runner, "SKILL_DIR", skill):
-                with self.assertRaisesRegex(runner.DailyReportError, "codex-code-mode-host"):
+                with self.assertRaisesRegex(runner.DailyReportError, "Traex CLI is not executable"):
                     runner.run_preflight({}, io.StringIO())
 
     def test_local_ai_parser_failure_is_optional(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             home = Path(temp_dir)
-            codex = home / "codex-cli"
+            traex = home / "traex-cli"
             prompt = home / "prompt.md"
             skill = home / "skill"
-            codex.write_text("", encoding="utf-8")
-            codex.chmod(0o700)
-            host = codex.with_name("codex-code-mode-host")
-            host.write_text("", encoding="utf-8")
-            host.chmod(0o700)
+            traex.write_text("", encoding="utf-8")
+            traex.chmod(0o700)
             prompt.write_text("", encoding="utf-8")
             skill.mkdir()
             (skill / "SKILL.md").write_text("", encoding="utf-8")
@@ -151,7 +148,7 @@ class SubprocessTests(unittest.TestCase):
                 )
             ]
 
-            with mock.patch.object(runner, "CODEX", codex), mock.patch.object(
+            with mock.patch.object(runner, "TRAEX", traex), mock.patch.object(
                 runner, "PROMPT_FILE", prompt
             ), mock.patch.object(runner, "SKILL_DIR", skill), mock.patch.object(
                 runner, "run_checked", side_effect=outcomes
@@ -159,6 +156,7 @@ class SubprocessTests(unittest.TestCase):
                 runner.run_preflight({}, handle)
 
         self.assertEqual(checked.call_count, 7)
+        self.assertEqual(checked.call_args_list[0].args[1], [str(traex), "login", "status"])
         self.assertIn(
             "optional preflight local AI parser skipped",
             handle.getvalue(),
@@ -168,20 +166,17 @@ class SubprocessTests(unittest.TestCase):
     def test_required_preflight_failure_propagates(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             home = Path(temp_dir)
-            codex = home / "codex-cli"
+            traex = home / "traex-cli"
             prompt = home / "prompt.md"
             skill = home / "skill"
-            codex.write_text("", encoding="utf-8")
-            codex.chmod(0o700)
-            host = codex.with_name("codex-code-mode-host")
-            host.write_text("", encoding="utf-8")
-            host.chmod(0o700)
+            traex.write_text("", encoding="utf-8")
+            traex.chmod(0o700)
             prompt.write_text("", encoding="utf-8")
             skill.mkdir()
             (skill / "SKILL.md").write_text("", encoding="utf-8")
-            failure = runner.CommandError("login failed", label="Codex auth")
+            failure = runner.CommandError("login failed", label="Traex auth")
 
-            with mock.patch.object(runner, "CODEX", codex), mock.patch.object(
+            with mock.patch.object(runner, "TRAEX", traex), mock.patch.object(
                 runner, "PROMPT_FILE", prompt
             ), mock.patch.object(runner, "SKILL_DIR", skill), mock.patch.object(
                 runner, "run_checked", side_effect=failure
@@ -194,14 +189,11 @@ class SubprocessTests(unittest.TestCase):
     def test_bits_preflight_refreshes_expired_token_status(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             home = Path(temp_dir)
-            codex = home / "codex-cli"
+            traex = home / "traex-cli"
             prompt = home / "prompt.md"
             skill = home / "skill"
-            codex.write_text("", encoding="utf-8")
-            codex.chmod(0o700)
-            host = codex.with_name("codex-code-mode-host")
-            host.write_text("", encoding="utf-8")
-            host.chmod(0o700)
+            traex.write_text("", encoding="utf-8")
+            traex.chmod(0o700)
             prompt.write_text("", encoding="utf-8")
             skill.mkdir()
             (skill / "SKILL.md").write_text("", encoding="utf-8")
@@ -225,7 +217,7 @@ class SubprocessTests(unittest.TestCase):
                 + [expired_bits, successful, successful, bits_ready, successful, successful]
             )
 
-            with mock.patch.object(runner, "CODEX", codex), mock.patch.object(
+            with mock.patch.object(runner, "TRAEX", traex), mock.patch.object(
                 runner, "PROMPT_FILE", prompt
             ), mock.patch.object(runner, "SKILL_DIR", skill), mock.patch.object(
                 runner, "run_checked", side_effect=outcomes
@@ -362,30 +354,30 @@ class SubprocessTests(unittest.TestCase):
                     runner.verify_wiki("2026-07-20", {})
 
 
-class CodexExecutionTests(unittest.TestCase):
-    def test_codex_command_is_isolated_and_fully_unattended(self):
-        self.assertTrue(hasattr(runner, "build_codex_argv"))
-        argv = runner.build_codex_argv(Path("/tmp/last-message.md"))
-        self.assertEqual(argv[:2], [str(runner.CODEX), "exec"])
+class TraexExecutionTests(unittest.TestCase):
+    def test_traex_command_is_isolated_and_fully_unattended(self):
+        self.assertTrue(hasattr(runner, "build_traex_argv"))
+        argv = runner.build_traex_argv(Path("/tmp/last-message.md"))
+        self.assertEqual(argv[:2], [str(runner.TRAEX), "exec"])
         self.assertEqual(argv[argv.index("--model") + 1], "gpt-6.1-sol")
-        self.assertIn("--dangerously-bypass-approvals-and-sandbox", argv)
-        self.assertIn("--dangerously-bypass-hook-trust", argv)
+        self.assertEqual(argv[argv.index("--permission-mode") + 1], "bypass_permissions")
+        self.assertEqual(argv[argv.index("--disable") + 1], "hooks")
         self.assertIn("--ignore-user-config", argv)
         self.assertIn("--ephemeral", argv)
         self.assertIn("--json", argv)
         self.assertEqual(argv[argv.index("--output-last-message") + 1], "/tmp/last-message.md")
         self.assertEqual(argv[-1], "-")
 
-    def test_codex_attempt_times_out_before_session_output(self):
-        self.assertTrue(hasattr(runner, "CodexStartupError"))
-        self.assertTrue(hasattr(runner, "run_codex_attempt"))
+    def test_traex_attempt_times_out_before_session_output(self):
+        self.assertTrue(hasattr(runner, "TraexStartupError"))
+        self.assertTrue(hasattr(runner, "run_traex_attempt"))
         with tempfile.TemporaryDirectory() as temp_dir, mock.patch.object(
             runner,
-            "build_codex_argv",
+            "build_traex_argv",
             return_value=[sys.executable, "-c", "import time; time.sleep(2)"],
-        ), mock.patch.object(runner, "CODEX_STARTUP_TIMEOUT_SECONDS", 0.1):
-            with self.assertRaises(runner.CodexStartupError):
-                runner.run_codex_attempt(
+        ), mock.patch.object(runner, "TRAEX_STARTUP_TIMEOUT_SECONDS", 0.1):
+            with self.assertRaises(runner.TraexStartupError):
+                runner.run_traex_attempt(
                     "prompt",
                     Path(temp_dir) / "last.md",
                     {},
@@ -395,30 +387,30 @@ class CodexExecutionTests(unittest.TestCase):
     def test_non_session_output_does_not_satisfy_startup_watchdog(self):
         with tempfile.TemporaryDirectory() as temp_dir, mock.patch.object(
             runner,
-            "build_codex_argv",
+            "build_traex_argv",
             return_value=[
                 sys.executable,
                 "-c",
                 "import time; print('warning', flush=True); time.sleep(0.3)",
             ],
-        ), mock.patch.object(runner, "CODEX_STARTUP_TIMEOUT_SECONDS", 0.1):
-            with self.assertRaises(runner.CodexStartupError):
-                runner.run_codex_attempt(
+        ), mock.patch.object(runner, "TRAEX_STARTUP_TIMEOUT_SECONDS", 0.1):
+            with self.assertRaises(runner.TraexStartupError):
+                runner.run_traex_attempt(
                     "prompt",
                     Path(temp_dir) / "last.md",
                     {},
                     io.StringIO(),
                 )
 
-    def test_codex_retries_one_startup_timeout(self):
-        self.assertTrue(hasattr(runner, "CodexStartupError"))
-        self.assertTrue(hasattr(runner, "run_codex_attempt"))
+    def test_traex_retries_one_startup_timeout(self):
+        self.assertTrue(hasattr(runner, "TraexStartupError"))
+        self.assertTrue(hasattr(runner, "run_traex_attempt"))
         with tempfile.TemporaryDirectory() as temp_dir, mock.patch.object(
             runner,
-            "run_codex_attempt",
-            side_effect=[runner.CodexStartupError("stalled"), None],
+            "run_traex_attempt",
+            side_effect=[runner.TraexStartupError("stalled"), None],
         ) as attempt, mock.patch.object(runner.time, "sleep"):
-            runner.run_codex(
+            runner.run_traex(
                 "prompt",
                 Path(temp_dir) / "last.md",
                 {},
@@ -428,7 +420,7 @@ class CodexExecutionTests(unittest.TestCase):
 
 
 class FullRunExitStatusTests(unittest.TestCase):
-    def test_zero_codex_exit_with_failed_message_returns_nonzero(self):
+    def test_zero_traex_exit_with_failed_message_returns_nonzero(self):
         def write_failed_message(prompt, last_message, env, handle):
             last_message.write_text(
                 '<daily-report-result status="failed" date="2026-07-20" />\n',
@@ -439,7 +431,7 @@ class FullRunExitStatusTests(unittest.TestCase):
             with mock.patch.object(runner, "LOG_DIR", Path(temp_dir)), mock.patch.object(
                 runner, "run_preflight"
             ), mock.patch.object(runner, "render_prompt", return_value="prompt"), mock.patch.object(
-                runner, "run_codex", side_effect=write_failed_message
+                runner, "run_traex", side_effect=write_failed_message
             ), mock.patch.object(runner, "verify_wiki") as verify, mock.patch.object(
                 runner, "notify_best_effort"
             ) as notify:
@@ -461,7 +453,7 @@ class FullRunExitStatusTests(unittest.TestCase):
             with mock.patch.object(runner, "LOG_DIR", Path(temp_dir)), mock.patch.object(
                 runner, "run_preflight"
             ), mock.patch.object(runner, "render_prompt", return_value="prompt"), mock.patch.object(
-                runner, "run_codex", side_effect=write_success_message
+                runner, "run_traex", side_effect=write_success_message
             ), mock.patch.object(
                 runner,
                 "verify_wiki",
@@ -483,7 +475,7 @@ class FullRunExitStatusTests(unittest.TestCase):
             with mock.patch.object(runner, "LOG_DIR", Path(temp_dir)), mock.patch.object(
                 runner, "run_preflight"
             ), mock.patch.object(runner, "render_prompt", return_value="prompt"), mock.patch.object(
-                runner, "run_codex", side_effect=write_no_activity_message
+                runner, "run_traex", side_effect=write_no_activity_message
             ), mock.patch.object(runner, "verify_wiki") as verify, mock.patch.object(
                 runner, "notify_best_effort"
             ) as notify:
@@ -565,7 +557,7 @@ class NotificationIntegrationTests(unittest.TestCase):
         ), mock.patch.object(
             runner, "render_prompt", return_value="prompt"
         ), mock.patch.object(
-            runner, "run_codex", side_effect=write_success
+            runner, "run_traex", side_effect=write_success
         ), mock.patch.object(
             runner,
             "verify_wiki",
@@ -595,7 +587,7 @@ class NotificationIntegrationTests(unittest.TestCase):
         ), mock.patch.object(
             runner, "render_prompt", return_value="prompt"
         ), mock.patch.object(
-            runner, "run_codex", side_effect=write_success
+            runner, "run_traex", side_effect=write_success
         ), mock.patch.object(
             runner,
             "verify_wiki",
@@ -625,7 +617,7 @@ class NotificationIntegrationTests(unittest.TestCase):
         ), mock.patch.object(runner, "run_preflight"), mock.patch.object(
             runner, "render_prompt", return_value="prompt"
         ), mock.patch.object(
-            runner, "run_codex", side_effect=write_success
+            runner, "run_traex", side_effect=write_success
         ), mock.patch.object(
             runner,
             "verify_wiki",

@@ -99,7 +99,7 @@ def failure_event(
     run_log: Path,
 ) -> NotificationEvent:
     actions = {
-        "codex_auth": "请执行 codex login status 检查登录状态，必要时重新登录。",
+        "traex_auth": "请执行 traex login status 检查登录状态，必要时重新登录。",
         "lark_auth": "请执行 lark-cli auth login --domain all 完成用户授权。",
         "bytecloud_auth": "请执行 bytedcli auth login 恢复 ByteCloud 登录态。",
         "bytedance_user": "请检查 bytedcli 当前身份是否为目标用户。",

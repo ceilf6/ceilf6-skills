@@ -26,16 +26,14 @@ from notifications import (
 
 
 HOME = Path("/Users/bytedance")
-# LaunchAgent 访问 Desktop 下的仓库需要 macOS 为执行器授予文件访问权限。
-# 固定的独立执行器路径可避免 CLI 更新改变授权所关联的路径。
-CODEX = HOME / ".local/lib/trae-daily-report-executor/codex"
+TRAEX = HOME / ".local/bin/traex"
 SPACE_ID = "7658115519924686035"
 PARENT_NODE_TOKEN = "ZDvbwhN4eiFRoHkUh1ocXSeInSb"
 PREFLIGHT_TIMEOUT_SECONDS = 120
-CODEX_TIMEOUT_SECONDS = 7200
-CODEX_STARTUP_TIMEOUT_SECONDS = 120
-CODEX_STARTUP_ATTEMPTS = 2
-CODEX_STARTUP_RETRY_DELAY_SECONDS = 5
+TRAEX_TIMEOUT_SECONDS = 7200
+TRAEX_STARTUP_TIMEOUT_SECONDS = 120
+TRAEX_STARTUP_ATTEMPTS = 2
+TRAEX_STARTUP_RETRY_DELAY_SECONDS = 5
 VERIFY_TIMEOUT_SECONDS = 120
 FEISHU_OPEN_ID = "ou_c501034db06707b7116eb9ec11896a7d"
 NOTIFICATION_TIMEOUT_SECONDS = 30
@@ -69,7 +67,7 @@ class CommandError(DailyReportError):
         self.label = label
 
 
-class CodexStartupError(CommandError):
+class TraexStartupError(CommandError):
     pass
 
 
@@ -223,20 +221,15 @@ def run_preflight_check(
 
 
 def run_preflight(env: Dict[str, str], handle=sys.stdout) -> None:
-    codex_host = CODEX.with_name("codex-code-mode-host")
-    required_paths = (CODEX, codex_host, PROMPT_FILE, SKILL_DIR / "SKILL.md")
+    required_paths = (TRAEX, PROMPT_FILE, SKILL_DIR / "SKILL.md")
     for path in required_paths:
         if not path.exists() or not os.access(str(path), os.R_OK):
             raise DailyReportError("required path is not readable: {}".format(path))
-    if not os.access(str(CODEX), os.X_OK):
-        raise DailyReportError("Codex CLI is not executable: {}".format(CODEX))
-    if not os.access(str(codex_host), os.X_OK):
-        raise DailyReportError(
-            "Codex code mode host is not executable: {}".format(codex_host)
-        )
+    if not os.access(str(TRAEX), os.X_OK):
+        raise DailyReportError("Traex CLI is not executable: {}".format(TRAEX))
 
     required_checks = (
-        ("Codex auth", [str(CODEX), "login", "status"]),
+        ("Traex auth", [str(TRAEX), "login", "status"]),
         ("Lark auth", ["lark-cli", "auth", "status", "--json", "--verify"]),
         ("ByteCloud auth", ["bytedcli", "auth", "status"]),
         ("ByteDance user", ["bytedcli", "auth", "userinfo"]),
@@ -438,14 +431,16 @@ def render_prompt(target_date: str) -> str:
     return rendered
 
 
-def build_codex_argv(last_message: Path) -> List[str]:
+def build_traex_argv(last_message: Path) -> List[str]:
     return [
-        str(CODEX),
+        str(TRAEX),
         "exec",
         "--model",
         "gpt-6.1-sol",
-        "--dangerously-bypass-approvals-and-sandbox",
-        "--dangerously-bypass-hook-trust",
+        "--permission-mode",
+        "bypass_permissions",
+        "--disable",
+        "hooks",
         "--ignore-user-config",
         "--ephemeral",
         "-c",
@@ -486,13 +481,13 @@ def stop_process(process: subprocess.Popen) -> None:
         process.wait()
 
 
-def run_codex_attempt(
+def run_traex_attempt(
     prompt: str,
     last_message: Path,
     env: Dict[str, str],
     handle,
 ) -> None:
-    argv = build_codex_argv(last_message)
+    argv = build_traex_argv(last_message)
     try:
         process = subprocess.Popen(
             argv,
@@ -505,7 +500,7 @@ def run_codex_attempt(
         )
     except OSError as error:
         raise CommandError(
-            "Codex execution could not start: {}".format(error)
+            "Traex execution could not start: {}".format(error)
         ) from error
 
     assert process.stdin is not None
@@ -526,19 +521,19 @@ def run_codex_attempt(
             elapsed = time.monotonic() - started
             if (
                 not saw_session_output
-                and elapsed >= CODEX_STARTUP_TIMEOUT_SECONDS
+                and elapsed >= TRAEX_STARTUP_TIMEOUT_SECONDS
             ):
                 stop_process(process)
-                raise CodexStartupError(
-                    "Codex produced no thread.started event within {}s".format(
-                        CODEX_STARTUP_TIMEOUT_SECONDS
+                raise TraexStartupError(
+                    "Traex produced no thread.started event within {}s".format(
+                        TRAEX_STARTUP_TIMEOUT_SECONDS
                     )
                 )
-            if elapsed >= CODEX_TIMEOUT_SECONDS:
+            if elapsed >= TRAEX_TIMEOUT_SECONDS:
                 stop_process(process)
                 raise CommandError(
-                    "Codex execution timed out after {}s".format(
-                        CODEX_TIMEOUT_SECONDS
+                    "Traex execution timed out after {}s".format(
+                        TRAEX_TIMEOUT_SECONDS
                     )
                 )
 
@@ -567,36 +562,36 @@ def run_codex_attempt(
 
     if process.returncode != 0:
         raise CommandError(
-            "Codex execution failed with status {}".format(process.returncode)
+            "Traex execution failed with status {}".format(process.returncode)
         )
     if not saw_session_output:
-        raise CodexStartupError(
-            "Codex exited before producing a thread.started event"
+        raise TraexStartupError(
+            "Traex exited before producing a thread.started event"
         )
 
 
-def run_codex(
+def run_traex(
     prompt: str,
     last_message: Path,
     env: Dict[str, str],
     handle,
 ) -> None:
-    for attempt in range(1, CODEX_STARTUP_ATTEMPTS + 1):
+    for attempt in range(1, TRAEX_STARTUP_ATTEMPTS + 1):
         try:
-            run_codex_attempt(prompt, last_message, env, handle)
+            run_traex_attempt(prompt, last_message, env, handle)
             return
-        except CodexStartupError as error:
-            if attempt == CODEX_STARTUP_ATTEMPTS:
+        except TraexStartupError as error:
+            if attempt == TRAEX_STARTUP_ATTEMPTS:
                 raise
             log_line(
                 handle,
-                "Codex startup attempt {} failed: {}; retrying".format(
+                "Traex startup attempt {} failed: {}; retrying".format(
                     attempt, error
                 ),
             )
             if last_message.exists():
                 last_message.unlink()
-            time.sleep(CODEX_STARTUP_RETRY_DELAY_SECONDS)
+            time.sleep(TRAEX_STARTUP_RETRY_DELAY_SECONDS)
 
 
 def send_lark_dm(event: NotificationEvent, env: Dict[str, str]) -> None:
@@ -663,33 +658,33 @@ def run_full(target_date: str, env: Dict[str, str]) -> int:
         stage = "preflight"
         try:
             run_preflight(env, handle)
-            stage = "codex_execution"
+            stage = "traex_execution"
             prompt = render_prompt(target_date)
-            log_line(handle, "Codex execution started")
+            log_line(handle, "Traex execution started")
             started = time.monotonic()
-            run_codex(prompt, last_message, env, handle)
+            run_traex(prompt, last_message, env, handle)
             log_line(
                 handle,
-                "Codex execution exited 0 in {:.1f}s".format(
+                "Traex execution exited 0 in {:.1f}s".format(
                     time.monotonic() - started
                 ),
             )
             stage = "result_contract"
             if not last_message.is_file():
                 raise VerificationError(
-                    "Codex did not produce a final result message"
+                    "Traex did not produce a final result message"
                 )
             message = last_message.read_text(encoding="utf-8")
             warnings = parse_report_warnings(message)
             outcome = result_status(message, target_date)
             if outcome is None:
                 raise VerificationError(
-                    "Codex final message lacks a recognized result sentinel"
+                    "Traex final message lacks a recognized result sentinel"
                 )
             if outcome == "failed":
                 stage = "report_result"
                 raise CommandError(
-                    "Codex reported that the daily report was not published",
+                    "Traex reported that the daily report was not published",
                     label="report_failed",
                 )
             if outcome == "success":

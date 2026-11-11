@@ -1,6 +1,6 @@
 ---
 name: report-writer-bytedance
-description: "Use when Codex needs to create, update, or verify a ByteDance personal daily report in Feishu/Lark wiki for today or a specified date; triggers include 字节日报, 飞书日结, 今日总结, 今天活动记录, bytedance report, lark-cli, bytedcli, Codebase, Bits, Meego, Cloud Ticket, Oncall."
+description: "Create, update, or verify a ByteDance personal daily report in Feishu/Lark wiki for today or a specified date; triggers include 字节日报, 飞书日结, 今日总结, 今天活动记录, bytedance report, lark-cli, bytedcli, Codebase, Bits, Meego, Cloud Ticket, Oncall."
 ---
 
 # Report Writer ByteDance
