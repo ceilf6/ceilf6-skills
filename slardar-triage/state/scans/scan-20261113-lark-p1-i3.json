@@ -1,0 +1,16 @@
+{
+  "origin": "lark",
+  "candidates": [
+    {
+      "issue_id": "lark:om_x100b605329cee888c3cadee52dc70cc",
+      "origin": "lark",
+      "origin_id": "om_x100b605329cee888c3cadee52dc70cc",
+      "chat_id": "oc_d7ae3bb59ccbfdebe20cb1aa819b8cb7",
+      "message": "<card title=\"[P0][cn]Web 报警|白屏/影响用户数报警\">\n**报警链接** :\n[白屏/影响用户数报警](https://slardar.bytedance.net/node/web/alarm/detail?bid=vc_web&env=online&region=cn&start_time=1794515700&end_time=1794537300&id=540731&history_id=&strategy_id=&from_alarm_card=1)\n**环境** :\nonline\n**报警时间** :\n2026-11-13 10:30:00+08:00\n\n**项目名** :\n[vc_web] : 视频会议web版\n**报警接收人** :\n@杨金良(ou_3224b3ec4c93ae257ca7708670899cf1)\n---\n**触发原因 :** (多策略关系-与)[查看/修改报警规则](https://slardar.bytedance.net/node/web/alarm/detail?bid=vc_web&env=online&region=cn&start_time=1794515769&end_time=1794537369&id=540731&history_id=&strategy_id=&from_alarm_card=1)\n**🔴 策略1 - 白屏/影响用户数监控**\n**触发条件**: 白屏/影响用户数 阈值 > 7 触发报警\n**过滤条件**: url 不匹配正则 /jsapi/init\n**📊 触发数据**: 当前值 **12.00** (阈值 7) | 样本量 27 | 用户数 12 | 时间窗口 10分钟\n**现场数据 :**\n🖼️ Image(img_key:img_v3_0217d_ae3b861e-b577-44ec-a363-e8aecdf341cg)\n**监控详情 :** [监控详情](https://slardar.bytedance.net/node/web/blank?bid=vc_web&env=online&region=cn&start_time=1794535800&end_time=1794537000&filter_id=1f352ce227aa309ee60a5366c4606fd6&activeTab=err)\n**评论** : [点击前往评论](https://slardar.bytedance.net/node/web/alarm/detail?env=online&region=cn&bid=vc_web&start_time=1794537000&end_time=1794537600&id=540731&open_comment_history_id=68150890)\n---\n**🤖 Agent归因分析**\n**归因结论：** 白屏影响用户数升高主要由8.5.0.13版本、/w/路径、Windows系统Chrome浏览器的北京用户贡献。\n**关键证据：**\n1. 版本维度：release=8.5.0.13贡献度100%，为核心异常版本\n2. 页面路径：/w/路径贡献度100%，为主要异常页面\n3. 环境特征：Windows7系统、Chrome78版本、北京地区用户贡献度均为100%\n[点击进入深度归因](https://slardar.bytedance.net/next/?prompt=%E5%B8%AE%E6%88%91%E5%AF%B9%E6%8A%A5%E8%AD%A6history_id%E4%B8%BA68150890%E7%9A%84%E6%8A%A5%E8%AD%A6%E8%BF%9B%E8%A1%8C%E6%B7%B1%E5%BA%A6%E5%BD%92%E5%9B%A0&from=alarm_attribution)\n---\n<clickable>\n{整个报警规则 ▼}\n[取消屏蔽]\n[一键拉群]\n</clickable>\n<clickable>\n[有效]\n[无效]\n[正常波动]\n[处理中]\n[已解决]\n</clickable>\n<clickable>\n\n</clickable>\n</card>",
+      "sender": "Slardar Oncall",
+      "created_at": "2026-11-13T10:31:00+08:00",
+      "users": 0,
+      "count": 0
+    }
+  ]
+}

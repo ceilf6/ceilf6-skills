@@ -150,5 +150,29 @@
       "task_book": "done"
     },
     "task_book": "/Users/bytedance/.claude/skills/slardar-triage/state/task-books/native-invite-clipboard-failure-2026-11-05.md"
+  },
+  "2a90b1bf8292719e268c4272c1810a50": {
+    "slug": "compare-table-repeat-note-2026-11-13",
+    "slardar_url": "https://slardar.bytedance.net/node/web/js/detail?env=online&bid=vc_ai&lang=zh&start_time=1794458215&end_time=1794544615&site_type=web&region=cn&issue_id=2a90b1bf8292719e268c4272c1810a50&layout=normal&release=8.7.0.11",
+    "error": null,
+    "meego_id": "7396960980",
+    "meego_url": "https://meego.larkoffice.com/larksuite/story/detail/7396960980",
+    "meego_name": "线上告警修复：比较表重复备注不影响表格渲染",
+    "steps": {
+      "meego": "done",
+      "task_book": "done",
+      "board": "done"
+    },
+    "recovery_note": "Meego 7396960980 已通过 workitem get 核验标题、来源 issue 和人工确认方案。prepare-dispatch 仅因末行解析不兼容 meego.sh 多行 JSON 误判失败；复用已存在条目，不重建。",
+    "task_book": "/Users/bytedance/.claude/skills/slardar-triage/state/task-books/compare-table-repeat-note-2026-11-13.md",
+    "task_id": "task_20261113T095607Z_63aa3389",
+    "task_slug": "compare-table-repeat-note-2026-11-13",
+    "workspace": "/Users/bytedance/Desktop/workspace/byteview-web-harness/workspaces/tasks/compare-table-repeat-note-2026-11-13/byteview-web",
+    "dispatched_at": "2026-11-13T09:56:48.211Z",
+    "board": {
+      "ok": true,
+      "ctx_dir": "/Users/bytedance/Desktop/ceilf/ceilf6-skills/slardar-triage/state/board/compare-table-repeat-note-2026-11-13",
+      "warning": "无 session_id，唤回将退化为新会话续入"
+    }
   }
 }
