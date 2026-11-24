@@ -1,0 +1,4 @@
+interface:
+  display_name: "Repo Guard Quality Evaluator"
+  short_description: "Evaluate repo-guard review quality"
+  default_prompt: "Use $repo-guard-quality-evaluator to run repo-guard's real-model quality evaluation, inspect summary.json and raw comments, and diagnose whether quality issues belong to repo-guard, reviewer skills, or both."

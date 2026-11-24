@@ -1,0 +1,12 @@
+*.DS_Store
+.claude/
+harness-ceilf6-bot/logs/
+harness-ceilf6-bot/state/
+
+doc-fetch-resources/
+
+# Local runtime state & private org data
+*-triage/state/
+doc-fetch-resources/
+group-skills-clis-stats/data/org_mapping.json
+harness-ceilf6-bot/config.json

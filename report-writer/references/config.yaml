@@ -1,0 +1,75 @@
+# Daily report profile configuration.
+# To adapt this skill for another person, add a profile and set active_profile.
+# Keep user-specific values here, not in SKILL.md or workflow references.
+
+active_profile: "wangjinghong02"
+
+profiles:
+  wangjinghong02:
+    user_mis: "wangjinghong02"
+    display_name: "王景宏"
+    author_email: "wangjinghong02@meituan.com"
+    timezone: "Asia/Shanghai"
+
+    parent_document:
+      url: "<internal-url>"
+      content_id: "2754620560"
+
+    title:
+      pattern: "{yy}.{mm}.{dd} {display_name}日报"
+
+    report:
+      sections:
+        done: "今日完成"
+        next: "明日展望"
+      plan_reference:
+        title: "todos"
+        url: "<internal-url>"
+        content_id: "2755093980"
+      legacy_next_section_aliases:
+        - "回来展望"
+      style: "detailed_process"
+
+    weekly_report:
+      week_start: "monday"
+      compare_previous_week: true
+      minimum_baseline_reports: 2
+      parent_document:
+        inherit_from_daily: true
+      title:
+        pattern: "{yy}年第{iso_week}周 {display_name}周报"
+      sections:
+        overview: "本周概览"
+        highlights: "重点成果"
+        workstreams: "核心工作线"
+        trends: "趋势对比"
+        risks: "风险与阻塞"
+        next: "下周计划"
+      delivery:
+        inherit_from_daily: true
+
+    delivery:
+      enabled: true
+      daxiang_group_id: "65399714912"
+      bot_id: "139088481414"
+      permission: "仅浏览"
+      ensure_bot_member: true
+      visible_text_body_field: "text"
+      extension: '{"fileType":"markdown"}'
+      message_template: |-
+        今日日报已创建：[{title}]({document_link})
+
+    cleanup:
+      permission_backups:
+        enabled: true
+        space_url: "<internal-url>"
+        space_id: "7025572"
+        title_prefix: "权限备份-grant-"
+        delete_only_grant_output_links: true
+
+    sources:
+      exhaustive_user_related_collection: true
+      citadel_recent_edit_limit: 20
+      citadel_read_all_target_date_recent_edits: true
+      commit_author_email: "{author_email}"
+      date_timezone: "{timezone}"

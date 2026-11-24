@@ -1,0 +1,29 @@
+这是一个每天 00:00 自动触发的字节日报任务。立即执行，不要等待人工确认。
+
+严格使用并完整遵循以下技能：
+
+`{{SKILL_DIR}}/SKILL.md`
+
+执行约束：
+
+1. 先完整读取该 `SKILL.md` 及其列出的所有 Required Files；所有相对路径都以技能目录 `{{SKILL_DIR}}` 为基准解析。
+2. 本次任务的目标日期已经由任务启动时刻固定为 `{{TARGET_DATE}}`（Asia/Shanghai），目标标题固定为 `{{TARGET_TITLE}}`。即使当前时间已经跨过午夜，也不得重新计算、改写或猜测目标日期。
+3. 必须先执行技能规定的工具与鉴权预检。`internal-cli auth status` 与 `internal-cli auth userinfo` 串行执行；若退出非零且报 `ERR_STREAM_WRITE_AFTER_END`，等待一秒后串行重试该命令一次，仅成功退出才算通过。重试仍失败或任何必要的 `lark-cli`、`internal-cli`、ByteDance 鉴权不可用时，停止并报告具体原因；不得生成或发布残缺日报。
+4. 本地 AI 解析器使用绝对路径 `{{SKILL_DIR}}/scripts/collect-local-ai-context.py`。
+5. 只使用技能允许的 ByteDance 平台和本地 AI 数据源，不使用互联网资料，不复制原始私聊、邮件、提示词、会话全文或本地文件路径到日报正文。
+6. 报告中的具体事实不得猜测平台映射、项目、仓库或归属。缺少主题或工作项标识的单条记录仅计入来源覆盖，不得强行关联其他事件，也不得阻止已有独立证据支持的工作写入；只有拟写入的事实本身依赖不明确归属时，才停止发布并列出待确认问题。
+7. ticket-platform 必需覆盖以技能列出的 OAuth 状态和 `todo list` 等普通接口为准；`workitem get --rich` 属于可选补充证据。若它返回 `ticket-platform_GOAPI_AUTH_REQUIRED`，记录为“ticket-platform 富文本详情跳过（缺 GoAPI Web session）”，改用普通 ticket-platform 结果、MR 与飞书文档交叉核验，不得仅因此停止日报。
+8. 先检查日结父 Wiki 的同名子页面；存在则更新，不存在才创建，确保同一天重复执行不会创建重复页面。
+9. 完成证据归一化后，先把本任务或上一轮自动生成的日结页面标记为 `self_generated_report_artifact`，仅计入覆盖，不得映射为 WorkEvent。若其余证据中不存在任何具有目标日活动的 `completed`、`in_progress` 或 `blocked` WorkEvent，则不得创建或更新日报、不得追加 SOP/成长沉淀库；在覆盖摘要后直接输出 `no_reportable_activity` 的 skipped sentinel。存在可报告 WorkEvent 时，严格执行 mentor → 主管 → HR 的串行评审与最多两轮修订；两轮后仍有 blocking finding 时停止发布。
+10. 默认使用原生标题与摘要配合 HTML 卡片。按 `references/html-report.md` 将审查后的 WorkEvent 写成 `report.json`，用 `automation/report_html.py build` 生成完整包，以 `--doc-format xml` 写入 `report.xml`。写入后以 XML、`--detail full` 保存完整回读 JSON，执行 `automation/report_html.py verify` 对照本地 manifest 核对 HTML 引用、日期、章节、非空正文及哈希；Markdown 回读和空标题不能证明 HTML 发布成功。内容回读不代表实际飞书渲染已验收，实际未查看时如实标明。按技能规则处理 SOP/成长沉淀库。
+11. 本 agent 不得发送任何 IM、邮件、群消息、机器人或 webhook 通知。
+12. Oncall 是可选来源。Oncall 未登录、令牌过期或查询失败时，记录 skipped 并继续生成日报，不得仅因此停止发布。`not logged in` 时，在最终 sentinel 前输出：
+    `<daily-report-warning kind="configuration_required" source="oncall" code="not_logged_in" />`
+    其他瞬时失败时，使用稳定的小写错误码输出：
+    `<daily-report-warning kind="source_unavailable" source="oncall" code="<stable_lowercase_code>" />`
+13. 仅 runner 可向当前用户发送配置提醒或失败提醒；本 agent 不得发送群消息、邮件、广播或常规成功通知。
+14. 最终输出必须完整满足技能的 Output Contract；失败时输出失败阶段、具体错误和是否发生任何写入。
+15. 最终回复的最后一个非空行必须是下列三者之一，不得在其后添加任何内容：
+    - 全部写入和回读验证成功：`<daily-report-result status="success" date="{{TARGET_DATE}}" />`
+    - 无目标日可报告活动且未写入：`<daily-report-result status="skipped" date="{{TARGET_DATE}}" reason="no_reportable_activity" />`
+    - 任一阶段失败或未发布：`<daily-report-result status="failed" date="{{TARGET_DATE}}" />`

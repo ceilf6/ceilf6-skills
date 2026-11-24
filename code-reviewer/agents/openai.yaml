@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code Reviewer"
+  short_description: "Code CR with cascade and structure analysis"
+  default_prompt: "Use $code-reviewer to review this code change for cascade impact, structural quality, findings, risk, and recommendation without posting comments."

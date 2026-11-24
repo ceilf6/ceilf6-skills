@@ -1,0 +1,122 @@
+# Report Template
+
+Use CitadelMD/Markdown that `citadel createDocument --content` can accept.
+
+## Title
+
+Use the selected profile title pattern from [config.yaml](config.yaml), usually:
+
+`{yy}.{mm}.{dd} {display_name}日报`
+
+Examples:
+- If `display_name` is `张三`: `26.04.22 张三日报`
+- If `display_name` is `李四`: `26.04.22 李四日报`
+
+## Body
+
+Use the configured section names from `report.sections.done` and `report.sections.next`.
+
+```markdown
+# <report.sections.done>
+
+- <事件标题>：<一句话总结>
+  - 进展：<关键过程或当前状态>
+  - 证据：[<链接标题>](<URL>)
+  - 下一步：<如有>
+
+- <事件标题>：<一句话总结>
+  - 文档：[<文档标题>](<KM URL>)
+  - 代码：[<repo/branch/commit/PR>](<Devtools URL>)
+
+# <report.sections.next>
+
+- <具体计划 1：优先来自未完成事项、显式计划或 plan_reference 中的相关 todo>
+- <具体计划 2>
+```
+
+## Writing Style
+
+- The report should be bullet-first and concise. Include nested detail only when it explains concrete progress, evidence, a blocker, or a next action.
+- Include every content-reviewed source that becomes a relevant WorkEvent in the KM report body. Do not leave a relevant finding only in the assistant response.
+- Keep top-level bullets readable; put branch names, commit hashes, and links in nested bullets.
+- For normal events, use at most 2-3 nested detail lines. Merge or remove lower-value lines rather than expanding the report.
+- Use Markdown links for every artifact link: `[label](https://...)`.
+- Do not write raw URLs in the KM document body. This includes standalone raw URLs and label-plus-URL text.
+- Do not use marketing language, exaggerated impact, or performance-review wording.
+- Do not write source diagnostics or negative provenance in the KM document body, such as `我不是会议发起者`, `非本人发起`, `仅参会`, `无明确产出`, `未找到相关会议`, or `无相关会议`.
+- Only include meeting/calendar content when it is directly tied to a work event and produced a user-owned outcome, decision, blocker, or next action. Otherwise omit it entirely.
+- In the next-plan section, use `report.plan_reference` as an optional backlog reference. Select only actionable items that match current work, and keep the section to 1-3 concise bullets unless the user asks for more.
+- Prefer the configured next-section name; if updating an old document that used an alias in `report.legacy_next_section_aliases`, preserve the existing section name.
+
+## Link Formatting
+
+Required:
+
+```markdown
+- 文档：[<文档标题>](<internal-url>>)
+- Commit：[<commit message or short hash>](<internal-url>>/<repo>/commit/<commitHash>)
+- PR：[<PR title or PR number>](<internal-url>>/<repo>/pr/<prId>/commit)
+```
+
+## Evidence Examples
+
+Document event:
+
+```markdown
+- <方案或文档主题>：继续梳理核心链路并沉淀技术方案
+  - 文档：[方案文档](<internal-url>>)
+  - 进展：明确模块拆分、关键字段和待验证问题
+  - 下一步：继续验证方案可扩展性并补充风险点
+```
+
+Code event:
+
+```markdown
+- <功能或缺陷修复>：完成分支上的核心逻辑提交并进入联调
+  - 仓库：<project>/<repo>
+  - 分支：<branch>
+  - Commit：[<shortHash>](<internal-url>>/<repo>/commit/<commitHash>)
+```
+
+Mixed event:
+
+```markdown
+- <联动事项>：完成字段补充、埋点或接口调整并同步记录
+  - PR：[PR <prId>](<internal-url>>/<repo>/pr/<prId>/commit)
+  - 记录文档：[记录文档](<internal-url>>)
+  - 状态：自测完成，待继续观察联调反馈
+```
+
+## Coverage Summary
+
+After creating the document, summarize source coverage in the assistant response, not in the KM document. Mention skipped/filtered sources only here when useful; keep the KM report itself focused on work events.
+
+```markdown
+已创建：<link>
+覆盖来源：学城最近编辑、显式 dev 链接、日历
+群授权：已为 <delivery.daxiang_group_id> 授予 <delivery.permission> 权限
+权限备份清理：已删除本次授权产生的 <count> 份备份文档
+群通知：已发送到 <delivery.daxiang_group_id>
+未覆盖：TT/ONES 未找到当天记录或认证不可用
+假设：无显式阻塞时，明日展望从未完成事项推导
+```
+
+## Group Message Template
+
+Send only after group authorization succeeds:
+
+```text
+今日日报已创建：[<title>](<document_link>)
+```
+
+Use `sendGroupMsg` with `body.text` for visible delivery:
+
+```json
+{
+  "type": "text",
+  "body": "{\"text\":\"<rendered message>\"}",
+  "extension": "{\"fileType\":\"markdown\"}"
+}
+```
+
+Build this JSON through `scripts/send-daxiang-group-text.mjs`; do not manually escape it in shell commands. Keep source coverage in the assistant response instead of the group message.

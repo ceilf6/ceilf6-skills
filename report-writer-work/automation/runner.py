@@ -1,0 +1,786 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import os
+import re
+import selectors
+import signal
+import subprocess
+import sys
+import time
+from datetime import date, datetime, timedelta
+from pathlib import Path
+from typing import Dict, List, Optional, Sequence
+from zoneinfo import ZoneInfo
+
+from report_html import ReportHtmlError, parse_document, verify_document as verify_html_document
+
+from notifications import (
+    NotificationEvent,
+    configuration_event,
+    failure_event,
+    parse_report_warnings,
+    send_once,
+)
+
+
+HOME = Path("/Users/bytedance")
+TRAEX = HOME / ".local/bin/traex"
+SPACE_ID = "<wiki_space_id>"
+PARENT_NODE_TOKEN = "<redacted>"
+PREFLIGHT_TIMEOUT_SECONDS = 120
+TRAEX_TIMEOUT_SECONDS = 7200
+TRAEX_STARTUP_TIMEOUT_SECONDS = 120
+TRAEX_STARTUP_ATTEMPTS = 2
+TRAEX_STARTUP_RETRY_DELAY_SECONDS = 5
+VERIFY_TIMEOUT_SECONDS = 120
+FEISHU_OPEN_ID = "<open_id>"
+NOTIFICATION_TIMEOUT_SECONDS = 30
+REQUIRED_SECTIONS = ("今日完成", "明日展望")
+SHANGHAI = ZoneInfo("Asia/Shanghai")
+DEFAULT_SKILL_DIR = HOME / ".local/share/trae-skills/report-writer-work"
+DEFAULT_PROMPT_FILE = HOME / ".config/trae-daily-report/prompt.md"
+DEFAULT_LOG_DIR = HOME / "Library/Logs/trae-daily-report"
+
+
+def resolve_skill_dir() -> Path:
+    script_dir = Path(__file__).resolve().parent
+    candidate = script_dir.parent
+    if (candidate / "SKILL.md").is_file():
+        return candidate
+    return DEFAULT_SKILL_DIR
+
+
+SKILL_DIR = resolve_skill_dir()
+PROMPT_FILE = DEFAULT_PROMPT_FILE
+LOG_DIR = DEFAULT_LOG_DIR
+
+
+class DailyReportError(RuntimeError):
+    pass
+
+
+class CommandError(DailyReportError):
+    def __init__(self, message: str, label: str = "command_error") -> None:
+        super().__init__(message)
+        self.label = label
+
+
+class TraexStartupError(CommandError):
+    pass
+
+
+class VerificationError(DailyReportError):
+    pass
+
+
+def resolve_target_date(
+    explicit: Optional[str], now: Optional[datetime] = None
+) -> str:
+    if explicit:
+        try:
+            return date.fromisoformat(explicit).isoformat()
+        except ValueError as error:
+            raise DailyReportError(
+                "target date must use YYYY-MM-DD: {}".format(explicit)
+            ) from error
+    current = now or datetime.now(SHANGHAI)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=SHANGHAI)
+    current = current.astimezone(SHANGHAI)
+    if current.hour < 4:
+        current = current - timedelta(hours=6)
+    return current.date().isoformat()
+
+
+def target_title(target_date: str) -> str:
+    parsed = date.fromisoformat(target_date)
+    return parsed.strftime("%y.%m.%d")
+
+
+def build_env() -> Dict[str, str]:
+    env = dict(os.environ)
+    env.update(
+        {
+            "HOME": str(HOME),
+            "USER": "bytedance",
+            "LOGNAME": "bytedance",
+            "TZ": "Asia/Shanghai",
+            "LANG": "en_US.UTF-8",
+            "PATH": ":".join(
+                [
+                    str(HOME / ".local/bin"),
+                    str(HOME / ".nvm/versions/node/v24.18.0/bin"),
+                    "/opt/homebrew/bin",
+                    "/usr/local/bin",
+                    "/usr/bin",
+                    "/bin",
+                    "/usr/sbin",
+                    "/sbin",
+                ]
+            ),
+            "LARKSUITE_CLI_NO_UPDATE_NOTIFIER": "1",
+            "LARKSUITE_CLI_NO_SKILLS_NOTIFIER": "1",
+            "internal-cli_NO_AUTO_UPGRADE": "1",
+        }
+    )
+    return env
+
+
+def command_detail(process: subprocess.CompletedProcess) -> str:
+    detail = (process.stderr or process.stdout or "").strip()
+    if len(detail) > 2000:
+        detail = detail[-2000:]
+    return detail
+
+
+def error_code(error: Exception) -> str:
+    label = getattr(error, "label", type(error).__name__)
+    normalized = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
+    return normalized or "unknown_error"
+
+
+def run_checked(
+    label: str,
+    argv: Sequence[str],
+    timeout_seconds: int,
+    env: Dict[str, str],
+) -> subprocess.CompletedProcess:
+    try:
+        process = subprocess.run(
+            list(argv),
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=timeout_seconds,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise CommandError(
+            "{} timed out after {}s".format(label, timeout_seconds),
+            label=label,
+        ) from error
+    except OSError as error:
+        raise CommandError(
+            "{} could not start: {}".format(label, error),
+            label=label,
+        ) from error
+
+    if process.returncode != 0:
+        detail = command_detail(process)
+        suffix = ": {}".format(detail) if detail else ""
+        raise CommandError(
+            "{} failed with status {}{}".format(label, process.returncode, suffix),
+            label=label,
+        )
+    return process
+
+
+def log_line(handle, message: str) -> None:
+    timestamp = datetime.now(SHANGHAI).isoformat(timespec="seconds")
+    line = "[{}] {}".format(timestamp, message)
+    handle.write(line + "\n")
+    handle.flush()
+
+
+def validate_ci-platform_auth_status(process: subprocess.CompletedProcess) -> None:
+    try:
+        status = json.loads(process.stdout)
+    except (json.JSONDecodeError, TypeError) as error:
+        raise CommandError(
+            "CI平台 auth status returned invalid JSON",
+            label="CI平台 auth",
+        ) from error
+    if not isinstance(status, dict):
+        raise CommandError(
+            "CI平台 auth status returned invalid JSON object",
+            label="CI平台 auth",
+        )
+    if status.get("expired") is not False:
+        raise CommandError(
+            "CI平台 auth expired at {}".format(status.get("captured_at", "unknown")),
+            label="CI平台 auth",
+        )
+
+
+def run_preflight_check(
+    label: str, argv: Sequence[str], env: Dict[str, str], handle
+) -> subprocess.CompletedProcess:
+    try:
+        return run_checked(label, argv, PREFLIGHT_TIMEOUT_SECONDS, env)
+    except CommandError as error:
+        if list(argv) not in (
+            ["internal-cli", "auth", "status"],
+            ["internal-cli", "auth", "userinfo"],
+        ) or "ERR_STREAM_WRITE_AFTER_END" not in str(error):
+            raise
+        log_line(handle, "preflight {} retry after stream error: {}".format(label, error))
+        time.sleep(1)
+        return run_checked(label, argv, PREFLIGHT_TIMEOUT_SECONDS, env)
+
+
+def run_preflight(env: Dict[str, str], handle=sys.stdout) -> None:
+    required_paths = (TRAEX, PROMPT_FILE, SKILL_DIR / "SKILL.md")
+    for path in required_paths:
+        if not path.exists() or not os.access(str(path), os.R_OK):
+            raise DailyReportError("required path is not readable: {}".format(path))
+    if not os.access(str(TRAEX), os.X_OK):
+        raise DailyReportError("Traex CLI is not executable: {}".format(TRAEX))
+
+    required_checks = (
+        ("Traex auth", [str(TRAEX), "login", "status"]),
+        ("Lark auth", ["lark-cli", "auth", "status", "--json", "--verify"]),
+        ("ByteCloud auth", ["internal-cli", "auth", "status"]),
+        ("ByteDance user", ["internal-cli", "auth", "userinfo"]),
+        ("CI平台 auth", ["internal-cli", "ci-platform", "auth", "status"]),
+        ("ticket-platform auth", ["internal-cli", "ticket-platform", "status"]),
+    )
+    for label, argv in required_checks:
+        started = time.monotonic()
+        log_line(handle, "preflight {} started".format(label))
+        process = run_preflight_check(label, argv, env, handle)
+        if label == "CI平台 auth":
+            try:
+                validate_ci-platform_auth_status(process)
+            except CommandError:
+                # CI平台 token 寿命约一周，午夜跨过 TTL 时无人在场；ByteCloud SSO
+                # 检查排在前面，走到这里 SSO 必然有效，login 可静默换发。先
+                # logout 清掉过期缓存，避免 login 因 "already cached" 短路。
+                log_line(
+                    handle,
+                    "preflight CI平台 auth expired; refreshing via ci-platform auth login",
+                )
+                run_checked(
+                    label,
+                    ["internal-cli", "ci-platform", "auth", "logout"],
+                    PREFLIGHT_TIMEOUT_SECONDS,
+                    env,
+                )
+                run_checked(
+                    label,
+                    ["internal-cli", "ci-platform", "auth", "login", "--json"],
+                    PREFLIGHT_TIMEOUT_SECONDS,
+                    env,
+                )
+                process = run_checked(label, argv, PREFLIGHT_TIMEOUT_SECONDS, env)
+                validate_ci-platform_auth_status(process)
+        log_line(
+            handle,
+            "preflight {} passed in {:.1f}s".format(label, time.monotonic() - started),
+        )
+
+    label = "local AI parser"
+    argv = [
+        "python3",
+        str(SKILL_DIR / "scripts/collect-local-ai-context.py"),
+        "--help",
+    ]
+    started = time.monotonic()
+    log_line(handle, "preflight {} started".format(label))
+    try:
+        run_checked(label, argv, PREFLIGHT_TIMEOUT_SECONDS, env)
+    except CommandError as error:
+        log_line(
+            handle,
+            "optional preflight local AI parser skipped label={}: {}".format(
+                error.label, error
+            ),
+        )
+    else:
+        log_line(
+            handle,
+            "preflight {} passed in {:.1f}s".format(label, time.monotonic() - started),
+        )
+
+
+def result_status(message: str, target_date: str) -> Optional[str]:
+    lines = [line.strip() for line in message.splitlines() if line.strip()]
+    if not lines:
+        return None
+    sentinels = {
+        "success": '<daily-report-result status="success" date="{}" />'.format(
+            target_date
+        ),
+        "failed": '<daily-report-result status="failed" date="{}" />'.format(
+            target_date
+        ),
+        "skipped": (
+            '<daily-report-result status="skipped" date="{}" '
+            'reason="no_reportable_activity" />'
+        ).format(target_date),
+    }
+    for status, sentinel in sentinels.items():
+        if lines[-1] == sentinel:
+            return status
+    return None
+
+
+def has_success_sentinel(message: str, target_date: str) -> bool:
+    return result_status(message, target_date) == "success"
+
+
+def select_unique_node(nodes: List[dict], title: str) -> dict:
+    matches = [node for node in nodes if node.get("title") == title]
+    if len(matches) != 1:
+        raise VerificationError(
+            "expected exactly one Wiki node titled {}, found {}".format(
+                title, len(matches)
+            )
+        )
+    if not matches[0].get("node_token"):
+        raise VerificationError("matching Wiki node has no node_token")
+    return matches[0]
+
+
+def verify_document_content(content: str) -> None:
+    headings = set(re.findall(r"(?m)^#\s+(.+?)\s*$", content))
+    missing = [section for section in REQUIRED_SECTIONS if section not in headings]
+    if missing:
+        raise VerificationError(
+            "written report is missing sections: {}".format(", ".join(missing))
+        )
+
+
+def parse_lark_json(label: str, raw: str) -> dict:
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise VerificationError("{} returned invalid JSON".format(label)) from error
+    if payload.get("ok") is not True:
+        raise VerificationError("{} returned ok != true".format(label))
+    return payload
+
+
+def verify_wiki(
+    target_date: str, env: Dict[str, str], require_html: bool = False
+) -> Dict[str, str]:
+    title = target_title(target_date)
+    listed = run_checked(
+        "Wiki node list",
+        [
+            "lark-cli",
+            "wiki",
+            "+node-list",
+            "--as",
+            "user",
+            "--space-id",
+            SPACE_ID,
+            "--parent-node-token",
+            PARENT_NODE_TOKEN,
+            "--page-all",
+            "--format",
+            "json",
+        ],
+        VERIFY_TIMEOUT_SECONDS,
+        env,
+    )
+    list_payload = parse_lark_json("Wiki node list", listed.stdout)
+    nodes = list_payload.get("data", {}).get("nodes", [])
+    node = select_unique_node(nodes, title)
+
+    fetched = run_checked(
+        "report document fetch",
+        [
+            "lark-cli",
+            "docs",
+            "+fetch",
+            "--as",
+            "user",
+            "--doc",
+            node["node_token"],
+            "--doc-format",
+            "xml",
+            "--detail",
+            "full",
+            "--format",
+            "json",
+        ],
+        VERIFY_TIMEOUT_SECONDS,
+        env,
+    )
+    fetch_payload = parse_lark_json("report document fetch", fetched.stdout)
+    document = fetch_payload.get("data", {}).get("document", {})
+    try:
+        root = parse_document(document, target_date)
+        if require_html or root.find("html5-block") is not None:
+            verify_html_document(document, target_date, Path.cwd())
+        else:
+            verify_document_content("\n".join("# " + "".join(item.itertext()) for item in root.findall("h1")))
+    except (ReportHtmlError, OSError, UnicodeError) as error:
+        raise VerificationError("report verification failed: {}".format(error)) from error
+    return {"title": title, "node_token": node["node_token"]}
+
+
+def render_prompt(target_date: str) -> str:
+    title = target_title(target_date)
+    try:
+        template = PROMPT_FILE.read_text(encoding="utf-8")
+    except OSError as error:
+        raise DailyReportError("could not read prompt: {}".format(error)) from error
+    rendered = (
+        template.replace("{{TARGET_DATE}}", target_date)
+        .replace("{{TARGET_TITLE}}", title)
+        .replace("{{SKILL_DIR}}", str(SKILL_DIR))
+    )
+    unresolved = re.findall(r"\{\{[A-Z_]+\}\}", rendered)
+    if unresolved:
+        raise DailyReportError(
+            "prompt contains unresolved placeholders: {}".format(", ".join(unresolved))
+        )
+    return rendered
+
+
+def build_traex_argv(last_message: Path) -> List[str]:
+    return [
+        str(TRAEX),
+        "exec",
+        "--model",
+        "gpt-6.1-sol",
+        "--permission-mode",
+        "bypass_permissions",
+        "--disable",
+        "hooks",
+        "--ignore-user-config",
+        "--ephemeral",
+        "-c",
+        "shell_environment_policy.inherit=all",
+        "--cd",
+        str(HOME),
+        "--add-dir",
+        str(SKILL_DIR),
+        "--skip-git-repo-check",
+        "--color",
+        "never",
+        "--json",
+        "--output-last-message",
+        str(last_message),
+        "-",
+    ]
+
+
+def parse_stream_event(raw_line: bytes) -> Optional[dict]:
+    try:
+        parsed = json.loads(raw_line)
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def stop_process(process: subprocess.Popen) -> None:
+    if process.poll() is not None:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+        process.wait(timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        process.wait()
+
+
+def run_traex_attempt(
+    prompt: str,
+    last_message: Path,
+    env: Dict[str, str],
+    handle,
+) -> None:
+    argv = build_traex_argv(last_message)
+    try:
+        process = subprocess.Popen(
+            argv,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=env,
+            cwd=str(HOME),
+            start_new_session=True,
+        )
+    except OSError as error:
+        raise CommandError(
+            "Traex execution could not start: {}".format(error)
+        ) from error
+
+    assert process.stdin is not None
+    assert process.stdout is not None
+    try:
+        process.stdin.write(prompt.encode("utf-8"))
+        process.stdin.close()
+    except BrokenPipeError:
+        pass
+
+    started = time.monotonic()
+    saw_session_output = False
+    line_buffer = b""
+    selector = selectors.DefaultSelector()
+    selector.register(process.stdout, selectors.EVENT_READ)
+    try:
+        while True:
+            elapsed = time.monotonic() - started
+            if (
+                not saw_session_output
+                and elapsed >= TRAEX_STARTUP_TIMEOUT_SECONDS
+            ):
+                stop_process(process)
+                raise TraexStartupError(
+                    "Traex produced no thread.started event within {}s".format(
+                        TRAEX_STARTUP_TIMEOUT_SECONDS
+                    )
+                )
+            if elapsed >= TRAEX_TIMEOUT_SECONDS:
+                stop_process(process)
+                raise CommandError(
+                    "Traex execution timed out after {}s".format(
+                        TRAEX_TIMEOUT_SECONDS
+                    )
+                )
+
+            events = selector.select(timeout=0.5)
+            for key, _ in events:
+                chunk = os.read(key.fileobj.fileno(), 65536)
+                if chunk:
+                    line_buffer += chunk
+                    while b"\n" in line_buffer:
+                        raw_line, line_buffer = line_buffer.split(b"\n", 1)
+                        event = parse_stream_event(raw_line)
+                        if event is None:
+                            continue
+                        if event.get("type") == "thread.started":
+                            saw_session_output = True
+                    handle.write(chunk.decode("utf-8", errors="replace"))
+                    handle.flush()
+                else:
+                    selector.unregister(key.fileobj)
+
+            if process.poll() is not None and not selector.get_map():
+                break
+    finally:
+        selector.close()
+        process.stdout.close()
+
+    if process.returncode != 0:
+        raise CommandError(
+            "Traex execution failed with status {}".format(process.returncode)
+        )
+    if not saw_session_output:
+        raise TraexStartupError(
+            "Traex exited before producing a thread.started event"
+        )
+
+
+def run_traex(
+    prompt: str,
+    last_message: Path,
+    env: Dict[str, str],
+    handle,
+) -> None:
+    for attempt in range(1, TRAEX_STARTUP_ATTEMPTS + 1):
+        try:
+            run_traex_attempt(prompt, last_message, env, handle)
+            return
+        except TraexStartupError as error:
+            if attempt == TRAEX_STARTUP_ATTEMPTS:
+                raise
+            log_line(
+                handle,
+                "Traex startup attempt {} failed: {}; retrying".format(
+                    attempt, error
+                ),
+            )
+            if last_message.exists():
+                last_message.unlink()
+            time.sleep(TRAEX_STARTUP_RETRY_DELAY_SECONDS)
+
+
+def send_lark_dm(event: NotificationEvent, env: Dict[str, str]) -> None:
+    run_checked(
+        "Lark self notification",
+        [
+            "lark-cli",
+            "im",
+            "+messages-send",
+            "--as",
+            "bot",
+            "--user-id",
+            FEISHU_OPEN_ID,
+            "--text",
+            event.text,
+            "--idempotency-key",
+            event.idempotency_key,
+            "--format",
+            "json",
+        ],
+        NOTIFICATION_TIMEOUT_SECONDS,
+        env,
+    )
+
+
+def notify_best_effort(
+    event: NotificationEvent,
+    env: Dict[str, str],
+    run_log: Path,
+    handle,
+) -> None:
+    try:
+        sent = send_once(
+            event,
+            LOG_DIR / "notifications",
+            lambda current: send_lark_dm(current, env),
+        )
+        log_line(
+            handle,
+            "notification {} key={} run_log={}".format(
+                "sent" if sent else "deduplicated",
+                event.idempotency_key,
+                run_log,
+            ),
+        )
+    except Exception as error:
+        log_line(handle, "notification failed: {}".format(error))
+        print(
+            "daily report notification failed: {}".format(error),
+            file=sys.stderr,
+        )
+
+
+def run_full(target_date: str, env: Dict[str, str]) -> int:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(SHANGHAI).strftime("%Y%m%d-%H%M%S")
+    run_log = LOG_DIR / "run-{}.log".format(stamp)
+    last_message = LOG_DIR / "last-message-{}.md".format(target_date)
+    if last_message.exists():
+        last_message.unlink()
+
+    with run_log.open("a", encoding="utf-8", buffering=1) as handle:
+        log_line(handle, "daily report started target_date={} skill_dir={}".format(target_date, SKILL_DIR))
+        stage = "preflight"
+        try:
+            run_preflight(env, handle)
+            stage = "traex_execution"
+            prompt = render_prompt(target_date)
+            log_line(handle, "Traex execution started")
+            started = time.monotonic()
+            run_traex(prompt, last_message, env, handle)
+            log_line(
+                handle,
+                "Traex execution exited 0 in {:.1f}s".format(
+                    time.monotonic() - started
+                ),
+            )
+            stage = "result_contract"
+            if not last_message.is_file():
+                raise VerificationError(
+                    "Traex did not produce a final result message"
+                )
+            message = last_message.read_text(encoding="utf-8")
+            warnings = parse_report_warnings(message)
+            outcome = result_status(message, target_date)
+            if outcome is None:
+                raise VerificationError(
+                    "Traex final message lacks a recognized result sentinel"
+                )
+            if outcome == "failed":
+                stage = "report_result"
+                raise CommandError(
+                    "Traex reported that the daily report was not published",
+                    label="report_failed",
+                )
+            if outcome == "success":
+                stage = "wiki_verification"
+                verified = verify_wiki(target_date, env, require_html=True)
+                log_line(
+                    handle,
+                    "daily report verified title={} node_token={}".format(
+                        verified["title"], verified["node_token"]
+                    ),
+                )
+            else:
+                log_line(
+                    handle,
+                    "daily report skipped reason=no_reportable_activity",
+                )
+            for warning in warnings:
+                if warning.kind == "configuration_required":
+                    notify_best_effort(
+                        configuration_event(target_date, warning, run_log),
+                        env,
+                        run_log,
+                        handle,
+                    )
+            log_line(
+                handle,
+                "daily report finished status=0 outcome={}".format(outcome),
+            )
+            return 0
+        except DailyReportError as error:
+            log_line(handle, "daily report failed: {}".format(error))
+            notify_best_effort(
+                failure_event(
+                    target_date,
+                    stage,
+                    error_code(error),
+                    run_log,
+                ),
+                env,
+                run_log,
+                handle,
+            )
+            log_line(handle, "daily report finished status=1")
+            return 1
+        except Exception as error:
+            log_line(
+                handle,
+                "daily report failed with unexpected {}: {}".format(
+                    type(error).__name__, error
+                ),
+            )
+            notify_best_effort(
+                failure_event(
+                    target_date,
+                    stage,
+                    error_code(error),
+                    run_log,
+                ),
+                env,
+                run_log,
+                handle,
+            )
+            log_line(handle, "daily report finished status=1")
+            return 1
+
+
+def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the ByteDance daily report")
+    parser.add_argument("--date", help="fixed report date in YYYY-MM-DD")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--preflight", action="store_true")
+    mode.add_argument("--verify-only", action="store_true")
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    args = parse_args(argv)
+    try:
+        selected_date = resolve_target_date(args.date)
+        env = build_env()
+        if args.preflight:
+            run_preflight(env)
+            return 0
+        if args.verify_only:
+            verified = verify_wiki(selected_date, env)
+            print(
+                "verified report: {} ({})".format(
+                    verified["title"], verified["node_token"]
+                )
+            )
+            return 0
+        return run_full(selected_date, env)
+    except DailyReportError as error:
+        print("daily report error: {}".format(error), file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

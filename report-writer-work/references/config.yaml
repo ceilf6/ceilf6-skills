@@ -1,0 +1,65 @@
+# ByteDance daily report profile configuration.
+
+active_profile: "ceilf6"
+
+profiles:
+  ceilf6:
+    username: "ceilf6"
+    display_name: "王景宏"
+    email: "<intern-email>"
+    employee_id: "9507267"
+    feishu_open_id: "<open_id>"
+    timezone: "Asia/Shanghai"
+
+    parent_wiki:
+      title: "日结"
+      url: "<internal-url>"
+      node_token: "ZDvbwhN4eiFRoHkUh1ocXSeInSb"
+      space_id: "<wiki_space_id>"
+
+    title:
+      pattern: "{yy}.{mm}.{dd}"
+      example: "26.07.08"
+
+    report:
+      presentation: "native_headings_html_cards"
+      sections:
+        done: "今日完成"
+        next: "明日展望"
+      plan_reference:
+        title: "明日展望数据源"
+        url: "<internal-url>"
+      sop_library:
+        title: "SOP/成长沉淀库"
+        url: "<internal-url>"
+      style: "concise_evidence_backed"
+
+    delivery:
+      enabled: false
+      note: "Only create or update the Feishu wiki document. Do not notify groups."
+
+    sources:
+      lark_drive_page_size: 20
+      im_page_size: 50
+      mail_summary_limit: 20
+      codebase_page_size: 50
+      include_sensitive_sources: true
+      skip_attendance_by_default: true
+      include_local_ai_sources: true
+      local_ai_parser: "report-writer-work/scripts/collect-local-ai-context.py"
+      source_failure_policy:
+        required:
+          - lark
+          - internal-cli_core
+          - ci-platform
+          - ticket-platform
+        optional:
+          oncall: skip_and_notify
+          local_ai: skip
+      local_ai_sources:
+        claude: "~/.claude/projects/**/*.jsonl"
+        codex:
+          - "~/.codex/sessions/{yyyy}/{mm}/{dd}/rollout-*.jsonl"
+          - "~/.codex/archived_sessions/rollout-*.jsonl"
+        trae: "~/.trae/cli/sessions/{yyyy}/{mm}/{dd}/rollout-*.jsonl; ~/.trae/cli/history.jsonl"
+        trae_cn: "~/.trae-cn/memory/projects/*/{yyyymmdd}/session_memory_*.jsonl"

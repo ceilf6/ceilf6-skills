@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# 假 internal-cli：整行 argv 追加 $STUB_STATE/calls.log；按子命令回放 $STUB_STATE 下的应答文件。
+# 应答一律用 MCP 信封（.data.result.content[0].text 内嵌字符串化 JSON），与真机同构。
+# 哨兵：comment_fail / node_get_fail / transition_fail / state_list_fail / state_transition_fail /
+#       create_fail / node_update_fail / update_fail / role_fail（workitem update --role-operate）
+#       → 对应命令 exit 5（真机错误即非零退出）。
+#       transition_not_arrived → node transition 回真机 code=20016（目标节点未到达）；
+#       transition_not_arrived_once → 只回一次 20016，随后成功（服务端推进延迟窗口）；
+#       transition_completed → 回 ErrAPIReCompleteNode；transition_noop → 应答成功但不改节点状态；
+#       transition_lag → 应答成功但状态推迟到下一次 node get 之后才可见（服务端传播延迟）。
+#       transition_owner_required → 目标节点 owner 为空时回 ErrOwnerRequired（节点设了负责人必填），
+#         文件内容为 always 时无视 owner 恒回该错（模拟补了负责人也不放行）。
+#       node transition 成功会把 nodes.json 里该节点标 finished（模拟真机的状态推进）。
+#       create_nonjson → workitem create 退 0 但吐非 JSON（网关降级形态）。
+#       required_fields.json → state transition 对其中仍为空的字段回 ErrFieldRequired（服务端必填校验）。
+set -euo pipefail
+printf '%s\n' "$*" >> "${STUB_STATE:?internal-cli stub 需要 STUB_STATE}/calls.log"
+envelope() { jq -n --arg t "$(cat "$1")" '{status:"success", data:{result:{content:[{type:"text", text:$t}]}}}'; }
+case "$*" in
+  *"ticket-platform comment create"*)
+    if [ -f "${STUB_STATE}/comment_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    echo '{"status":"success"}' ;;
+  *"ticket-platform node get"*)
+    if [ -f "${STUB_STATE}/node_get_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    envelope "${STUB_STATE}/nodes.json"
+    if [ -f "${STUB_STATE}/lag_pending" ]; then
+      _lk=$(cat "${STUB_STATE}/lag_pending"); rm -f "${STUB_STATE}/lag_pending"
+      jq --arg k "$_lk" '.list |= map(if .basic.node_key == $k then .basic.status = "finished" else . end)' \
+        "${STUB_STATE}/nodes.json" > "${STUB_STATE}/nodes.tmp" && mv "${STUB_STATE}/nodes.tmp" "${STUB_STATE}/nodes.json"
+    fi ;;
+  *"ticket-platform node transition"*)
+    # 读干 stdin：真机 CLI 会读，调用方若不隔离 stdin 就会吞掉自己循环的剩余输入
+    cat >/dev/null 2>/dev/null || true
+    if [ -f "${STUB_STATE}/transition_not_arrived" ]; then
+      echo '{"status":"error","error":{"message":"id=1000050166, code=20016, message=Node Is Not Arrived, Could Not Be operated "}}'; exit 5; fi
+    # 只 20016 一次：模拟上一节点刚 confirm、服务端尚未推进的短暂窗口，调用方重取后再试应成功
+    if [ -f "${STUB_STATE}/transition_not_arrived_once" ]; then
+      rm -f "${STUB_STATE}/transition_not_arrived_once"
+      echo '{"status":"error","error":{"message":"code=20016, message=Node Is Not Arrived"}}'; exit 5; fi
+    if [ -f "${STUB_STATE}/transition_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    # 节点设了「负责人必填」：owner 空着 confirm 会被服务端拒绝
+    if [ -f "${STUB_STATE}/transition_owner_required" ]; then
+      _nk=$(printf '%s\n' "$*" | sed -E 's/.*--node-id ([^ ]+).*/\1/')
+      if [ "$(cat "${STUB_STATE}/transition_owner_required")" = always ] \
+         || jq -e --arg k "$_nk" 'first(.list[] | select(.basic.node_key == $k) | .assignees.owners) | length == 0' \
+              "${STUB_STATE}/nodes.json" >/dev/null 2>&1; then
+        echo '{"status":"error","error":{"message":"error=ErrOwnerRequired,message={node_name}负责人必填,需求开发负责人必填,retriable=false"}}'; exit 5; fi
+    fi
+    if [ -f "${STUB_STATE}/transition_completed" ]; then
+      echo '{"status":"error","error":{"message":"error=ErrAPIReCompleteNode,message=Node Is Completed, Could Not Be Completed"}}'; exit 5; fi
+    # 成功即把该节点在 nodes.json 里标 finished：真机 confirm 后回读就是这样，调用方的回读校验才有意义。
+    # transition_noop 应答成功但不改状态，模拟真机见过的「exit 0 而节点仍 doing」。
+    if [ -f "${STUB_STATE}/transition_lag" ]; then
+      printf '%s\n' "$*" | sed -E 's/.*--node-id ([^ ]+).*/\1/' > "${STUB_STATE}/lag_pending"
+      echo '{"status":"success"}'; exit 0; fi
+    if [ ! -f "${STUB_STATE}/transition_noop" ]; then
+      _nk=$(printf '%s\n' "$*" | sed -E 's/.*--node-id ([^ ]+).*/\1/')
+      jq --arg k "$_nk" '.list |= map(if .basic.node_key == $k then .basic.status = "finished" else . end)' \
+        "${STUB_STATE}/nodes.json" > "${STUB_STATE}/nodes.tmp" && mv "${STUB_STATE}/nodes.tmp" "${STUB_STATE}/nodes.json"
+    fi
+    echo '{"status":"success"}' ;;
+  *"ticket-platform workitem update"*)
+    case "$*" in *--role-operate*)
+      if [ -f "${STUB_STATE}/role_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+      echo '{"status":"success"}'; exit 0 ;;
+    esac
+    if [ -f "${STUB_STATE}/update_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    # --fields 写进 workitem.json 的 work_item_fields，调用方回读才能看见；hidden_fields.json 里列出的键
+    # 只在其前置字段已有值时才落（模拟服务端按显隐条件丢弃联动字段）
+    case "$*" in *"--fields "*)
+      if [ -f "${STUB_STATE}/workitem.json" ]; then
+        _f=$(printf '%s\n' "$*" | sed -E "s/.*--fields '?(\[.*\])'?.*/\1/")
+        _h='{}'; [ -f "${STUB_STATE}/hidden_fields.json" ] && _h=$(cat "${STUB_STATE}/hidden_fields.json")
+        jq --argjson f "$_f" --argjson h "$_h" '
+          . as $w
+          | ($w.work_item_fields // []) as $cur
+          | ($f | map(select((.field_key as $k | $h[$k]) == null or (($h[.field_key]) as $dep | ($cur[] | select(.key == $dep) | .value) // "" | . != "")))) as $ok
+          | .work_item_fields = ($cur | map(select(.key as $k | ($ok | map(.field_key) | index($k)) == null)) + ($ok | map({key:.field_key, value:.field_value})))' \
+          "${STUB_STATE}/workitem.json" > "${STUB_STATE}/workitem.tmp" && mv "${STUB_STATE}/workitem.tmp" "${STUB_STATE}/workitem.json"
+      fi ;;
+    esac
+    echo '{"status":"success"}' ;;
+  *"ticket-platform workitem get"*)
+    if [ -f "${STUB_STATE}/workitem.json" ]; then envelope "${STUB_STATE}/workitem.json"
+    else envelope <(jq -n '{work_item_attribute:{role_members:[]}}'); fi ;;
+  *"ticket-platform node update"*)
+    if [ -f "${STUB_STATE}/node_update_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    # --node-owners 写进 nodes.json：调用方回读节点流时才能看见补上的负责人
+    case "$*" in *--node-owners*)
+      if [ -f "${STUB_STATE}/nodes.json" ]; then
+        _nk=$(printf '%s\n' "$*" | sed -E 's/.*--node-id ([^ ]+).*/\1/')
+        _ow=$(printf '%s\n' "$*" | sed -E 's/.*--node-owners (\[[^]]*\]).*/\1/')
+        jq --arg k "$_nk" --argjson o "$_ow" \
+          '.list |= map(if .basic.node_key == $k then .assignees.owners = [$o[] | {user_key:.}] else . end)' \
+          "${STUB_STATE}/nodes.json" > "${STUB_STATE}/nodes.tmp" && mv "${STUB_STATE}/nodes.tmp" "${STUB_STATE}/nodes.json"
+      fi ;;
+    esac
+    echo '{"status":"success"}' ;;
+  *"ticket-platform state list"*)
+    if [ -f "${STUB_STATE}/state_list_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    envelope "${STUB_STATE}/states.json" ;;
+  *"ticket-platform state transition required get"*)
+    echo '{"status":"success","data":{"result":{"content":[{"type":"text","text":"{}"}]}}}' ;;
+  *"ticket-platform state transition"*)
+    if [ -f "${STUB_STATE}/state_transition_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    # 服务端必填校验：required_fields.json（{field_key: 字段名}）里在 workitem.json 中为空的字段，按真机文案报 ErrFieldRequired
+    if [ -f "${STUB_STATE}/required_fields.json" ]; then
+      _w='{}'; [ -f "${STUB_STATE}/workitem.json" ] && _w=$(cat "${STUB_STATE}/workitem.json")
+      _miss=$(jq -r --argjson w "$_w" 'to_entries | map(select(.key as $k | ([$w.work_item_fields[]? | select(.key == $k) | .value | select(. != null and . != "" and . != "null")] | length) == 0)) | map("\(.value)(\(.key)) 必填") | join(",")' "${STUB_STATE}/required_fields.json")
+      if [ -n "$_miss" ]; then
+        jq -n --arg m "error=ErrFieldRequired,message={field_name}({field_key}) 必填,${_miss},retriable=false" '{status:"error", error:{message:$m}}'; exit 5; fi
+    fi
+    # 只拒一次 No Permission：模拟经办人不是本人，调用方换经办人后重试应成功
+    if [ -f "${STUB_STATE}/state_transition_permission_once" ]; then
+      rm -f "${STUB_STATE}/state_transition_permission_once"
+      echo '{"status":"error","error":{"message":"No Permission"}}'; exit 5; fi
+    # 流转成功后推进 states.json：有 after_transition_<id>.json 就换成它，否则把当前状态置为转移目标、清空转移
+    _tid=$(printf '%s\n' "$*" | sed -E 's/.*--transition-id ([^ ]+).*/\1/')
+    if [ -f "${STUB_STATE}/after_transition_${_tid}.json" ]; then
+      mv "${STUB_STATE}/after_transition_${_tid}.json" "${STUB_STATE}/states.json"
+    elif [ -f "${STUB_STATE}/states.json" ] && [ ! -f "${STUB_STATE}/state_transition_noop" ]; then
+      jq --arg t "$_tid" '(first(.transition[]? | select((.id|tostring) == $t))) as $tr | if $tr == null then . else {state_key:$tr.state_key, state_name:$tr.state_name, transition:[]} end' \
+        "${STUB_STATE}/states.json" > "${STUB_STATE}/states.tmp" && mv "${STUB_STATE}/states.tmp" "${STUB_STATE}/states.json"
+    fi
+    echo '{"status":"success"}' ;;
+  *"ticket-platform workitem create"*)
+    # 建单走底层 workitem create（--fields）；--dry-run 同真机：只回显参数、不建单
+    case "$*" in *"--dry-run"*) echo '{"status":"success","data":{"dry_run":true}}'; exit 0 ;; esac
+    if [ -f "${STUB_STATE}/create_nonjson" ]; then echo 'NOT JSON'; exit 0; fi
+    if [ -f "${STUB_STATE}/create_fail" ]; then echo '{"status":"error"}'; exit 5; fi
+    envelope "${STUB_STATE}/created.json" ;;
+  *) : ;;
+esac
