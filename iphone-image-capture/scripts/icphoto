@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+SKILL_DIR="$(cd -P "$SCRIPT_DIR/.." && pwd)"
+SRC="$SCRIPT_DIR/icphoto.swift"
+HASH="$(shasum -a 256 "$SRC" | awk '{print substr($1,1,16)}')"
+BIN="/tmp/icphoto-bin-${HASH}"
+
+if [[ ! -x "$BIN" ]]; then
+  TMP_BIN="${BIN}.tmp.$$"
+  xcrun swiftc -O "$SRC" -o "$TMP_BIN"
+  mv -f "$TMP_BIN" "$BIN"
+fi
+
+export ICPHOTO_SKILL_DIR="$SKILL_DIR"
+exec "$BIN" "$@"

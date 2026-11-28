@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>__TITLE__</title>
+  <style>
+    :root { --bg:#0b0e14; --panel:#151a24; --border:#262f40; --text:#e6edf3; --muted:#8b949e; --gold:#e3b341; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif; background:var(--bg); color:var(--text); padding:20px 24px 90px; }
+    header { max-width:1440px; margin:0 auto 18px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; }
+    h1 { font-size:20px; margin:0; }
+    .search { background:var(--panel); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 12px; min-width:240px; }
+    .pills { max-width:1440px; margin:0 auto 18px; display:flex; flex-wrap:wrap; gap:8px; }
+    .pill { background:var(--panel); color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:5px 12px; cursor:pointer; font-size:12.5px; }
+    .pill.active { color:#111; background:var(--gold); border-color:var(--gold); font-weight:600; }
+    .grid { max-width:1440px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:14px; }
+    .card { position:relative; background:var(--panel); border:1px solid var(--border); border-radius:10px; overflow:hidden; display:flex; flex-direction:column; }
+    .card.selected { border-color:var(--gold); box-shadow:0 0 0 2px rgba(227,179,65,0.35); }
+    .card img { width:100%; height:180px; object-fit:cover; cursor:zoom-in; background:#07090d; }
+    .pick-box { position:absolute; top:8px; left:8px; background:rgba(11,14,20,0.82); border:1px solid var(--border); border-radius:6px; padding:3px 7px; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:4px; }
+    .meta { padding:8px 10px; font-size:12px; }
+    .name { font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .dt { color:var(--muted); margin-top:2px; font-family:ui-monospace,SFMono-Regular,monospace; font-size:11px; }
+    .bar { position:fixed; left:50%; transform:translateX(-50%); bottom:18px; background:#1c2333; border:1px solid var(--gold); border-radius:999px; padding:8px 18px; display:flex; gap:12px; align-items:center; box-shadow:0 8px 28px rgba(0,0,0,0.55); z-index:20; }
+    .bar button { background:var(--gold); color:#111; border:0; border-radius:999px; padding:6px 14px; font-weight:600; cursor:pointer; }
+    .bar button.secondary { background:transparent; color:var(--muted); border:1px solid var(--border); }
+    .zoom { position:fixed; inset:0; background:rgba(4,7,14,0.94); display:none; align-items:center; justify-content:center; flex-direction:column; z-index:50; padding:24px; cursor:zoom-out; }
+    .zoom.open { display:flex; }
+    .zoom img { max-width:94vw; max-height:86vh; object-fit:contain; border-radius:6px; }
+    .zoom p { color:var(--muted); font-family:monospace; font-size:12.5px; margin-top:10px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>__TITLE__ <span style="color:var(--muted);font-size:14px;font-weight:400">(__COUNT__ 张)</span></h1>
+    <input class="search" id="q" type="search" placeholder="搜索文件名或日期 (如 2025-04 或 IMG_3683)...">
+  </header>
+  <div class="pills" id="pills">__MONTH_BUTTONS__</div>
+  <div class="grid" id="grid">__CARDS__</div>
+  <div class="bar">
+    <span id="selCount">已选 0 张</span>
+    <button onclick="copySelected()">复制已选 Key 清单</button>
+    <button class="secondary" onclick="clearSelected()">清空</button>
+  </div>
+  <div class="zoom" id="zoom" onclick="this.classList.remove('open')">
+    <img id="zoomImg" src="" alt="">
+    <p id="zoomCap"></p>
+  </div>
+  <script>
+    let curMonth = 'ALL';
+    const qInput = document.getElementById('q');
+    const cards = [...document.querySelectorAll('.card')];
+    function applyFilter() {
+      const q = qInput.value.trim().toLowerCase();
+      for (const c of cards) {
+        const mOk = curMonth === 'ALL' || c.dataset.m === curMonth;
+        const qOk = !q || c.dataset.q.includes(q);
+        c.style.display = (mOk && qOk) ? '' : 'none';
+      }
+    }
+    document.getElementById('pills').addEventListener('click', e => {
+      const b = e.target.closest('.pill');
+      if (!b) return;
+      document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+      b.classList.add('active');
+      curMonth = b.dataset.m;
+      applyFilter();
+    });
+    qInput.addEventListener('input', applyFilter);
+    document.getElementById('grid').addEventListener('change', e => {
+      if (!e.target.classList.contains('pick-cb')) return;
+      e.target.closest('.card').classList.toggle('selected', e.target.checked);
+      const checked = document.querySelectorAll('.pick-cb:checked').length;
+      document.getElementById('selCount').textContent = `已选 ${checked} 张`;
+    });
+    function copySelected() {
+      const vals = [...document.querySelectorAll('.pick-cb:checked')].map(el => el.value);
+      if (!vals.length) { alert('请先勾选至少一张照片'); return; }
+      navigator.clipboard.writeText(vals.join('\n')).then(() => {
+        document.getElementById('selCount').textContent = `已复制 ${vals.length} 张到剪贴板！`;
+      });
+    }
+    function clearSelected() {
+      document.querySelectorAll('.pick-cb:checked').forEach(cb => {
+        cb.checked = false;
+        cb.closest('.card').classList.remove('selected');
+      });
+      document.getElementById('selCount').textContent = '已选 0 张';
+    }
+    function openZoom(src, cap) {
+      document.getElementById('zoomImg').src = src;
+      document.getElementById('zoomCap').textContent = cap;
+      document.getElementById('zoom').classList.add('open');
+    }
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') document.getElementById('zoom').classList.remove('open');
+    });
+  </script>
+</body>
+</html>

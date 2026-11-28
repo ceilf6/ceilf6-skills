@@ -145,6 +145,14 @@ repo-guard 通过 git submodule 引用本仓库，运行时始终拉取最新版
 
 ---
 
+# iphone-image-capture
+
+面向 macOS 通过 USB（PTP / `ImageCaptureCore`）管理 iPhone、iPad 或相机照片与视频的 skill，无需将海量素材先导入系统 `Photos.app`。
+
+内置零第三方依赖的原生 Swift CLI `scripts/icphoto`，支持 0 像素传输秒读全量照片元数据目录、并发拉取缩略图并按时间窗口聚类、排除长截图与重复修图、纯 `AppKit` 拼接 `7×6` 联系表供视觉模型高密度扫图、生成深色交互式 HTML 选图画册、自动校正 EXIF 竖图方向导出 Web 图片（或携带 Live Photo `sidecars` 无损备份），以及带 `--dry-run` 门禁与重名拦截的手机端安全清理。
+
+---
+
 ## Friendly Links
 
 - [Linux.do](https://linux.do/) - Chinese AI learning and developer community.
